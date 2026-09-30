@@ -20,5 +20,9 @@ struct EmulatorDemoOptions {
 
 EmulatorDemoOptions readEmulatorDemoOptions();
 
+// True when USRDIR/renderer.ini contains "renderer=software": keeps the PPU
+// rasterizer for A/B checks on hardware or if the RSX path misbehaves.
+bool softwareRendererRequested();
+
 } // namespace ps3
 } // namespace movebeat

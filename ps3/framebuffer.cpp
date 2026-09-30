@@ -13,11 +13,6 @@
 #include <rsx/rsx.h>
 #include <sysutil/video.h>
 
-#if defined(MOVEBEAT_EXPERIMENTAL_RSX_NOTES) && !defined(_MSC_VER)
-#include "note3d_vpo.h"
-#include "note3d_fpo.h"
-#endif
-
 namespace movebeat {
 namespace ps3 {
 namespace {
@@ -25,36 +20,6 @@ namespace {
 const u32 kCommandBufferSize = 0x100000;
 const u32 kHostMemorySize = 32 * 1024 * 1024;
 const unsigned int kMaxSolidNotes = 256;
-#if defined(MOVEBEAT_EXPERIMENTAL_RSX_NOTES)
-// Two camera-facing side faces, four sloped bevels and the front face.
-// Never submit a back face: it can show through on a degraded Z path.
-const unsigned int kVerticesPerCube = 42;
-struct SolidVertex {
-    float position[3];
-    float color[4];
-};
-
-void putSolidVertex(SolidVertex& target, const Vec3& position,
-                    u32 color, float light) {
-    target.position[0] = position.x;
-    target.position[1] = position.y;
-    target.position[2] = position.z;
-    target.color[0] = ((color >> 16) & 255u) * light / 255.0f;
-    target.color[1] = ((color >> 8) & 255u) * light / 255.0f;
-    target.color[2] = (color & 255u) * light / 255.0f;
-    target.color[3] = 1.0f;
-}
-
-void putSolidQuad(SolidVertex* target, const Vec3& a, const Vec3& b,
-                  const Vec3& c, const Vec3& d, u32 color, float light) {
-    putSolidVertex(target[0], a, color, light);
-    putSolidVertex(target[1], b, color, light);
-    putSolidVertex(target[2], c, color, light);
-    putSolidVertex(target[3], a, color, light);
-    putSolidVertex(target[4], c, color, light);
-    putSolidVertex(target[5], d, color, light);
-}
-#endif
 const char kVideoStagePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/video_stage.txt";
 
@@ -112,10 +77,9 @@ bool writePpmPixels(const char* path, const u32* source, int width, int height) 
 Framebuffer::Framebuffer()
     : context_(0), host_memory_(0), current_(0), width_(0), height_(0),
       pitch_(0), clear_color_(0xff050510u), initialized_(false), flip_submitted_(false),
-      depth_buffer_(0), note_vertex_buffer_(0), note_fragment_buffer_(0),
-      depth_offset_(0), note_vertex_offset_(0), note_fragment_offset_(0),
-      solid_notes_ready_(false), software_depth_(0), note_depth_active_(false),
-      last_solid_note_count_(0) {
+      software_depth_(0), note_depth_active_(false), last_solid_note_count_(0),
+      rsx_(false), frame_submitted_(false), last_batch_vertices_(0),
+      last_batch_dropped_(0) {
     memset(buffers_, 0, sizeof(buffers_));
 }
 
@@ -136,7 +100,7 @@ bool Framebuffer::makeBuffer(int index) {
     return gcmSetDisplayBuffer(index, buffers_[index].offset, pitch_, width_, height_) == 0;
 }
 
-bool Framebuffer::initialize() {
+bool Framebuffer::initialize(RendererPreference preference) {
     if (initialized_) return true;
 
     host_memory_ = memalign(1024 * 1024, kHostMemorySize);
@@ -155,8 +119,8 @@ bool Framebuffer::initialize() {
         shutdown();
         return false;
     }
-    // Prefer 720p: the diagnostic renderer writes the framebuffer from the
-    // PPU, so 1080p wastes bandwidth without adding useful tracking detail.
+    // Prefer 720p: the software fallback writes every pixel from the PPU,
+    // and 1080p adds nothing useful for tracking or readability.
     const u32 resolution_id =
         videoGetResolutionAvailability(VIDEO_PRIMARY, VIDEO_RESOLUTION_720,
                                        VIDEO_ASPECT_AUTO, 0) == 1
@@ -182,6 +146,10 @@ bool Framebuffer::initialize() {
     }
     recordVideoStage("buffers_ready");
 
+    rsx_ = preference == RENDERER_PREFER_RSX &&
+           gpu_.initialize(context_, width_, height_);
+    recordVideoStage(rsx_ ? "renderer_rsx" : "renderer_software");
+
     gcmSetFlipMode(GCM_FLIP_VSYNC);
     gcmResetFlipStatus();
     initialized_ = true;
@@ -195,14 +163,11 @@ bool Framebuffer::initialize() {
 void Framebuffer::shutdown() {
     if (context_ && initialized_) gcmSetWaitFlip(context_);
     if (context_ && initialized_) rsxFinish(context_, 1);
-    if (depth_buffer_) rsxFree(depth_buffer_);
-    if (note_vertex_buffer_) rsxFree(note_vertex_buffer_);
-    if (note_fragment_buffer_) rsxFree(note_fragment_buffer_);
-    depth_buffer_ = note_vertex_buffer_ = note_fragment_buffer_ = 0;
+    gpu_.shutdown();
+    rsx_ = false;
     if (software_depth_) free(software_depth_);
     software_depth_ = 0;
     note_depth_active_ = false;
-    solid_notes_ready_ = false;
     for (int i = 0; i < 2; ++i) {
         if (buffers_[i].pixels) {
             rsxFree(buffers_[i].pixels);
@@ -237,6 +202,13 @@ void Framebuffer::beginFrame(u32 color) {
     waitForPreviousFlip();
     clear_color_ = color;
     note_depth_active_ = false;
+    if (rsx_) {
+        // The RSX clears the surface when the batch is submitted.
+        batch_.reset(width_, height_, RsxBatchRenderer::kVertexCapacity,
+                     RsxBatchRenderer::kTextureCapacity);
+        frame_submitted_ = false;
+        return;
+    }
     u32* destination = buffers_[current_].pixels;
     const int count = width_ * height_;
     // Both display buffers are 64-byte aligned and every supported video mode
@@ -250,87 +222,29 @@ void Framebuffer::beginFrame(u32 color) {
     if (count & 1) destination[count - 1] = color;
 }
 
-void Framebuffer::bindCurrentSurface() {
-#if !defined(_MSC_VER)
-    gcmSurface surface;
-    memset(&surface, 0, sizeof(surface));
-    surface.colorFormat = GCM_SURFACE_X8R8G8B8;
-    surface.colorTarget = GCM_SURFACE_TARGET_0;
-    surface.colorLocation[0] = GCM_LOCATION_RSX;
-    surface.colorOffset[0] = buffers_[current_].offset;
-    surface.colorPitch[0] = pitch_;
-    for (int index = 1; index < 4; ++index) {
-        surface.colorLocation[index] = GCM_LOCATION_RSX;
-        surface.colorPitch[index] = 64;
-    }
-    surface.depthFormat = GCM_SURFACE_ZETA_Z24S8;
-    surface.depthLocation = GCM_LOCATION_RSX;
-    surface.depthOffset = depth_offset_;
-    surface.depthPitch = pitch_;
-    surface.type = GCM_SURFACE_TYPE_LINEAR;
-    surface.antiAlias = GCM_SURFACE_CENTER_1;
-    surface.width = width_;
-    surface.height = height_;
-    rsxSetSurface(context_, &surface);
-    const float scale[4] = {width_ * 0.5f, height_ * -0.5f, 0.5f, 0.0f};
-    const float offset[4] = {width_ * 0.5f, height_ * 0.5f, 0.5f, 0.0f};
-    rsxSetViewport(context_, 0, 0, width_, height_, 0.0f, 1.0f, scale, offset);
-    rsxSetScissor(context_, 0, 0, width_, height_);
-    for (unsigned int clip = 0; clip < 8; ++clip)
-        rsxSetViewportClip(context_, clip, width_, height_);
-#endif
-}
-
-bool Framebuffer::initializeSolidNotes() {
-#if !defined(MOVEBEAT_EXPERIMENTAL_RSX_NOTES) || defined(_MSC_VER)
-    return false;
-#else
-    if (solid_notes_ready_) return true;
-    if (!initialized_) return false;
-    const rsxFragmentProgram* fragment =
-        reinterpret_cast<const rsxFragmentProgram*>(note3d_fpo);
-    void* fragment_code = 0;
-    u32 fragment_size = 0;
-    rsxFragmentProgramGetUCode(fragment, &fragment_code, &fragment_size);
-    if (!fragment_code || !fragment_size) return false;
-    depth_buffer_ = rsxMemalign(64, pitch_ * height_);
-    note_vertex_buffer_ = rsxMemalign(
-        128, kMaxSolidNotes * kVerticesPerCube * sizeof(SolidVertex));
-    note_fragment_buffer_ = rsxMemalign(64, fragment_size);
-    bool ready = depth_buffer_ && note_vertex_buffer_ && note_fragment_buffer_;
-    if (ready) {
-        memcpy(note_fragment_buffer_, fragment_code, fragment_size);
-        ready = rsxAddressToOffset(depth_buffer_, &depth_offset_) == 0 &&
-                rsxAddressToOffset(note_vertex_buffer_, &note_vertex_offset_) == 0 &&
-                rsxAddressToOffset(note_fragment_buffer_, &note_fragment_offset_) == 0;
-    }
-    if (!ready) {
-        if (depth_buffer_) rsxFree(depth_buffer_);
-        if (note_vertex_buffer_) rsxFree(note_vertex_buffer_);
-        if (note_fragment_buffer_) rsxFree(note_fragment_buffer_);
-        depth_buffer_ = note_vertex_buffer_ = note_fragment_buffer_ = 0;
-        depth_offset_ = note_vertex_offset_ = note_fragment_offset_ = 0;
-        return false;
-    }
-    solid_notes_ready_ = true;
-    return true;
-#endif
+void Framebuffer::submitFrame() {
+    if (!rsx_ || frame_submitted_) return;
+    gpu_.submit(batch_, buffers_[current_].offset, clear_color_);
+    last_batch_vertices_ = static_cast<unsigned int>(batch_.vertices().size());
+    last_batch_dropped_ = batch_.droppedPrimitives();
+    frame_submitted_ = true;
 }
 
 bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms) {
     last_solid_note_count_ = 0;
-#if !defined(MOVEBEAT_EXPERIMENTAL_RSX_NOTES)
     if (!initialized_) return false;
-    const std::size_t pixel_count = static_cast<std::size_t>(width_) * height_;
-    if (!software_depth_) {
-        software_depth_ = static_cast<float*>(malloc(pixel_count * sizeof(float)));
-        if (!software_depth_) return false;
+    SoftwareNoteTarget target = {0, 0, width_, height_};
+    if (!rsx_) {
+        const std::size_t pixel_count = static_cast<std::size_t>(width_) * height_;
+        if (!software_depth_) {
+            software_depth_ = static_cast<float*>(malloc(pixel_count * sizeof(float)));
+            if (!software_depth_) return false;
+        }
+        memset(software_depth_, 0, pixel_count * sizeof(float));
+        target.pixels = buffers_[current_].pixels;
+        target.inverse_depth = software_depth_;
     }
-    memset(software_depth_, 0, pixel_count * sizeof(float));
     note_depth_active_ = true;
-    const SoftwareNoteTarget target = {
-        buffers_[current_].pixels, software_depth_, width_, height_
-    };
     for (std::size_t index = 0; index < game.noteCount(); ++index) {
         if (!game.notePending(index)) continue;
         const Note& note = game.note(index);
@@ -340,143 +254,18 @@ bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms
         if (last_solid_note_count_ >= kMaxSolidNotes) break;
         const u32 color = note.hand == HAND_LEFT ? 0xff2098e8u : 0xffe83048u;
         const float side = note.kind == NOTE_CHAIN ? 0.16f : 0.32f;
-        rasterizeNoteCube(target, makeNoteCube(
-            position, side, width_, height_, gameplayNoteDepth(side)), color);
+        const NoteCubeMesh cube = makeNoteCube(
+            position, side, width_, height_, gameplayNoteDepth(side));
+        if (rsx_) forEachNoteCubeTriangle(cube, color, width_, height_, batch_);
+        else rasterizeNoteCube(target, cube, color);
         ++last_solid_note_count_;
     }
     return true;
-#elif defined(_MSC_VER)
-    (void)game;
-    (void)now_ms;
-    return false;
-#else
-    if (!initializeSolidNotes()) return false;
-    SolidVertex* vertices = static_cast<SolidVertex*>(note_vertex_buffer_);
-    struct VisibleNote {
-        const Note* note;
-        Vec3 position;
-    };
-    VisibleNote visible[kMaxSolidNotes];
-    unsigned int count = 0;
-    for (std::size_t index = 0; index < game.noteCount(); ++index) {
-        if (!game.notePending(index)) continue;
-        const Note& note = game.note(index);
-        if (note.kind == NOTE_BOMB) continue;
-        const Vec3 position = game.notePosition(note, now_ms);
-        if (position.z < -0.8f || position.z > game.noteSpawnDepth()) continue;
-        if (count >= kMaxSolidNotes) break;
-        visible[count].note = &note;
-        visible[count].position = position;
-        ++count;
-    }
-    // Charts are time-ordered, hence nearer notes were collected first.
-    // Submit far-to-near so a nearer front face covers a farther cube even if
-    // a driver's depth state is degraded; the Z-buffer handles intersecting
-    // faces within each solid.
-    unsigned int vertex_count = 0;
-    for (unsigned int draw_index = 0; draw_index < count; ++draw_index) {
-        const VisibleNote& item = visible[count - 1u - draw_index];
-        const Note& note = *item.note;
-        const u32 color = note.hand == HAND_LEFT ? 0xff2098e8u : 0xffe83048u;
-        const float side = note.kind == NOTE_CHAIN ? 0.16f : 0.32f;
-        const float depth = gameplayNoteDepth(side);
-        const NoteCubeMesh cube = makeNoteCube(
-            item.position, side, width_, height_, depth);
-        const NoteCubeVisibleFaces faces = visibleNoteCubeFaces(cube);
-        SolidVertex* output = vertices + vertex_count;
-        // Camera is at (cameraX, eyeHeight + cameraOffset, -projectionDepth).
-        // The travel-facing front face is
-        // always visible; select at most one X and one Y face by the camera's
-        // position relative to this cube. Hidden faces must not rely on Z.
-        if (faces.left) {
-            putSolidQuad(output, cube.world[4], cube.world[0],
-                         cube.world[3], cube.world[7], color, 0.50f);
-            output += 6;
-            vertex_count += 6;
-        } else if (faces.right) {
-            putSolidQuad(output, cube.world[1], cube.world[5],
-                         cube.world[6], cube.world[2], color, 0.54f);
-            output += 6;
-            vertex_count += 6;
-        }
-        if (faces.top) {
-            putSolidQuad(output, cube.world[0], cube.world[1],
-                         cube.world[5], cube.world[4], color, 0.84f);
-            output += 6;
-            vertex_count += 6;
-        } else if (faces.bottom) {
-            putSolidQuad(output, cube.world[3], cube.world[2],
-                         cube.world[6], cube.world[7], color, 0.42f);
-            output += 6;
-            vertex_count += 6;
-        }
-        putSolidQuad(output, cube.front[0], cube.front[1],
-                     cube.front[2], cube.front[3], color, 1.00f);
-        vertex_count += 6;
-    }
-    bindCurrentSurface();
-    // The PPU's writes to an RSX color surface are not a reliable render-target
-    // clear in RPCS3: the GPU can retain earlier cube pixels in its cached
-    // surface. Clear COLOR on the GPU itself every frame, including frames
-    // with zero visible notes, so a moving cube cannot leave old positions.
-    rsxSetClearColor(context_, clear_color_);
-    rsxSetClearDepthStencil(context_, 0xffffff00u);
-    rsxClearSurface(context_, GCM_CLEAR_M);
-    if (!count) {
-        rsxFinish(context_, 1);
-        return true;
-    }
-    rsxSetZMinMaxControl(context_, GCM_FALSE, GCM_TRUE, GCM_FALSE);
-    rsxSetDepthTestEnable(context_, GCM_TRUE);
-    rsxSetDepthFunc(context_, GCM_LESS);
-    rsxSetDepthWriteEnable(context_, 1);
-    rsxSetCullFaceEnable(context_, GCM_FALSE);
-    rsxSetBlendEnable(context_, GCM_FALSE);
-    rsxSetColorMask(context_, GCM_COLOR_MASK_R | GCM_COLOR_MASK_G |
-                              GCM_COLOR_MASK_B | GCM_COLOR_MASK_A);
-
-    const rsxVertexProgram* vertex =
-        reinterpret_cast<const rsxVertexProgram*>(note3d_vpo);
-    const rsxFragmentProgram* fragment =
-        reinterpret_cast<const rsxFragmentProgram*>(note3d_fpo);
-    void* vertex_code = 0;
-    u32 vertex_size = 0;
-    rsxVertexProgramGetUCode(vertex, &vertex_code, &vertex_size);
-    rsxLoadVertexProgram(context_, vertex, vertex_code);
-    const rsxProgramConst* camera_parameter =
-        rsxVertexProgramGetConst(vertex, "camera");
-    static bool printed_gpu_setup = false;
-    if (!printed_gpu_setup) {
-        printed_gpu_setup = true;
-        printf("RSX note pass: cubes=%u vertex_bytes=%u fragment_offset=%08X camera_const=%p\n",
-               count, vertex_size, note_fragment_offset_, camera_parameter);
-    }
-    const float camera[4] = {
-        height_ * kProjectionFocalHeight * kProjectionDepth * 2.0f / width_,
-        kProjectionFocalHeight * kProjectionDepth * 2.0f,
-        kProjectionEyeHeight, kProjectionDepth
-    };
-    rsxLoadVertexProgramParameterBlock(context_, 0, 1, camera);
-    rsxLoadFragmentProgramLocation(context_, fragment, note_fragment_offset_,
-                                   GCM_LOCATION_RSX);
-    rsxBindVertexArrayAttrib(context_, GCM_VERTEX_ATTRIB_POS, 0,
-                             note_vertex_offset_, sizeof(SolidVertex), 3,
-                             GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
-    rsxBindVertexArrayAttrib(context_, GCM_VERTEX_ATTRIB_COLOR0, 0,
-                             note_vertex_offset_ + offsetof(SolidVertex, color),
-                             sizeof(SolidVertex), 4,
-                             GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_RSX);
-    rsxDrawVertexArray(context_, GCM_TYPE_TRIANGLES, 0, vertex_count);
-    // The remaining HUD and direction symbols are written by the PPU into
-    // this same color buffer, so finish the RSX pass before touching them.
-    rsxFinish(context_, 1);
-    last_solid_note_count_ = count;
-    return true;
-#endif
 }
 
 void Framebuffer::present() {
     if (!initialized_) return;
+    submitFrame();
     if (gcmSetFlip(context_, buffers_[current_].id) == 0) {
         rsxFlushBuffer(context_);
         gcmSetWaitFlip(context_);
@@ -485,17 +274,32 @@ void Framebuffer::present() {
     }
 }
 
-bool Framebuffer::savePpm(const char* path) const {
-    return initialized_ && writePpmPixels(
-        path, buffers_[current_].pixels, width_, height_);
+bool Framebuffer::savePpm(const char* path) {
+    if (!initialized_) return false;
+    if (rsx_) {
+        // Render now and wait, so video memory holds this frame. RPCS3 only
+        // mirrors GPU output there with "Write Color Buffers" enabled.
+        submitFrame();
+        rsxFlushBuffer(context_);
+        rsxFinish(context_, 1);
+    }
+    return writePpmPixels(path, buffers_[current_].pixels, width_, height_);
 }
 
 void Framebuffer::pixel(int x, int y, u32 color) {
     if (!initialized_ || x < 0 || y < 0 || x >= width_ || y >= height_) return;
+    if (rsx_) {
+        batch_.rectangle(x, y, 1, 1, color);
+        return;
+    }
     buffers_[current_].pixels[y * width_ + x] = color;
 }
 
 void Framebuffer::line(int x0, int y0, int x1, int y1, u32 color, int thickness) {
+    if (rsx_) {
+        batch_.line(x0, y0, x1, y1, color, thickness);
+        return;
+    }
     const int dx = absolute(x1 - x0);
     const int sx = x0 < x1 ? 1 : -1;
     const int dy = -absolute(y1 - y0);
@@ -513,6 +317,10 @@ void Framebuffer::line(int x0, int y0, int x1, int y1, u32 color, int thickness)
 }
 
 void Framebuffer::rectangle(int x, int y, int width, int height, u32 color) {
+    if (rsx_) {
+        batch_.rectangle(x, y, width, height, color);
+        return;
+    }
     for (int row = 0; row < height; ++row) {
         for (int column = 0; column < width; ++column) {
             pixel(x + column, y + row, color);
@@ -523,6 +331,10 @@ void Framebuffer::rectangle(int x, int y, int width, int height, u32 color) {
 void Framebuffer::triangle(int x0, int y0, int x1, int y1,
                            int x2, int y2, u32 color) {
     if (!initialized_) return;
+    if (rsx_) {
+        batch_.triangle(x0, y0, x1, y1, x2, y2, color);
+        return;
+    }
     const long long area = edge(x0, y0, x1, y1, x2, y2);
     if (area == 0) return;
     const int left = std::max(0, std::min(x0, std::min(x1, x2)));
@@ -550,9 +362,32 @@ void Framebuffer::quadrilateral(int x0, int y0, int x1, int y1,
 }
 
 void Framebuffer::circle(int center_x, int center_y, int radius, u32 color) {
+    if (rsx_) {
+        batch_.circle(center_x, center_y, radius, color);
+        return;
+    }
     for (int y = -radius; y <= radius; ++y) {
         for (int x = -radius; x <= radius; ++x) {
             if (x * x + y * y <= radius * radius) pixel(center_x + x, center_y + y, color);
+        }
+    }
+}
+
+void Framebuffer::image(int x, int y, int width, int height,
+                        const unsigned short* rgb565) {
+    if (!initialized_ || !rgb565) return;
+    if (rsx_) {
+        batch_.image(x, y, width, height, rgb565);
+        return;
+    }
+    for (int row = 0; row < height; ++row) {
+        for (int column = 0; column < width; ++column) {
+            const unsigned short color = rgb565[row * width + column];
+            const u32 red = ((color >> 11) & 31u) * 255u / 31u;
+            const u32 green = ((color >> 5) & 63u) * 255u / 63u;
+            const u32 blue = (color & 31u) * 255u / 31u;
+            pixel(x + column, y + row,
+                  0xff000000u | (red << 16) | (green << 8) | blue);
         }
     }
 }
@@ -561,6 +396,10 @@ void Framebuffer::noteLine(int x0, int y0, int x1, int y1, u32 color,
                            int thickness, float camera_depth) {
     if (!note_depth_active_) {
         line(x0, y0, x1, y1, color, thickness);
+        return;
+    }
+    if (rsx_) {
+        batch_.noteLine(x0, y0, x1, y1, color, thickness, camera_depth);
         return;
     }
     const SoftwareNoteTarget target = {
@@ -590,6 +429,10 @@ void Framebuffer::noteCircle(int center_x, int center_y, int radius,
                              u32 color, float camera_depth) {
     if (!note_depth_active_) {
         circle(center_x, center_y, radius, color);
+        return;
+    }
+    if (rsx_) {
+        batch_.noteCircle(center_x, center_y, radius, color, camera_depth);
         return;
     }
     const SoftwareNoteTarget target = {

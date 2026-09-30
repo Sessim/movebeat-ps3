@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Install NVIDIA Cg Toolkit for cgcomp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nvidia-cg-toolkit
       - name: Install current PS3DEV release
         env:
           GH_TOKEN: ${{ github.token }}

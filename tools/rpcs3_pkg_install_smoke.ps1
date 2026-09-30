@@ -36,6 +36,17 @@ foreach ($name in @('qt6', 'config', 'dev_flash', 'dev_flash2',
     }
 }
 
+# The game draws on the RSX. RPCS3 keeps GPU output in host textures unless
+# "Write Color Buffers" copies it back, so PPU frame captures need it on.
+$isolatedConfig = Join-Path $app 'config/config.yml'
+if (Test-Path -LiteralPath $isolatedConfig -PathType Leaf) {
+    $configText = Get-Content -LiteralPath $isolatedConfig -Raw
+    $configText = $configText -replace '(?m)^(\s*Write Color Buffers:\s*)false',
+        '${1}true'
+    Set-Content -LiteralPath $isolatedConfig -Value $configText -NoNewline `
+        -Encoding UTF8
+}
+
 $installer = Start-Process -FilePath (Join-Path $app 'rpcs3.exe') `
     -ArgumentList @('--headless', '--installpkg', "`"$package`"") `
     -WorkingDirectory $app -WindowStyle Hidden -PassThru -Wait

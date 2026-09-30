@@ -156,39 +156,55 @@ inline void rasterizeSolidQuad(const SoftwareNoteTarget& target,
     rasterizeSolidTriangle(target, a, c, d, color);
 }
 
-inline void rasterizeNoteCube(const SoftwareNoteTarget& target,
-                              const NoteCubeMesh& cube, std::uint32_t color) {
+// Emits the visible faces of a note cube as screen-space triangles with
+// inverse camera depth. The software rasterizer and the RSX batch both use
+// this, so the two renderers share one note geometry.
+template <typename TriangleSink>
+void forEachNoteCubeTriangle(const NoteCubeMesh& cube, std::uint32_t color,
+                             int width, int height, TriangleSink& sink) {
     const NoteCubeVisibleFaces faces = visibleNoteCubeFaces(cube);
     const int quad[5][4] = {
         {4, 0, 3, 7}, {1, 5, 6, 2}, {0, 1, 5, 4}, {3, 2, 6, 7},
         {0, 1, 2, 3}
     };
-    const auto rasterizeNoteQuad = [&](int face, std::uint32_t face_color) {
+    const auto emitNoteQuad = [&](int face, std::uint32_t face_color) {
         ProjectedSolidVertex projected[4];
         for (int corner = 0; corner < 4; ++corner) {
             const int index = quad[face][corner];
-            if (!projectSolidVertex(cube.world[index], target.width,
-                                    target.height, projected[corner])) return;
+            if (!projectSolidVertex(cube.world[index], width, height,
+                                    projected[corner])) return;
             // Geometry comes from the local three-quarter projection, while
             // depth remains in the track camera so overlapping notes stay
             // ordered on their original straight lanes.
             projected[corner].x = static_cast<float>(cube.screen[index].x);
             projected[corner].y = static_cast<float>(cube.screen[index].y);
         }
-        rasterizeProjectedTriangle(target, projected[0], projected[1],
-                                   projected[2], face_color);
-        rasterizeProjectedTriangle(target, projected[0], projected[2],
-                                   projected[3], face_color);
+        sink(projected[0], projected[1], projected[2], face_color);
+        sink(projected[0], projected[2], projected[3], face_color);
     };
     if (faces.left)
-        rasterizeNoteQuad(0, shadeSolidFace(color, 0.50f));
+        emitNoteQuad(0, shadeSolidFace(color, 0.50f));
     else if (faces.right)
-        rasterizeNoteQuad(1, shadeSolidFace(color, 0.54f));
+        emitNoteQuad(1, shadeSolidFace(color, 0.54f));
     if (faces.top)
-        rasterizeNoteQuad(2, shadeSolidFace(color, 0.84f));
+        emitNoteQuad(2, shadeSolidFace(color, 0.84f));
     else if (faces.bottom)
-        rasterizeNoteQuad(3, shadeSolidFace(color, 0.42f));
-    rasterizeNoteQuad(4, color);
+        emitNoteQuad(3, shadeSolidFace(color, 0.42f));
+    emitNoteQuad(4, color);
+}
+
+struct SoftwareTriangleSink {
+    const SoftwareNoteTarget& target;
+    void operator()(const ProjectedSolidVertex& a, const ProjectedSolidVertex& b,
+                    const ProjectedSolidVertex& c, std::uint32_t color) {
+        rasterizeProjectedTriangle(target, a, b, c, color);
+    }
+};
+
+inline void rasterizeNoteCube(const SoftwareNoteTarget& target,
+                              const NoteCubeMesh& cube, std::uint32_t color) {
+    SoftwareTriangleSink sink = {target};
+    forEachNoteCubeTriangle(cube, color, target.width, target.height, sink);
 }
 
 } // namespace ps3

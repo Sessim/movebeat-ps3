@@ -26,16 +26,40 @@ off. A failed level still stops immediately.
 - `playfield_draw.cpp` draws the 3D play scene (grid, walls, arcs, notes,
   cut bursts, sabers, HUD); `screens_draw.cpp` draws menus and overlays;
   `text_draw.cpp` holds the bitmap text and digit helpers.
-- `framebuffer.cpp` and `software_note_renderer.hpp` are the rasterizer that
-  every draw call ends up in; `app_paths.hpp` lists the USRDIR files.
+- `framebuffer.cpp` receives every draw call and forwards it to the RSX batch
+  (`draw_batch.cpp`, `rsx_batch_renderer.cpp`) or to the software fallback
+  (`software_note_renderer.hpp`); `app_paths.hpp` lists the USRDIR files.
 
 ## Build
 
 From a PS3DEV/PSL1GHT shell:
 
-The default software-3D build does not need NVIDIA Cg. The optional legacy
-RSX experiment (`make RSX_NOTES=1`) does need NVIDIA Cg Toolkit
-(`nvidia-cg-toolkit` on Ubuntu), because PSL1GHT's `cgcomp` uses its compiler.
+The build needs the NVIDIA Cg Toolkit (`nvidia-cg-toolkit` on Ubuntu):
+PSL1GHT's `cgcomp` uses its compiler for the RSX shaders in `shaders/`.
+
+## Rendering
+
+The RSX draws every frame. `Framebuffer` keeps its drawing calls, but on the
+RSX path each call is recorded into a `DrawBatch` (`draw_batch.cpp`) as
+clip-space triangles, and `RsxBatchRenderer` (`rsx_batch_renderer.cpp`) draws
+the batch at `present()`: one clear, then one draw per run of equal state.
+Runs are flat (painter's order), note cube faces (depth LESS with write),
+note glyphs (depth LEQUAL, no write) and textured library cards. Cube faces
+come from `forEachNoteCubeTriangle`, the same generator the software
+rasterizer uses, and depth is the software inverse depth mapped linearly to
+[0, 1], so both paths occlude alike. `tests/draw_batch_tests.cpp` replays the
+batch pixel by pixel and compares it with the software primitives.
+
+If the RSX resources cannot be created the app falls back to the PPU
+software rasterizer. The fallback can also be forced for A/B checks by
+writing `renderer=software` to `USRDIR/renderer.ini`. `run_status.ini`
+reports `renderer=rsx|software`, `batch_max_vertices` and
+`batch_dropped_primitives`.
+
+`savePpm` on the RSX path renders the pending frame, waits for the RSX and
+reads video memory back. RPCS3 only mirrors GPU output into emulated memory
+with "Write Color Buffers" enabled; `tools/rpcs3_pkg_install_smoke.ps1`
+turns it on in its isolated profile.
 
 On the configured Ubuntu WSL instance, run `bash tools/build_ps3.sh` from the
 project root. It uses `/opt/movebeat-sdk/ps3dev`, builds in a fresh Linux path
@@ -79,7 +103,7 @@ closes only the emulator instance it started. Its profile and logs remain under
 `out/rpcs3-ppu-test-runs/`.
 
 The repository's GitHub Actions workflow also cross-compiles the SELF with the
-current official PS3DEV prerelease without installing Cg, in addition to
+current official PS3DEV prerelease and the Cg Toolkit, in addition to
 running desktop tests. A
 successful run publishes both `movebeat.self` and installable `movebeat.pkg` in
 the `movebeat-ps3` workflow artifact. The workflow also retains the upstream
@@ -276,12 +300,10 @@ toward the centerline and widen toward the player. Notes use this
 same camera rather than a separate three-quarter camera: their front faces
 therefore face the player instead of turning sideways, and visible top/side
 planes come only from the real viewing angle. The differently shaded faces
-have no inset front border. The default PS3
-build rasterizes the 3D mesh triangles into
-the same PPU color buffer as the grid and
-HUD, with a per-frame inverse-depth buffer for occlusion. This avoids the
-mixed PPU/RSX color-surface conflict seen in RPCS3; the experimental RSX path
-remains available behind `MOVEBEAT_EXPERIMENTAL_RSX_NOTES`. The cut arrow is
+have no inset front border. The RSX draws the 3D mesh triangles with the
+grid and HUD in one pass per frame (see Rendering); the software fallback
+rasterizes them into the same PPU color buffer with a per-frame
+inverse-depth buffer for occlusion. The cut arrow is
 depth-tested against nearby cubes on the front face, and bombs use the same
 depth test. A dense BeatSaver chart had shown far arrows through near cubes
 before this fix. Bombs remain round. An RPCS3 capture confirms

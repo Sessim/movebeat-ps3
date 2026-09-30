@@ -44,16 +44,7 @@ bool LibraryCard::load(const std::string& directory) {
 
 void LibraryCard::draw(Framebuffer& screen, int x, int y) const {
     if (!ready()) return;
-    for (int row = 0; row < HEIGHT; ++row) {
-        for (int column = 0; column < WIDTH; ++column) {
-            const unsigned short color = pixels_[row * WIDTH + column];
-            const u32 red = ((color >> 11) & 31u) * 255u / 31u;
-            const u32 green = ((color >> 5) & 63u) * 255u / 63u;
-            const u32 blue = (color & 31u) * 255u / 31u;
-            screen.pixel(x + column, y + row,
-                         0xff000000u | (red << 16) | (green << 8) | blue);
-        }
-    }
+    screen.image(x, y, WIDTH, HEIGHT, &pixels_[0]);
 }
 
 } // namespace ps3

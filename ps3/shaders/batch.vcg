@@ -1,0 +1,12 @@
+// Pass-through: DrawBatch already stores clip-space positions.
+void main(float4 position : POSITION,
+          float4 color : COLOR0,
+          float2 texcoord : TEXCOORD0,
+          out float4 clipPosition : POSITION,
+          out float2 outputTexcoord : TEXCOORD0,
+          out float4 outputColor : TEXCOORD1)
+{
+    clipPosition = position;
+    outputTexcoord = texcoord;
+    outputColor = color;
+}

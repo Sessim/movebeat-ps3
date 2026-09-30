@@ -138,7 +138,9 @@ bool App::initializeSystems(int& exit_code) {
         exit_code = 1;
         return false;
     }
-    if (!screen_.initialize()) {
+    const bool software_requested = softwareRendererRequested();
+    if (!screen_.initialize(software_requested ? RENDERER_FORCE_SOFTWARE
+                                               : RENDERER_PREFER_RSX)) {
         printf("RSX framebuffer initialization failed\n");
         diagnostic_.state = "fatal";
         diagnostic_.phase = "framebuffer";
@@ -148,7 +150,8 @@ bool App::initializeSystems(int& exit_code) {
         exit_code = 2;
         return false;
     }
-    printf("MoveBeat PS3 0.1\n");
+    printf("MoveBeat PS3 0.1 (%s renderer)\n", screen_.rendererName());
+    diagnostic_.renderer = screen_.rendererName();
     diagnostic_.phase = "framebuffer_ready";
     writeRunStatus(kRunStatusPath, diagnostic_);
 
@@ -819,15 +822,15 @@ void App::renderPlayfield(const FrameInput& input) {
     if (solid_notes_drawn) {
         const unsigned int cubes = screen_.lastSolidNoteCount();
         if (cubes) {
-#if defined(MOVEBEAT_EXPERIMENTAL_RSX_NOTES)
-            ++diagnostic_.gpu_note_draw_calls;
-            diagnostic_.gpu_note_max_cubes = std::max(
-                diagnostic_.gpu_note_max_cubes, cubes);
-#else
-            ++diagnostic_.software_note_draw_calls;
-            diagnostic_.software_note_max_cubes = std::max(
-                diagnostic_.software_note_max_cubes, cubes);
-#endif
+            if (screen_.usingRsx()) {
+                ++diagnostic_.gpu_note_draw_calls;
+                diagnostic_.gpu_note_max_cubes = std::max(
+                    diagnostic_.gpu_note_max_cubes, cubes);
+            } else {
+                ++diagnostic_.software_note_draw_calls;
+                diagnostic_.software_note_max_cubes = std::max(
+                    diagnostic_.software_note_max_cubes, cubes);
+            }
         }
     } else {
         ++diagnostic_.gpu_note_fallback_frames;
@@ -916,6 +919,9 @@ void App::renderFrame(const FrameInput& input,
         frame_work_end_us - frame_render_start_us));
     saveDiagnosticFrames(input);
     screen_.present();
+    diagnostic_.batch_max_vertices = std::max(
+        diagnostic_.batch_max_vertices, screen_.lastBatchVertices());
+    diagnostic_.batch_dropped_primitives += screen_.lastBatchDropped();
     sysUtilCheckCallback();
 }
 

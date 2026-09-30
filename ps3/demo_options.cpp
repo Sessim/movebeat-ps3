@@ -50,5 +50,23 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
     return options;
 }
 
+bool softwareRendererRequested() {
+    FILE* file = 0;
+#if defined(_MSC_VER)
+    fopen_s(&file, kRendererPath, "rb");
+#else
+    file = fopen(kRendererPath, "rb");
+#endif
+    if (!file) return false;
+    bool requested = false;
+    char line[64] = {};
+    while (fgets(line, sizeof(line), file)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (strcmp(line, "renderer=software") == 0) requested = true;
+    }
+    fclose(file);
+    return requested;
+}
+
 } // namespace ps3
 } // namespace movebeat

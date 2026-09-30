@@ -30,6 +30,10 @@ struct RunStatus {
     unsigned int gpu_note_fallback_frames;
     unsigned int software_note_draw_calls;
     unsigned int software_note_max_cubes;
+    // "rsx" when the RSX draws the frame, "software" for the PPU rasterizer.
+    const char* renderer;
+    unsigned int batch_max_vertices;
+    unsigned int batch_dropped_primitives;
     unsigned int error_stage;
     unsigned int error_code;
     int level_count;

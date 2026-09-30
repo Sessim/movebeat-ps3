@@ -4,22 +4,36 @@
 #include <ppu-types.h>
 #include <rsx/rsx.h>
 
+#include "draw_batch.hpp"
+#include "rsx_batch_renderer.hpp"
 #include "movebeat/game.hpp"
 
 namespace movebeat {
 namespace ps3 {
 
+enum RendererPreference {
+    // Draw the frame on the RSX; fall back to software if it cannot start.
+    RENDERER_PREFER_RSX,
+    // PPU rasterizer only (USRDIR/renderer.ini: renderer=software).
+    RENDERER_FORCE_SOFTWARE
+};
+
+// Double-buffered 32-bit display with two interchangeable back ends. The RSX
+// path records every primitive into a DrawBatch and draws it at present();
+// the software path writes pixels from the PPU. Both expose the same calls.
 class Framebuffer {
 public:
     Framebuffer();
     ~Framebuffer();
 
-    bool initialize();
+    bool initialize(RendererPreference preference = RENDERER_PREFER_RSX);
     void shutdown();
     void waitForPreviousFlip();
     void beginFrame(u32 color);
     void present();
-    bool savePpm(const char* path) const;
+    // On the RSX path this renders the pending frame and reads it back from
+    // video memory, which is slow; use it for diagnostics only.
+    bool savePpm(const char* path);
 
     void pixel(int x, int y, u32 color);
     void line(int x0, int y0, int x1, int y1, u32 color, int thickness);
@@ -28,15 +42,24 @@ public:
     void quadrilateral(int x0, int y0, int x1, int y1,
                        int x2, int y2, int x3, int y3, u32 color);
     void circle(int center_x, int center_y, int radius, u32 color);
+    // Draws an RGB565 image 1:1 at (x, y).
+    void image(int x, int y, int width, int height,
+               const unsigned short* rgb565);
     // Direction glyphs and bombs obey the 3D note depth buffer when active.
     void noteLine(int x0, int y0, int x1, int y1, u32 color,
                   int thickness, float camera_depth);
     void noteCircle(int center_x, int center_y, int radius, u32 color,
                     float camera_depth);
     // Draw cuttable notes as 3D mesh triangles with perspective and a Z-buffer.
-    // Returns false if the depth buffer cannot be allocated.
+    // Returns false if the software depth buffer cannot be allocated.
     bool drawSolidNotes(const movebeat::Game& game, unsigned int now_ms);
     unsigned int lastSolidNoteCount() const { return last_solid_note_count_; }
+
+    bool usingRsx() const { return rsx_; }
+    const char* rendererName() const { return rsx_ ? "rsx" : "software"; }
+    // Vertices and dropped primitives of the last submitted RSX frame.
+    unsigned int lastBatchVertices() const { return last_batch_vertices_; }
+    unsigned int lastBatchDropped() const { return last_batch_dropped_; }
 
     int width() const { return width_; }
     int height() const { return height_; }
@@ -52,9 +75,8 @@ private:
     Framebuffer& operator=(const Framebuffer&);
 
     bool makeBuffer(int index);
-    bool initializeSolidNotes();
-    void bindCurrentSurface();
     void waitForFlip();
+    void submitFrame();
 
     gcmContextData* context_;
     void* host_memory_;
@@ -66,16 +88,15 @@ private:
     u32 clear_color_;
     bool initialized_;
     bool flip_submitted_;
-    void* depth_buffer_;
-    void* note_vertex_buffer_;
-    void* note_fragment_buffer_;
-    u32 depth_offset_;
-    u32 note_vertex_offset_;
-    u32 note_fragment_offset_;
-    bool solid_notes_ready_;
     float* software_depth_;
     bool note_depth_active_;
     unsigned int last_solid_note_count_;
+    bool rsx_;
+    bool frame_submitted_;
+    DrawBatch batch_;
+    RsxBatchRenderer gpu_;
+    unsigned int last_batch_vertices_;
+    unsigned int last_batch_dropped_;
 };
 
 } // namespace ps3

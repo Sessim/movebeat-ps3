@@ -29,6 +29,8 @@ target_link_libraries(movebeat_demo PRIVATE movebeat_core)
 add_library(movebeat_ps3_syntax OBJECT
     ps3/main.cpp
     ps3/app.cpp
+    ps3/draw_batch.cpp
+    ps3/rsx_batch_renderer.cpp
     ps3/demo_options.cpp
     ps3/level_library.cpp
     ps3/playfield_draw.cpp
@@ -42,6 +44,8 @@ add_library(movebeat_ps3_syntax OBJECT
     ps3/audio_player.cpp
     ps3/run_diagnostics.cpp
 )
+# RSX-only code compiles to no-op stand-ins against these stubs.
+target_compile_definitions(movebeat_ps3_syntax PRIVATE MOVEBEAT_PS3_STUBS=1)
 target_include_directories(movebeat_ps3_syntax PRIVATE
     tests/ps3_stubs
     ps3
@@ -70,6 +74,13 @@ target_include_directories(movebeat_move_input_tests PRIVATE
     core/include
 )
 add_test(NAME movebeat_move_input_tests COMMAND movebeat_move_input_tests)
+
+add_executable(movebeat_draw_batch_tests
+    tests/draw_batch_tests.cpp
+    ps3/draw_batch.cpp
+)
+target_include_directories(movebeat_draw_batch_tests PRIVATE ps3 core/include)
+add_test(NAME movebeat_draw_batch_tests COMMAND movebeat_draw_batch_tests)
 
 add_executable(movebeat_run_diagnostics_tests
     tests/run_diagnostics_tests.cpp

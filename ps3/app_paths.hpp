@@ -14,6 +14,8 @@ const char kRunStatusPath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/run_status.ini";
 const char kFirstFramePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/first_frame.ppm";
+const char kRendererPath[] =
+    "/dev_hdd0/game/MOVEBEAT1/USRDIR/renderer.ini";
 const char kDemoModePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/demo_mode.ini";
 const char kDemoFramePath[] =

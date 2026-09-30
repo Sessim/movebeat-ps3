@@ -12,12 +12,7 @@ include $(PSL1GHT)/ppu_rules
 TARGET      := movebeat
 BUILD       := build
 SOURCES     := . ../core/src
-RSX_NOTES   ?= 0
-ifeq ($(RSX_NOTES),1)
 SHADERS     := shaders
-else
-SHADERS     :=
-endif
 DATA        :=
 INCLUDES    := . ../core/include
 
@@ -27,8 +22,7 @@ CONTENTID   := UP0001-$(APPID)_00-0000000000000000
 ICON0       := $(PS3_MAKEFILE_DIR)package/ICON0.PNG
 
 CFLAGS       = $(CFLAGS_INIT) -O2 -Wall -mcpu=cell $(MACHDEP) $(INCLUDE)
-CXXFLAGS     = $(CFLAGS) $(CXXFLAGS_INIT) -std=gnu++11 \
-               $(if $(filter 1,$(RSX_NOTES)),-DMOVEBEAT_EXPERIMENTAL_RSX_NOTES,)
+CXXFLAGS     = $(CFLAGS) $(CXXFLAGS_INIT) -std=gnu++11
 LDFLAGS      = $(MACHDEP) -Wl,-Map,$@.map
 LIBS        := -lvorbisfile -lvorbis -logg -laudio -lsimdmath -lrsx \
                -lgcm_sys -lio -lsysutil -lrt -llv2 -lm -lcamera -lgem \
@@ -45,17 +39,14 @@ export BUILDDIR  := $(CURDIR)/$(BUILD)
 export PKGFILES  := $(CURDIR)/package
 
 CPPFILES := main.cpp app.cpp demo_options.cpp level_library.cpp playfield_draw.cpp \
-            screens_draw.cpp text_draw.cpp framebuffer.cpp library_card.cpp \
+            screens_draw.cpp text_draw.cpp framebuffer.cpp draw_batch.cpp \
+            rsx_batch_renderer.cpp library_card.cpp \
             move_input.cpp demo_input.cpp gem_runtime.cpp audio_player.cpp \
             run_diagnostics.cpp newlib_malloc_lock.cpp chart.cpp game.cpp level.cpp \
             records.cpp settings.cpp
-ifeq ($(RSX_NOTES),1)
-VCGFILES := note3d.vcg
-FCGFILES := note3d.fcg
-else
-VCGFILES :=
-FCGFILES :=
-endif
+# Compiled by PSL1GHT's cgcomp, which needs the NVIDIA Cg Toolkit (cgc).
+VCGFILES := batch.vcg
+FCGFILES := batch_color.fcg batch_texture.fcg
 VPOFILES := $(VCGFILES:.vcg=.vpo)
 FPOFILES := $(FCGFILES:.fcg=.fpo)
 
@@ -119,16 +110,17 @@ $(OUTPUT)-tests.pkg: $(OUTPUT)-tests.self
 	$(VERB) cp $@ $(basename $@).gnpdrm.pkg
 	$(VERB) $(PACKAGE_FINALIZE) $(basename $@).gnpdrm.pkg
 
-$(OUTPUT)-tests.elf: game_tests.o gem_runtime_tests.o gem_runtime.o move_input.o newlib_malloc_lock.o chart.o game.o level.o records.o settings.o
+$(OUTPUT)-tests.elf: game_tests.o gem_runtime_tests.o gem_runtime.o move_input.o \
+		draw_batch_tests.o draw_batch.o \
+		newlib_malloc_lock.o chart.o game.o level.o records.o settings.o
 	$(LD) $^ $(LDFLAGS) $(LIBPATHS) -lm -llv2 -o $@
 
 $(OUTPUT).self: $(OUTPUT).elf
 $(OUTPUT).elf: $(OFILES)
 $(OUTPUT).pkg: $(OUTPUT).self $(wildcard $(PKGFILES)/USRDIR/levels/*/*)
 
-ifeq ($(RSX_NOTES),1)
-framebuffer.o: note3d.vpo.o note3d.fpo.o
-endif
+# bin2o generates batch_*_{v,f}po.h next to these objects.
+rsx_batch_renderer.o: batch.vpo.o batch_color.fpo.o batch_texture.fpo.o
 
 %.vpo.o: %.vpo
 	$(VERB) echo $(notdir $<)
@@ -139,6 +131,6 @@ endif
 	$(bin2o)
 
 -include $(DEPENDS)
--include game_tests.d gem_runtime_tests.d gem_runtime.d
+-include game_tests.d gem_runtime_tests.d gem_runtime.d draw_batch_tests.d
 
 endif

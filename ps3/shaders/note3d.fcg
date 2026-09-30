@@ -1,4 +1,0 @@
-void main(float4 vertexColor : TEXCOORD0, out float4 outputColor)
-{
-    outputColor = vertexColor;
-}

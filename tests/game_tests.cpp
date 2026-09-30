@@ -22,6 +22,7 @@
 #if defined(__PPU__)
 #include "../ps3/move_input.hpp"
 void runGemRuntimeHueTests();
+int runDrawBatchTests();
 #endif
 
 namespace {
@@ -1280,6 +1281,8 @@ int main() {
     checkpoint("PPU Move input mapping"); testPpuMoveInputMapping();
     checkpoint("PPU GemRuntime physical LED hue assignment");
     runGemRuntimeHueTests();
+    checkpoint("PPU RSX draw batch geometry");
+    failures += runDrawBatchTests();
 #endif
     if (failures == 0) {
         std::puts("All MoveBeat core tests passed.");
