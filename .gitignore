@@ -1,0 +1,17 @@
+build*/
+.venv*/
+out/
+*.elf
+*.self
+*.pkg
+*.o
+*.a
+*.exe
+*.pdb
+*.user
+__pycache__/
+*.py[cod]
+.gradle/
+android/app/build/
+local.properties
+.claude/settings.local.json

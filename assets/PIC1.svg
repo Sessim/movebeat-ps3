@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#19244b"/>
+      <stop offset="0.48" stop-color="#0c1128"/>
+      <stop offset="1" stop-color="#03050d"/>
+    </radialGradient>
+    <linearGradient id="red" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#9d0b43"/>
+      <stop offset="0.45" stop-color="#ff2865"/>
+      <stop offset="1" stop-color="#ffe5ed"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#08799f"/>
+      <stop offset="0.45" stop-color="#2ce8ff"/>
+      <stop offset="1" stop-color="#e4ffff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="22" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g opacity="0.42" stroke="#34436f" stroke-width="3">
+    <path d="M0 940H1920M105 820H1815M220 715H1700M330 625H1590M430 548H1490"/>
+    <path d="M190 1080L795 350M540 1080L875 350M1380 1080L1045 350M1730 1080L1125 350"/>
+  </g>
+  <path d="M0 770C380 640 560 720 830 585S1375 380 1920 505V1080H0Z" fill="#081021" opacity="0.48"/>
+
+  <g filter="url(#glow)">
+    <path d="M680 820L1325 185" stroke="#ff225d" stroke-width="52" stroke-linecap="round" opacity="0.24"/>
+    <path d="M680 820L1325 185" stroke="url(#red)" stroke-width="18" stroke-linecap="round"/>
+    <path d="M1240 820L595 185" stroke="#23ddff" stroke-width="52" stroke-linecap="round" opacity="0.24"/>
+    <path d="M1240 820L595 185" stroke="url(#cyan)" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <path d="M630 880L730 775" stroke="#cbd1df" stroke-width="40" stroke-linecap="round"/>
+  <path d="M1290 880L1190 775" stroke="#cbd1df" stroke-width="40" stroke-linecap="round"/>
+
+  <g transform="translate(315 270)">
+    <rect width="230" height="230" rx="24" fill="#e91f5a" stroke="#ff8cab" stroke-width="10"/>
+    <path d="M68 143L115 90L162 143" fill="none" stroke="white" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(1375 270)">
+    <rect width="230" height="230" rx="24" fill="#12bad9" stroke="#90f5ff" stroke-width="10"/>
+    <path d="M68 87L115 140L162 87" fill="none" stroke="white" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="170" y="825" width="1580" height="165" rx="28" fill="#050712" opacity="0.88"/>
+  <text x="960" y="935" text-anchor="middle" fill="#f7f9ff"
+        font-family="DejaVu Sans, sans-serif" font-size="112" font-weight="700" letter-spacing="24">MOVEBEAT</text>
+  <text x="960" y="1025" text-anchor="middle" fill="#92a4d6"
+        font-family="DejaVu Sans, sans-serif" font-size="35" font-weight="500" letter-spacing="12">RHYTHM • MOTION • PS3</text>
+</svg>

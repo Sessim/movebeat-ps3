@@ -1,0 +1,66 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install importer dependencies
+        run: python -m pip install -r tools/requirements-import.txt
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  ps3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install current PS3DEV release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api repos/ps3dev/ps3dev/releases \
+            --jq 'map(select(.prerelease and (.draft | not))) | sort_by(.published_at) | reverse | .[0].assets[] | select(.name == "ps3dev-linux-X64.tar.gz") | .browser_download_url')
+          test -n "$url"
+          curl --fail --location --silent --show-error "$url" | tar xz
+          echo "PS3DEV=$GITHUB_WORKSPACE/ps3dev" >> "$GITHUB_ENV"
+          echo "PSL1GHT=$GITHUB_WORKSPACE/ps3dev" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/ps3dev/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ps3dev/ppu/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ps3dev/spu/bin" >> "$GITHUB_PATH"
+      - name: Build PS3 SELF and PKG
+        run: |
+          set -euo pipefail
+          ppu-g++ --version
+          make -C ps3 -j2 pkg
+          make -C ps3 -j2 core-tests-pkg
+          test -s ps3/movebeat.self
+          test -s ps3/movebeat.pkg
+          test -s ps3/movebeat.gnpdrm.pkg
+          test -s ps3/movebeat-tests.elf
+          test -s ps3/movebeat-tests.self
+          test -s ps3/movebeat-tests.pkg
+          test -s ps3/movebeat-tests.gnpdrm.pkg
+          ppu-readelf -h ps3/movebeat.elf
+          ppu-readelf -h ps3/movebeat-tests.elf
+      - name: Upload installable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: movebeat-ps3
+          path: |
+            ps3/movebeat.self
+            ps3/movebeat.pkg
+            ps3/movebeat.gnpdrm.pkg
+            ps3/movebeat-tests.elf
+            ps3/movebeat-tests.self
+            ps3/movebeat-tests.pkg
+            ps3/movebeat-tests.gnpdrm.pkg
+          if-no-files-found: error

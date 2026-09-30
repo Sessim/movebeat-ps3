@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="176" viewBox="0 0 320 176">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070a18"/>
+      <stop offset="0.55" stop-color="#111630"/>
+      <stop offset="1" stop-color="#050713"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d7ffff"/>
+      <stop offset="0.35" stop-color="#40e8ff"/>
+      <stop offset="1" stop-color="#087da8"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffdfeb"/>
+      <stop offset="0.35" stop-color="#ff3e72"/>
+      <stop offset="1" stop-color="#9f124b"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="320" height="176" rx="12" fill="url(#bg)"/>
+  <path d="M0 138H320M26 113H294M52 91H268" stroke="#26345c" stroke-width="1" opacity="0.65"/>
+  <path d="M40 176L132 62M280 176L188 62M96 176L145 62M224 176L175 62" stroke="#1b274b" stroke-width="1" opacity="0.65"/>
+
+  <g filter="url(#glow)">
+    <path d="M103 123L217 28" stroke="#ff2c66" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+    <path d="M103 123L217 28" stroke="url(#red)" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M217 123L103 28" stroke="#38eaff" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+    <path d="M217 123L103 28" stroke="url(#cyan)" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+  <path d="M94 132L111 113" stroke="#c5cad8" stroke-width="7" stroke-linecap="round"/>
+  <path d="M226 132L209 113" stroke="#c5cad8" stroke-width="7" stroke-linecap="round"/>
+
+  <g transform="translate(57 47)">
+    <rect width="42" height="42" rx="5" fill="#ed235d" stroke="#ff8cab" stroke-width="2"/>
+    <path d="M13 26L21 17L29 26" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(221 47)">
+    <rect width="42" height="42" rx="5" fill="#12bddd" stroke="#8ff3ff" stroke-width="2"/>
+    <path d="M13 16L21 25L29 16" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="36" y="136" width="248" height="30" rx="7" fill="#080b19" opacity="0.88"/>
+  <text x="160" y="159" text-anchor="middle" fill="#f5f8ff"
+        font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="700" letter-spacing="5">MOVEBEAT</text>
+  <rect x="0.5" y="0.5" width="319" height="175" rx="11.5" fill="none" stroke="#53618a"/>
+</svg>
