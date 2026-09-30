@@ -28,6 +28,12 @@ target_link_libraries(movebeat_demo PRIVATE movebeat_core)
 # the GitHub Actions PPU build remains the authoritative ABI/link check.
 add_library(movebeat_ps3_syntax OBJECT
     ps3/main.cpp
+    ps3/app.cpp
+    ps3/demo_options.cpp
+    ps3/level_library.cpp
+    ps3/playfield_draw.cpp
+    ps3/screens_draw.cpp
+    ps3/text_draw.cpp
     ps3/framebuffer.cpp
     ps3/library_card.cpp
     ps3/move_input.cpp

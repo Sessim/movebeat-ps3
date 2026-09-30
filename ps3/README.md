@@ -14,6 +14,21 @@ After the last gameplay object is settled, imported levels remain in the play
 state until the Ogg decoder reaches EOF, so a mapped song's outro is not cut
 off. A failed level still stops immediately.
 
+## Source layout
+
+- `main.cpp` only creates `App`.
+- `app.cpp` owns startup, shutdown and the per-frame state machine. A frame
+  runs, in order: pause/audio checks, input (`readInput`), library actions,
+  tracking-loss recovery, calibration, Start handling, gameplay update,
+  rendering and the `run_status.ini` heartbeat.
+- `level_library.cpp` scans `USRDIR/levels`, manages library cards and holds
+  the built-in fallback chart; `demo_options.cpp` reads `demo_mode.ini`.
+- `playfield_draw.cpp` draws the 3D play scene (grid, walls, arcs, notes,
+  cut bursts, sabers, HUD); `screens_draw.cpp` draws menus and overlays;
+  `text_draw.cpp` holds the bitmap text and digit helpers.
+- `framebuffer.cpp` and `software_note_renderer.hpp` are the rasterizer that
+  every draw call ends up in; `app_paths.hpp` lists the USRDIR files.
+
 ## Build
 
 From a PS3DEV/PSL1GHT shell:
