@@ -59,10 +59,9 @@ bool require(const std::map<std::string, std::string>& values,
     return true;
 }
 
-} // namespace
-
-bool loadLevelManifest(std::istream& input, LevelManifest& level, std::string& error) {
-    std::map<std::string, std::string> values;
+// Reads `key=value` lines; blank lines and # comments are skipped.
+bool readKeyValues(std::istream& input, const char* file_name,
+                   std::map<std::string, std::string>& values, std::string& error) {
     std::string line;
     unsigned int line_number = 0;
     while (std::getline(input, line)) {
@@ -72,17 +71,40 @@ bool loadLevelManifest(std::istream& input, LevelManifest& level, std::string& e
         const std::string::size_type separator = line.find('=');
         if (separator == std::string::npos) {
             std::ostringstream message;
-            message << "level.ini line " << line_number << ": expected key=value";
+            message << file_name << " line " << line_number << ": expected key=value";
             error = message.str();
             return false;
         }
         const std::string key = trim(line.substr(0, separator));
         if (key.empty()) {
-            error = "level.ini: empty key";
+            error = std::string(file_name) + ": empty key";
             return false;
         }
         values[key] = trim(line.substr(separator + 1));
     }
+    return true;
+}
+
+std::string lowerAscii(const std::string& value) {
+    std::string result(value);
+    for (std::size_t index = 0; index < result.size(); ++index)
+        if (result[index] >= 'A' && result[index] <= 'Z')
+            result[index] = static_cast<char>(result[index] - 'A' + 'a');
+    return result;
+}
+
+bool hexHash(const std::string& value) {
+    if (value.size() != 40) return false;
+    for (std::size_t index = 0; index < value.size(); ++index)
+        if (!std::isxdigit(static_cast<unsigned char>(value[index]))) return false;
+    return true;
+}
+
+} // namespace
+
+bool loadLevelManifest(std::istream& input, LevelManifest& level, std::string& error) {
+    std::map<std::string, std::string> values;
+    if (!readKeyValues(input, "level.ini", values, error)) return false;
 
     LevelManifest parsed;
     std::string format;
@@ -116,6 +138,8 @@ bool loadLevelManifest(std::istream& input, LevelManifest& level, std::string& e
 
     parsed.source = values["source"];
     parsed.source_key = values["source_key"];
+    // An unusable hash only loses playlist matching by hash, not the level.
+    if (hexHash(values["source_hash"])) parsed.source_hash = lowerAscii(values["source_hash"]);
     parsed.song_author = values["song_author"];
     parsed.mapper = values["mapper"];
     parsed.cover = values["cover"];
@@ -204,6 +228,71 @@ bool loadLevelChart(const std::string& directory, const LevelManifest& level,
         return false;
     }
     return loadChartFile(joinPath(directory, level.charts[chart_index].file), chart, error);
+}
+
+bool loadPlaylistManifest(std::istream& input, PlaylistManifest& playlist,
+                          std::string& error) {
+    std::map<std::string, std::string> values;
+    if (!readKeyValues(input, "playlist.ini", values, error)) return false;
+    if (values["format"] != "1") {
+        error = "playlist.ini: unsupported format";
+        return false;
+    }
+    PlaylistManifest parsed;
+    parsed.title = values["title"];
+    parsed.author = values["author"];
+    if (parsed.title.empty()) {
+        error = "playlist.ini: missing title";
+        return false;
+    }
+    unsigned int count = 0;
+    if (!parseUnsigned(values["song_count"], count) || count == 0 ||
+        count > kMaxPlaylistSongs) {
+        error = "playlist.ini: song_count must be 1..256";
+        return false;
+    }
+    for (unsigned int index = 0; index < count; ++index) {
+        std::ostringstream prefix;
+        prefix << "song" << index << "_";
+        PlaylistSong song;
+        const std::string hash = values[prefix.str() + "hash"];
+        if (!hash.empty()) {
+            if (!hexHash(hash)) {
+                error = "playlist.ini: invalid " + prefix.str() + "hash";
+                return false;
+            }
+            song.hash = lowerAscii(hash);
+        }
+        song.key = values[prefix.str() + "key"];
+        if (song.hash.empty() && song.key.empty()) {
+            error = "playlist.ini: " + prefix.str() + " needs a hash or a key";
+            return false;
+        }
+        song.title = values[prefix.str() + "title"];
+        song.characteristic = values[prefix.str() + "characteristic"];
+        song.difficulty = values[prefix.str() + "difficulty"];
+        parsed.songs.push_back(song);
+    }
+    playlist = parsed;
+    error.clear();
+    return true;
+}
+
+bool loadPlaylistDirectory(const std::string& directory,
+                           PlaylistManifest& playlist, std::string& error) {
+    std::ifstream manifest(joinPath(directory, "playlist.ini").c_str());
+    if (!manifest) {
+        error = "could not open playlist.ini in " + directory;
+        return false;
+    }
+    return loadPlaylistManifest(manifest, playlist, error);
+}
+
+bool playlistSongMatches(const PlaylistSong& song, const LevelManifest& level) {
+    if (!song.hash.empty() && !level.source_hash.empty())
+        return song.hash == level.source_hash;
+    return !song.key.empty() && !level.source_key.empty() &&
+           lowerAscii(song.key) == lowerAscii(level.source_key);
 }
 
 } // namespace movebeat

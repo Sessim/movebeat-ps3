@@ -23,6 +23,7 @@
 #include "../ps3/move_input.hpp"
 void runGemRuntimeHueTests();
 int runDrawBatchTests();
+int runMenuTests();
 #endif
 
 namespace {
@@ -677,6 +678,56 @@ void testLevelManifest() {
            "manifest rejects non-finite note jump metadata");
 }
 
+void testPlaylistManifest() {
+    std::istringstream input(
+        "format=1\ntitle=Warmup\nauthor=Someone\nsong_count=3\n"
+        "song0_hash=2DF6BE39F87AFF225E86A83E5185AA1DE8264E18\nsong0_key=132ce\n"
+        "song0_title=beliver\nsong0_characteristic=Standard\nsong0_difficulty=Hard\n"
+        "song1_key=bench02\n"
+        "song2_hash=0000000000000000000000000000000000000000\n");
+    movebeat::PlaylistManifest playlist;
+    std::string error;
+    expect(movebeat::loadPlaylistManifest(input, playlist, error), "playlist manifest parses");
+    expect(playlist.title == "Warmup" && playlist.author == "Someone" &&
+           playlist.songs.size() == 3, "playlist keeps title, author and song order");
+    expect(playlist.songs[0].hash == "2df6be39f87aff225e86a83e5185aa1de8264e18" &&
+           playlist.songs[0].difficulty == "Hard",
+           "playlist hashes are lowercased and difficulties kept");
+
+    movebeat::LevelManifest level;
+    level.source_key = "132CE";
+    level.source_hash = "2df6be39f87aff225e86a83e5185aa1de8264e18";
+    expect(movebeat::playlistSongMatches(playlist.songs[0], level),
+           "a playlist song matches its level by hash");
+    level.source_hash = "1111111111111111111111111111111111111111";
+    expect(!movebeat::playlistSongMatches(playlist.songs[0], level),
+           "a different hash (another map version) does not match by key");
+    movebeat::LevelManifest bench;
+    bench.source_key = "Bench02";
+    expect(movebeat::playlistSongMatches(playlist.songs[1], bench),
+           "a song without a hash matches by key, ignoring case");
+    expect(!movebeat::playlistSongMatches(playlist.songs[2], bench),
+           "a hash-only song never matches a level without that hash");
+
+    std::istringstream nameless("format=1\ntitle=X\nsong_count=1\nsong0_title=Y\n");
+    expect(!movebeat::loadPlaylistManifest(nameless, playlist, error),
+           "a playlist song needs a hash or a key");
+    std::istringstream bad_hash("format=1\ntitle=X\nsong_count=1\nsong0_hash=xyz\n");
+    expect(!movebeat::loadPlaylistManifest(bad_hash, playlist, error),
+           "a playlist rejects malformed hashes");
+    std::istringstream empty("format=1\ntitle=X\nsong_count=0\n");
+    expect(!movebeat::loadPlaylistManifest(empty, playlist, error),
+           "an empty playlist is rejected");
+
+    std::istringstream hashed(
+        "format=1\nsource_hash=2DF6BE39F87AFF225E86A83E5185AA1DE8264E18\ntitle=E\n"
+        "bpm=120\naudio=a.ogg\nchart_count=1\nchart0_characteristic=Standard\n"
+        "chart0_difficulty=Hard\nchart0_file=h.mbchart\nchart0_notes=1\nchart0_skipped=0\n");
+    expect(movebeat::loadLevelManifest(hashed, level, error) &&
+           level.source_hash == "2df6be39f87aff225e86a83e5185aa1de8264e18",
+           "level manifests expose the lowercased content hash");
+}
+
 void testNoteJumpConfiguration() {
     movebeat::GameConfig config;
     expect(movebeat::configureNoteJump(config, 120.0f, 18.0f, 0.5f),
@@ -1294,6 +1345,7 @@ int main() {
     checkpoint("chain links"); testChainLinks();
     checkpoint("arcs"); testArcs();
     checkpoint("level manifest"); testLevelManifest();
+    checkpoint("playlist manifest"); testPlaylistManifest();
     checkpoint("note jump settings"); testNoteJumpConfiguration();
     checkpoint("energy failure"); testEnergyFailure();
     checkpoint("high scores"); testHighScores();
@@ -1305,6 +1357,8 @@ int main() {
     runGemRuntimeHueTests();
     checkpoint("PPU RSX draw batch geometry");
     failures += runDrawBatchTests();
+    checkpoint("PPU library menu, Move gestures and playlists");
+    failures += runMenuTests();
 #endif
     if (failures == 0) {
         std::puts("All MoveBeat core tests passed.");

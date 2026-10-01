@@ -28,6 +28,8 @@ struct LevelChart {
 struct LevelManifest {
     std::string source;
     std::string source_key;
+    // Beat Saber content SHA-1 (lowercase hex), how playlists name a map.
+    std::string source_hash;
     std::string title;
     std::string song_author;
     std::string mapper;
@@ -44,6 +46,33 @@ bool loadLevelDirectory(const std::string& directory, LevelManifest& level,
                         std::string& error);
 bool loadLevelChart(const std::string& directory, const LevelManifest& level,
                     std::size_t chart_index, Chart& chart, std::string& error);
+
+// One map of a playlist, named by content hash and/or BeatSaver key. The
+// characteristic and difficulty are optional: what the playlist suggests.
+struct PlaylistSong {
+    std::string hash;
+    std::string key;
+    std::string title;
+    std::string characteristic;
+    std::string difficulty;
+};
+
+// playlist.ini of a playlist bundle (converted from a BeatSaver .bplist).
+struct PlaylistManifest {
+    std::string title;
+    std::string author;
+    std::vector<PlaylistSong> songs;
+};
+
+const unsigned int kMaxPlaylistSongs = 256;
+
+bool loadPlaylistManifest(std::istream& input, PlaylistManifest& playlist,
+                          std::string& error);
+bool loadPlaylistDirectory(const std::string& directory,
+                           PlaylistManifest& playlist, std::string& error);
+// True when the song names this level: by hash (case-insensitive) when both
+// have one, otherwise by BeatSaver key (case-insensitive).
+bool playlistSongMatches(const PlaylistSong& song, const LevelManifest& level);
 
 } // namespace movebeat
 

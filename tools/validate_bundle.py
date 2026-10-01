@@ -39,9 +39,15 @@ def validate_bundle(directory: Path) -> list[str]:
         return ["conversion-report.json root must be an object"]
     if report.get("bundleFormat") != BUNDLE_FORMAT_VERSION:
         errors.append(f"unsupported bundleFormat: {report.get('bundleFormat')!r}")
+    # A playlist bundle lists songs (playlist.ini) instead of holding a level.
+    playlist = report.get("kind") == "playlist"
+    manifest_name = "playlist.ini" if playlist else "level.ini"
     source = report.get("source")
     if not isinstance(source, dict):
         errors.append("source must be an object")
+    elif playlist:
+        if source.get("type") != "beatsaver_playlist":
+            errors.append(f"unsupported playlist source.type: {source.get('type')!r}")
     else:
         if source.get("type") not in ("beatsaver", "beat_saber_zip"):
             errors.append(f"unsupported source.type: {source.get('type')!r}")
@@ -97,8 +103,8 @@ def validate_bundle(directory: Path) -> list[str]:
     for folded, name in actual.items():
         if folded not in expected:
             errors.append(f"unlisted file: {name}")
-    if "level.ini" not in expected:
-        errors.append("level.ini is not listed")
+    if manifest_name not in expected:
+        errors.append(f"{manifest_name} is not listed")
     card_name = expected.get(CARD_FILENAME)
     if card_name is not None:
         card = directory / card_name

@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "app_paths.hpp"
+#include "library_shelf.hpp"
 #include "library_window.hpp"
 
 namespace movebeat {
@@ -24,6 +25,12 @@ int compareTitles(const std::string& left, const std::string& right) {
     }
     if (left.size() == right.size()) return 0;
     return left.size() < right.size() ? -1 : 1;
+}
+
+bool playlistChoiceLess(const PlaylistChoice& left, const PlaylistChoice& right) {
+    const int titles = compareTitles(left.manifest.title, right.manifest.title);
+    if (titles != 0) return titles < 0;
+    return left.directory < right.directory;
 }
 
 bool levelChoiceLess(const LevelChoice& left, const LevelChoice& right) {
@@ -67,48 +74,81 @@ movebeat::Note makeNote(unsigned int time_ms, int lane, int row,
 
 } // namespace
 
-std::vector<LevelChoice> discoverLevels() {
+std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists) {
     std::vector<LevelChoice> choices;
+    playlists.clear();
     DIR* directory = opendir(kLevelRoot);
     if (!directory) return choices;
-    for (dirent* entry = readdir(directory);
-         entry && choices.size() < kMaxLibraryLevels;
-         entry = readdir(directory)) {
+    for (dirent* entry = readdir(directory); entry; entry = readdir(directory)) {
         const std::string name(entry->d_name);
-        if (name.empty() || name == "." || name == ".." ||
+        // Dot names include the FTP uploader's unfinished staging folders.
+        if (name.empty() || name[0] == '.' ||
             name.find('/') != std::string::npos ||
             name.find('\\') != std::string::npos) continue;
-        LevelChoice choice;
-        choice.directory = std::string(kLevelRoot) + "/" + name;
+        const std::string path = std::string(kLevelRoot) + "/" + name;
         std::string error;
         // Only level.ini is parsed here; charts are parsed when a level is
         // started, so startup cost no longer grows with chart sizes.
-        if (movebeat::loadLevelDirectory(choice.directory, choice.manifest, error) &&
-            levelChartFilesExist(choice.directory, choice.manifest)) {
-            choices.push_back(choice);
+        if (choices.size() < kMaxLibraryLevels) {
+            LevelChoice choice;
+            choice.directory = path;
+            if (movebeat::loadLevelDirectory(path, choice.manifest, error)) {
+                if (levelChartFilesExist(path, choice.manifest))
+                    choices.push_back(choice);
+                continue;
+            }
+        }
+        if (playlists.size() < kMaxLibraryPlaylists) {
+            PlaylistChoice playlist;
+            playlist.directory = path;
+            if (movebeat::loadPlaylistDirectory(path, playlist.manifest, error))
+                playlists.push_back(playlist);
         }
     }
     closedir(directory);
     std::sort(choices.begin(), choices.end(), levelChoiceLess);
+
+    std::vector<const movebeat::LevelManifest*> manifests;
+    for (std::size_t index = 0; index < choices.size(); ++index)
+        manifests.push_back(&choices[index].manifest);
+    std::vector<PlaylistChoice> usable;
+    for (std::size_t index = 0; index < playlists.size(); ++index) {
+        PlaylistChoice& playlist = playlists[index];
+        playlist.tracks = resolvePlaylistTracks(playlist.manifest, manifests,
+                                                playlist.song_indices);
+        if (!playlist.tracks.empty()) usable.push_back(playlist);
+        else printf("Playlist without library tracks: %s\n", playlist.directory.c_str());
+    }
+    std::sort(usable.begin(), usable.end(), playlistChoiceLess);
+    playlists.swap(usable);
     return choices;
 }
 
 unsigned int updateLibraryCards(std::vector<LevelChoice>& levels,
-                                std::size_t selected, unsigned int max_loads) {
-    const std::size_t count = levels.size();
-    for (std::size_t index = 0; index < count; ++index)
-        if (libraryCardDistance(index, selected, count) > kLibraryCardWindow)
-            levels[index].card.clear();
+                                const std::vector<std::size_t>& order,
+                                std::size_t position, unsigned int max_loads) {
+    const std::size_t count = order.size();
+    // A library index may appear once in an order; keep its card when its
+    // place is inside the window.
+    std::vector<bool> keep(levels.size(), false);
+    for (std::size_t place = 0; place < count; ++place)
+        if (order[place] < levels.size() &&
+            libraryCardDistance(place, position, count) <= kLibraryCardWindow)
+            keep[order[place]] = true;
+    for (std::size_t index = 0; index < levels.size(); ++index)
+        if (!keep[index]) levels[index].card.clear();
+    if (count == 0 || position >= count) return 0;
     // Nearest first: the selected card, then +1, -1, +2, -2, ...
     unsigned int loads = 0;
     for (std::size_t distance = 0;
          distance <= kLibraryCardWindow && distance <= count / 2u; ++distance) {
         for (int side = 0; side < 2 && loads < max_loads; ++side) {
             if (distance == 0 && side == 1) break;
-            const std::size_t index = side == 0
-                ? (selected + distance) % count
-                : (selected + count - distance % count) % count;
-            LevelChoice& choice = levels[index];
+            const std::size_t place = side == 0
+                ? (position + distance) % count
+                : (position + count - distance % count) % count;
+            if (order[place] >= levels.size()) continue;
+            LevelChoice& choice = levels[order[place]];
             if (choice.card.ready() || choice.card_missing) continue;
             if (!choice.card.load(choice.directory)) choice.card_missing = true;
             ++loads;

@@ -2,8 +2,14 @@ param(
     # An installed RPCS3 profile, e.g. out/rpcs3-pkg-smoke-runs/<run>/app.
     [Parameter(Mandatory = $true)]
     [string]$AppPath,
-    [ValidateRange(10, 600)]
-    [int]$TimeoutSeconds = 180
+    [ValidateRange(10, 7200)]
+    [int]$TimeoutSeconds = 180,
+    # Play the first playlist through instead (demo_mode.ini playlist_test=1;
+    # build with the library from make_bench_library.py --playlist-test).
+    [switch]$Playlist,
+    # Which playlist shelf to play (1 = first playlist by title).
+    [ValidateRange(1, 32)]
+    [int]$Shelf = 1
 )
 
 # Runs the game's scripted library navigation (demo_mode.ini menu_test=1)
@@ -35,14 +41,15 @@ if (Test-Path -LiteralPath $demoBackup) {
 }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$reportDir = Join-Path $project "out/rpcs3-menu-smoke/$stamp"
+$reportDir = Join-Path $project ("out/rpcs3-{0}-smoke/$stamp" -f $(if ($Playlist) { 'playlist' } else { 'menu' }))
+$mode = if ($Playlist) { 'playlist_test' } else { 'menu_test' }
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
 $baseline = if (Test-Path -LiteralPath $statusPath) {
     (Get-Item -LiteralPath $statusPath).LastWriteTimeUtc
 } else { [datetime]::MinValue }
 $hadDemo = Test-Path -LiteralPath $demo -PathType Leaf
 if ($hadDemo) { Move-Item -LiteralPath $demo -Destination $demoBackup }
-Set-Content -LiteralPath $demo -Encoding Ascii -Value @('enabled=1', 'menu_test=1')
+Set-Content -LiteralPath $demo -Encoding Ascii -Value @('enabled=1', "$mode=1", "playlist_shelf=$Shelf")
 
 $process = $null
 $status = @{}
@@ -69,7 +76,7 @@ try {
                     $status[$line.Substring(0, $separator)] = $line.Substring($separator + 1)
                 }
             }
-            if ($status['phase'] -eq 'menu_test_done') { $outcome = 'done'; break }
+            if ($status['phase'] -eq "${mode}_done") { $outcome = 'done'; break }
             if ($status['state'] -eq 'fatal') { $outcome = 'fatal'; break }
         }
         $process.Refresh()
@@ -125,6 +132,11 @@ $report = [pscustomobject]@{
     menu_chord_starts = [int]$status['menu_chord_starts']
     pose_calibrated = [int]$status['pose_calibrated']
     hand_slots_swapped = [int]$status['hand_slots_swapped']
+    playlist_count = [int]$status['playlist_count']
+    shelf = [int]$status['shelf']
+    playlist_songs_played = [int]$status['playlist_songs_played']
+    playlist_total_score = [int]$status['playlist_total_score']
+    playlist_complete = [int]$status['playlist_complete']
     sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii

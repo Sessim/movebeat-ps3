@@ -111,7 +111,7 @@ $(OUTPUT)-tests.pkg: $(OUTPUT)-tests.self
 	$(VERB) $(PACKAGE_FINALIZE) $(basename $@).gnpdrm.pkg
 
 $(OUTPUT)-tests.elf: game_tests.o gem_runtime_tests.o gem_runtime.o move_input.o \
-		draw_batch_tests.o draw_batch.o \
+		draw_batch_tests.o draw_batch.o menu_tests.o sound_effects.o \
 		newlib_malloc_lock.o chart.o game.o level.o records.o settings.o
 	$(LD) $^ $(LDFLAGS) $(LIBPATHS) -lm -llv2 -o $@
 
@@ -131,6 +131,6 @@ rsx_batch_renderer.o: batch.vpo.o batch_color.fpo.o batch_texture.fpo.o
 	$(bin2o)
 
 -include $(DEPENDS)
--include game_tests.d gem_runtime_tests.d gem_runtime.d draw_batch_tests.d
+-include game_tests.d gem_runtime_tests.d gem_runtime.d draw_batch_tests.d menu_tests.d
 
 endif

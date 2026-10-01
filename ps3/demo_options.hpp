@@ -17,11 +17,17 @@ struct EmulatorDemoOptions {
     // Stay in the library and replay a scripted navigation run to measure
     // the cost of each step (tools/rpcs3_menu_smoke.ps1).
     bool menu_test;
+    // Pick the first playlist, start it with both Move buttons and play it
+    // through with scripted cuts (tools/rpcs3_playlist_smoke.ps1).
+    bool playlist_test;
+    // The playlist shelf the test plays (1 = first playlist by title).
+    unsigned int playlist_shelf;
 
     EmulatorDemoOptions() : enabled(false), automatic_cuts(true),
                             tracking_loss_test(false),
                             chart_index(0), capture_at_ms(0),
-                            menu_test(false) {}
+                            menu_test(false), playlist_test(false),
+                            playlist_shelf(1) {}
 };
 
 EmulatorDemoOptions readEmulatorDemoOptions();

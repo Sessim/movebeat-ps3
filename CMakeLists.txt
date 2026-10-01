@@ -88,6 +88,7 @@ add_executable(movebeat_menu_tests
     ps3/sound_effects.cpp
 )
 target_include_directories(movebeat_menu_tests PRIVATE ps3 core/include)
+target_link_libraries(movebeat_menu_tests PRIVATE movebeat_core)
 add_test(NAME movebeat_menu_tests COMMAND movebeat_menu_tests)
 
 add_executable(movebeat_run_diagnostics_tests
@@ -127,6 +128,13 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_beatsaver_import -v
     )
     set_tests_properties(movebeat_beatsaver_import_tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME movebeat_playlist_import_tests
+        COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_playlist_import -v
+    )
+    set_tests_properties(movebeat_playlist_import_tests PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     add_test(

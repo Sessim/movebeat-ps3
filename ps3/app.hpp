@@ -11,6 +11,7 @@
 #include "framebuffer.hpp"
 #include "gem_runtime.hpp"
 #include "level_library.hpp"
+#include "library_shelf.hpp"
 #include "menu_buttons.hpp"
 #include "menu_pointer.hpp"
 #include "move_input.hpp"
@@ -85,6 +86,11 @@ private:
     void readInput(FrameInput& input);
     void readDemoInput(FrameInput& input);
     void readMenuTestInput(FrameInput& input);
+    void readPlaylistTestInput(FrameInput& input);
+    // The library is driven by a script (menu or playlist test).
+    bool scriptedMenuRun() const {
+        return demo_mode_ && (demo_options_.menu_test || demo_options_.playlist_test);
+    }
     void recordMenuTest(const FrameInput& input);
 
     // Library scene.
@@ -96,6 +102,15 @@ private:
     void reloadSelectedChart();
     bool ensureSelectedChart();
     void selectLevel(std::size_t index);
+    // Shelves: all tracks (0) or playlist k (k). Select steps through them.
+    void handleShelfSwitch(const FrameInput& input);
+    void showShelf(std::size_t shelf);
+    // Selects the track at `position` of the shelf (playlist difficulty
+    // suggestion included).
+    void selectShelfPosition(std::size_t position);
+    // Playlist run: the next song after a countdown, or at once.
+    void updatePlaylistRun();
+    void playNextPlaylistSong();
     // step: +1 harder, -1 easier; wrap for buttons, clamp for gestures;
     // hand: 0 left, 1 right, -1 none (feedback side).
     void changeDifficulty(int step, bool wrap, int hand);
@@ -115,6 +130,9 @@ private:
     // and starts, calibrating first if this session has no play origin.
     void handleMoveChord(const FrameInput& input);
     void beginLevel();
+    // Start in the library (a playlist shelf begins a run), replay on the
+    // results screen, or the next song of a playlist run.
+    void startOrContinue();
     bool startLevelAudio(const char* failure_message, bool clear_error_on_success);
 
     // Play scene.
@@ -138,6 +156,16 @@ private:
     bool demo_mode_;
 
     std::vector<LevelChoice> level_choices_;
+    std::vector<PlaylistChoice> playlists_;
+    std::size_t shelf_;
+    // Library indices of the shown shelf, in carousel order, and the
+    // carousel position of the selection in it.
+    std::vector<std::size_t> shelf_order_;
+    std::size_t shelf_pos_;
+    PlaylistRun playlist_run_;
+    // Countdown to the next song of a run on the results screen (0: none).
+    unsigned int next_song_remaining_ms_;
+    unsigned int last_playlist_ms_;
     movebeat::Chart selected_chart_;
     movebeat::LevelManifest selected_level_;
     std::string level_error_;
@@ -212,6 +240,7 @@ private:
     unsigned long long demo_loss_started_us_;
     bool demo_loss_finished_;
     unsigned int menu_test_frame_;
+    unsigned int playlist_test_results_;
     bool menu_test_done_;
     const char* menu_capture_path_;
     unsigned int last_frame_active_us_;

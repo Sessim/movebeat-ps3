@@ -881,8 +881,12 @@ def request_json(url: str) -> dict[str, Any]:
     return value
 
 
-def select_version(versions: object) -> dict[str, Any]:
-    """Choose the newest downloadable published version without trusting API order."""
+def select_version(versions: object, want_hash: str | None = None) -> dict[str, Any]:
+    """Choose the newest downloadable published version without trusting API order.
+
+    With `want_hash`, the downloadable version with that content hash wins
+    (a playlist names one exact version); otherwise the newest is used.
+    """
     if not isinstance(versions, list):
         raise ImportError("BeatSaver returned an invalid versions list")
 
@@ -892,6 +896,10 @@ def select_version(versions: object) -> dict[str, Any]:
     ]
     if not usable:
         raise ImportError("BeatSaver map has no downloadable versions")
+    if want_hash:
+        for version in usable:
+            if clean_text(version.get("hash")).casefold() == want_hash.casefold():
+                return version
 
     published = [
         version for version in usable
@@ -1110,11 +1118,12 @@ def read_archive_cover_preview(zip_path: Path) -> bytes:
 
 def download_map(key: str, destination: Path, *,
                  progress: Callable[[int, int | None], None] | None = None,
-                 cancelled: Callable[[], bool] | None = None) -> SourceMetadata:
+                 cancelled: Callable[[], bool] | None = None,
+                 want_hash: str | None = None) -> SourceMetadata:
     safe_key = urllib.parse.quote(key, safe="")
     metadata = request_json(f"{API_BASE}/maps/id/{safe_key}")
     try:
-        version = select_version(metadata.get("versions"))
+        version = select_version(metadata.get("versions"), want_hash)
     except ImportError as exc:
         raise ImportError(f"BeatSaver map {key} has no downloadable versions") from exc
     download_url = clean_text(version.get("downloadURL"))

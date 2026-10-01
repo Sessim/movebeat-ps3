@@ -95,6 +95,7 @@ App::FrameInput::FrameInput()
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
+      shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
       imported_level_(false), selected_level_index_(0),
       selected_chart_index_(0), selected_chart_loaded_(false),
       chart_duration_ms_(0), audio_clock_(false),
@@ -110,7 +111,7 @@ App::App()
       demo_frame_saved_(false), demo_scored_frame_saved_(false),
       demo_timed_frame_saved_(false),
       demo_cycles_(0), demo_loss_started_us_(0), demo_loss_finished_(false),
-      menu_test_frame_(0), menu_test_done_(false), menu_capture_path_(0), last_frame_active_us_(0),
+      menu_test_frame_(0), playlist_test_results_(0), menu_test_done_(false), menu_capture_path_(0), last_frame_active_us_(0),
       menu_step_total_us_(0) {}
 
 int App::run() {
@@ -118,7 +119,7 @@ int App::run() {
     if (!initializeSystems(exit_code)) return exit_code;
     if (!selectInitialLevel(exit_code)) return exit_code;
     loadSettings();
-    if (demo_mode_ && !demo_options_.menu_test) startDemo();
+    if (demo_mode_ && !scriptedMenuRun()) startDemo();
 
     diagnostic_.state = "running";
     diagnostic_.phase = run_state_ == RUN_AUDIO_ERROR ? "audio_error" :
@@ -203,9 +204,10 @@ void App::runStartupFailure(GemRuntime::InitStage stage, int error) {
 
 bool App::selectInitialLevel(int& exit_code) {
     const unsigned long long scan_start_us = nowMicroseconds();
-    level_choices_ = discoverLevels();
+    level_choices_ = discoverLibrary(playlists_);
     diagnostic_.library_scan_ms = static_cast<unsigned int>(
         (nowMicroseconds() - scan_start_us) / 1000ull);
+    diagnostic_.playlist_count = static_cast<unsigned int>(playlists_.size());
     selected_chart_ = tutorialChart();
     if (demo_mode_ && !demo_options_.level_id.empty()) {
         bool found = false;
@@ -231,9 +233,13 @@ bool App::selectInitialLevel(int& exit_code) {
             return false;
         }
     }
+    shelf_order_.clear();
+    for (std::size_t index = 0; index < level_choices_.size(); ++index)
+        shelf_order_.push_back(index);
+    shelf_pos_ = selected_level_index_;
     if (!level_choices_.empty()) {
         // Fill the whole card window once at startup.
-        updateLibraryCards(level_choices_, selected_level_index_,
+        updateLibraryCards(level_choices_, shelf_order_, shelf_pos_,
                            static_cast<unsigned int>(kLibraryCardWindow * 2 + 1));
         recordLibraryCardMemory(diagnostic_, level_choices_);
         level_directory_ = level_choices_[selected_level_index_].directory;
@@ -263,7 +269,7 @@ bool App::selectInitialLevel(int& exit_code) {
         -(kProjectionEyeHeight + kProjectionCameraHeight) / kProjectionDepth;
     reloadSelectedChart();
     chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
-    carousel_.reset(static_cast<int>(selected_level_index_));
+    carousel_.reset(static_cast<int>(shelf_pos_));
     last_tick_row_ = carousel_.nearestRow();
     selection_changed_ms_ = nowMilliseconds();
     random_.seed(static_cast<std::uint32_t>(nowMicroseconds()));
@@ -316,20 +322,27 @@ void App::runFrame() {
     FrameInput input;
     readInput(input);
     handleHandToggle(input);
+    handleShelfSwitch(input);
     handleCalibrationCancel(input);
     handleLibraryNavigation(input);
     handleLibrarySettings(input);
     handleBackButtons(input);
     updateLibraryMotion(input);
-    if (run_state_ == RUN_SELECT && !level_choices_.empty()) {
+    if ((run_state_ == RUN_SELECT || run_state_ == RUN_RESULTS) &&
+        !shelf_order_.empty()) {
         // One card read per frame at most keeps the window around the
-        // selection filled while scrolling without a long frame.
-        if (updateLibraryCards(level_choices_, selected_level_index_, 1u))
+        // selection filled while scrolling without a long frame. The
+        // playlist summary lists the last seven songs: center on them.
+        const std::size_t center =
+            run_state_ == RUN_RESULTS && playlist_run_.complete() && shelf_pos_ >= 3
+                ? shelf_pos_ - 3 : shelf_pos_;
+        if (updateLibraryCards(level_choices_, shelf_order_, center, 1u))
             recordLibraryCardMemory(diagnostic_, level_choices_);
     }
     updateTrackingPause(input);
     updateCalibration(input);
     handleStart(input);
+    updatePlaylistRun();
     updateGameplay(input);
     renderFrame(input, frame_work_start_us);
     if (demo_mode_ && demo_options_.menu_test) recordMenuTest(input);
@@ -444,6 +457,46 @@ void App::readMenuTestInput(FrameInput& input) {
     input.moves.right_buttons = buttons;
 }
 
+void App::readPlaylistTestInput(FrameInput& input) {
+    // Scripted playlist run (play itself uses the scripted cuts): Select
+    // shows the first playlist, both Move buttons start it (the first
+    // start calibrates), the first countdown runs out, the second results
+    // screen is skipped with Start, and the summary ends the test.
+    input.moves.left_connected = true;
+    input.moves.right_connected = true;
+    // Tips average to the origin, so calibration keeps the scripted cuts.
+    input.moves.left = movebeat::SaberPose(
+        movebeat::Vec3(-0.3f, -1.0f, 0.0f), movebeat::Vec3(-0.3f, 0.0f, 0.0f), true);
+    input.moves.right = movebeat::SaberPose(
+        movebeat::Vec3(0.3f, -1.0f, 0.0f), movebeat::Vec3(0.3f, 0.0f, 0.0f), true);
+    const unsigned int frame = menu_test_frame_++;
+    // One Select press (two frames, then eight released) per shelf step.
+    const unsigned int selects_end = 30u + 10u * demo_options_.playlist_shelf;
+    if (run_state_ == RUN_SELECT) {
+        if (frame >= 30u && frame < selects_end && (frame - 30u) % 10u < 2u)
+            input.moves.right_buttons = kButtonSelect;
+        if (frame == selects_end + 30u) menu_capture_path_ = kDemoFramePath;
+        if (frame >= selects_end + 50u && frame < selects_end + 56u) {
+            input.moves.left_buttons = GEM_BUTTON_MOVE;
+            input.moves.right_buttons = GEM_BUTTON_MOVE;
+        }
+    }
+    if (run_state_ != RUN_RESULTS) {
+        playlist_test_results_ = 0;
+    } else {
+        const unsigned int results_frame = playlist_test_results_++;
+        const std::size_t played = playlist_run_.results().size();
+        if (played == 1u && results_frame == 150u) menu_capture_path_ = kDemoTimedFramePath;
+        if (played == 2u && results_frame >= 60u && results_frame < 62u)
+            input.moves.right_buttons = kButtonStart;
+        if (playlist_run_.complete() && results_frame == 30u)
+            menu_capture_path_ = kDemoScoredFramePath;
+        if (playlist_run_.complete() && results_frame >= 40u) menu_test_done_ = true;
+    }
+    // Safety net: a stuck run must still end the test.
+    if (frame >= 60u * 300u) menu_test_done_ = true;
+}
+
 void App::recordMenuTest(const FrameInput& input) {
     // The chord start (chart parse, calibration, level) is not menu cost.
     if (menu_test_done_ || diagnostic_.menu_chord_starts) return;
@@ -464,6 +517,14 @@ void App::readDemoInput(FrameInput& input) {
     if (demo_options_.menu_test) {
         readMenuTestInput(input);
         return;
+    }
+    if (demo_options_.playlist_test) {
+        if (run_state_ != RUN_PLAY) {
+            readPlaylistTestInput(input);
+            return;
+        }
+        // Each results screen counts its frames from zero.
+        playlist_test_results_ = 0;
     }
     const unsigned int elapsed_ms = unpausedElapsedMs(
         nowMicroseconds(), level_start_us_, pause_started_us_, paused_);
@@ -546,8 +607,10 @@ void App::saveSettings() {
 }
 
 void App::handleHandToggle(FrameInput& input) {
+    // Both T held + Select: Select alone steps through the shelves.
     input.hand_toggle = run_state_ == RUN_SELECT && !calibrating_ &&
-        !paused_ && (input.buttons.pressed & kButtonSelect) != 0;
+        !paused_ && input.blade_modifier &&
+        (input.buttons.pressed & kButtonSelect) != 0;
     if (!input.hand_toggle) return;
     settings_.invert_hands = !settings_.invert_hands;
     hand_slots_swapped_ = !hand_slots_swapped_;
@@ -588,7 +651,7 @@ void App::reloadSelectedChart() {
 
 void App::handleLibraryNavigation(const FrameInput& input) {
     if (run_state_ != RUN_SELECT || calibrating_ || input.cancel_calibration ||
-        input.hand_toggle || !input.level_pressed || level_choices_.size() <= 1)
+        input.hand_toggle || !input.level_pressed || shelf_order_.size() <= 1)
         return;
     // The carousel animates the step; updateLibraryMotion selects the
     // track it lands on.
@@ -610,6 +673,60 @@ void App::selectLevel(std::size_t candidate) {
     audio_path_ = level_directory_ + "/" + selected_level_.audio;
     printf("Selected level: %s (%s)\n", selected_level_.title.c_str(),
            selected_level_.charts[0].difficulty.c_str());
+}
+
+void App::selectShelfPosition(std::size_t position) {
+    if (position >= shelf_order_.size()) return;
+    shelf_pos_ = position;
+    selectLevel(shelf_order_[position]);
+    if (shelf_ == 0) return;
+    const PlaylistChoice& playlist = playlists_[shelf_ - 1];
+    const movebeat::PlaylistSong& song =
+        playlist.manifest.songs[playlist.song_indices[position]];
+    if (!song.difficulty.empty())
+        selected_chart_index_ = choosePlaylistChart(song, selected_level_, -1);
+}
+
+void App::handleShelfSwitch(const FrameInput& input) {
+    if (run_state_ != RUN_SELECT || calibrating_ || paused_ || input.hand_toggle ||
+        input.blade_modifier || (input.buttons.pressed & kButtonSelect) == 0 ||
+        playlists_.empty())
+        return;
+    showShelf((shelf_ + 1) % (playlists_.size() + 1));
+    audio_.playEffect(SFX_DIFFICULTY, 0.6f, 0.0f);
+    pulseRumble(0, 3, 140);
+    pulseRumble(1, 3, 140);
+}
+
+void App::showShelf(std::size_t shelf) {
+    if (shelf > playlists_.size()) return;
+    if (shelf_ > 0) playlists_[shelf_ - 1].card.clear();
+    shelf_ = shelf;
+    shelf_order_.clear();
+    if (shelf_ == 0) {
+        for (std::size_t index = 0; index < level_choices_.size(); ++index)
+            shelf_order_.push_back(index);
+    } else {
+        PlaylistChoice& playlist = playlists_[shelf_ - 1];
+        shelf_order_ = playlist.tracks;
+        if (!playlist.card.ready() && !playlist.card_missing &&
+            !playlist.card.load(playlist.directory))
+            playlist.card_missing = true;
+    }
+    // Stay on the current track when the new shelf has it.
+    std::size_t position = 0;
+    for (std::size_t place = 0; place < shelf_order_.size(); ++place)
+        if (shelf_order_[place] == selected_level_index_) { position = place; break; }
+    stopPreview(120);
+    carousel_.reset(static_cast<int>(position));
+    last_tick_row_ = carousel_.nearestRow();
+    randomizer_spinning_ = false;
+    selection_changed_ms_ = nowMilliseconds();
+    if (!shelf_order_.empty()) selectShelfPosition(position);
+    diagnostic_.shelf = static_cast<unsigned int>(shelf_);
+    printf("Shelf %u: %s (%u tracks)\n", static_cast<unsigned int>(shelf_),
+           shelf_ ? playlists_[shelf_ - 1].manifest.title.c_str() : "all tracks",
+           static_cast<unsigned int>(shelf_order_.size()));
 }
 
 bool App::ensureSelectedChart() {
@@ -717,7 +834,7 @@ void App::updateLibraryMotion(const FrameInput& input) {
     const float seconds = last_motion_ms_
         ? (now_ms - last_motion_ms_) / 1000.0f : 0.0f;
     last_motion_ms_ = now_ms;
-    const std::size_t count = level_choices_.size();
+    const std::size_t count = shelf_order_.size();
     if (run_state_ != RUN_SELECT || count == 0) {
         gesture_.cancel();
         gesture_hand_ = -1;
@@ -756,8 +873,8 @@ void App::updateLibraryMotion(const FrameInput& input) {
         // A Move button tap: spin to a random other track, one extra lap
         // for show. (Both Move buttons together start the level.)
         if (input.move_tap_slot >= 0 && count > 1 && !carousel_.dragging()) {
-            const std::size_t pick = random_.pickOther(selected_level_index_, count);
-            const std::size_t ahead = (pick + count - selected_level_index_) % count;
+            const std::size_t pick = random_.pickOther(shelf_pos_, count);
+            const std::size_t ahead = (pick + count - shelf_pos_) % count;
             carousel_.step(static_cast<int>(ahead + (count <= 40 ? count : 0)));
             randomizer_spinning_ = true;
             ++diagnostic_.menu_randomizer_spins;
@@ -781,9 +898,9 @@ void App::updateLibraryMotion(const FrameInput& input) {
         ++diagnostic_.menu_ticks;
     }
     const std::size_t selected = carousel_.selected(count);
-    if (selected != selected_level_index_) {
+    if (selected != shelf_pos_) {
         stopPreview(120);
-        selectLevel(selected);
+        selectShelfPosition(selected);
         selection_changed_ms_ = now_ms;
     }
     if (randomizer_spinning_ && carousel_.resting()) {
@@ -814,6 +931,11 @@ void App::handleBackButtons(const FrameInput& input) {
     }
     if (run_state_ == RUN_RESULTS && (input.level_pressed & kButtonTriangle)) {
         run_state_ = RUN_SELECT;
+        if (playlist_run_.active()) printf("Playlist run stopped\n");
+        playlist_run_.stop();
+        next_song_remaining_ms_ = 0;
+        carousel_.reset(static_cast<int>(shelf_pos_));
+        last_tick_row_ = carousel_.nearestRow();
         game_.reset();
         cut_feedback_.clear();
         selection_changed_ms_ = nowMilliseconds();
@@ -939,9 +1061,7 @@ void App::handleStart(const FrameInput& input) {
     } else if (input.calibrated_start ||
                (input.start_pressed && run_state_ == RUN_RESULTS && !paused_ &&
                 input.moves.left.tracked && input.moves.right.tracked)) {
-        if ((run_state_ == RUN_SELECT || run_state_ == RUN_RESULTS) &&
-            ensureSelectedChart())
-            beginLevel();
+        startOrContinue();
     } else {
         handleMoveChord(input);
     }
@@ -957,6 +1077,9 @@ void App::handleMoveChord(const FrameInput& input) {
     // The results screen replays with the measured origin; it needs both
     // spheres in view to tell the hands apart.
     if (run_state_ == RUN_RESULTS && !(ready && pose_calibrated_)) return;
+    // The summary after a finished playlist only goes back (Triangle).
+    if (run_state_ == RUN_RESULTS && playlist_run_.active() &&
+        !playlist_run_.hasNext()) return;
     if (!ensureSelectedChart()) return;
     ++diagnostic_.menu_chord_starts;
     pulseRumble(0, 5, 200);
@@ -968,7 +1091,7 @@ void App::handleMoveChord(const FrameInput& input) {
         assignHands(input.moves);
         printf("Move chord: GEM slot %u is the left hand\n",
                physicalSlotForHand(0u, hand_slots_swapped_));
-        beginLevel();
+        startOrContinue();
         return;
     }
     // First start of the session (or the hands overlap): the one-second
@@ -976,6 +1099,70 @@ void App::handleMoveChord(const FrameInput& input) {
     pose_calibration_.reset();
     calibrating_ = true;
     printf("Move chord: calibrating before the first level\n");
+}
+
+void App::startOrContinue() {
+    if (run_state_ == RUN_RESULTS && playlist_run_.active()) {
+        if (playlist_run_.hasNext()) playNextPlaylistSong();
+        return;
+    }
+    if ((run_state_ != RUN_SELECT && run_state_ != RUN_RESULTS) ||
+        !ensureSelectedChart())
+        return;
+    if (run_state_ == RUN_SELECT) {
+        if (shelf_ > 0 && shelf_pos_ < shelf_order_.size()) {
+            // The difficulty chosen for the first song guides the songs
+            // the playlist names no difficulty for.
+            const int rank = selected_chart_index_ < selected_level_.charts.size()
+                ? difficultyRank(selected_level_.charts[selected_chart_index_].difficulty)
+                : -1;
+            playlist_run_.begin(shelf_ - 1, playlists_[shelf_ - 1].tracks,
+                                shelf_pos_, rank);
+            printf("Playlist run: %s from song %u\n",
+                   playlists_[shelf_ - 1].manifest.title.c_str(),
+                   static_cast<unsigned int>(shelf_pos_ + 1));
+        } else {
+            playlist_run_.stop();
+        }
+    }
+    beginLevel();
+}
+
+void App::updatePlaylistRun() {
+    const unsigned int now_ms = nowMilliseconds();
+    const unsigned int elapsed = last_playlist_ms_ ? now_ms - last_playlist_ms_ : 0u;
+    last_playlist_ms_ = now_ms;
+    if (run_state_ != RUN_RESULTS || !playlist_run_.hasNext() ||
+        next_song_remaining_ms_ == 0 || paused_)
+        return;
+    if (elapsed >= next_song_remaining_ms_) playNextPlaylistSong();
+    else next_song_remaining_ms_ -= elapsed;
+}
+
+void App::playNextPlaylistSong() {
+    next_song_remaining_ms_ = 0;
+    while (playlist_run_.hasNext()) {
+        const std::size_t level = playlist_run_.advance();
+        // The shelf is the run's playlist, so its position is the run's.
+        shelf_pos_ = playlist_run_.position();
+        carousel_.reset(static_cast<int>(shelf_pos_));
+        last_tick_row_ = carousel_.nearestRow();
+        selectLevel(level);
+        const PlaylistChoice& playlist = playlists_[playlist_run_.playlist()];
+        selected_chart_index_ = choosePlaylistChart(
+            playlist.manifest.songs[playlist.song_indices[shelf_pos_]],
+            selected_level_, playlist_run_.preferredRank());
+        if (ensureSelectedChart()) {
+            beginLevel();
+            return;
+        }
+        // A chart that cannot load is skipped and counts as failed.
+        PlaylistSongResult skipped;
+        skipped.level = level;
+        skipped.chart = selected_chart_index_;
+        skipped.failed = true;
+        playlist_run_.record(skipped);
+    }
 }
 
 void App::beginLevel() {
@@ -1036,7 +1223,7 @@ void App::updateGameplay(FrameInput& input) {
                                      game_.score().failed;
     if (run_state_ == RUN_PLAY && !paused_ &&
         game_.finished(input.level_time_ms) && audio_tail_finished) {
-        if (demo_mode_) restartDemoCycle();
+        if (demo_mode_ && !demo_options_.playlist_test) restartDemoCycle();
         else finishLevel();
     }
 }
@@ -1092,6 +1279,27 @@ void App::finishLevel() {
     }
     printf("Level finished: score=%u hits=%u misses=%u\n",
            game_.score().score, game_.score().hits, game_.score().misses);
+    if (!playlist_run_.active()) return;
+    PlaylistSongResult result;
+    result.level = selected_level_index_;
+    result.chart = selected_chart_index_;
+    result.score = current.score;
+    result.hits = current.hits;
+    result.misses = current.misses;
+    result.max_combo = current.max_combo;
+    result.failed = current.failed;
+    playlist_run_.record(result);
+    // Time to see the result, and to breathe, before the next song.
+    next_song_remaining_ms_ = playlist_run_.hasNext() ? 8000u : 0u;
+    diagnostic_.playlist_songs_played =
+        static_cast<unsigned int>(playlist_run_.results().size());
+    diagnostic_.playlist_total_score = playlist_run_.totalScore();
+    if (playlist_run_.complete()) {
+        diagnostic_.playlist_complete = 1;
+        printf("Playlist complete: %u songs, score %u\n",
+               static_cast<unsigned int>(playlist_run_.results().size()),
+               playlist_run_.totalScore());
+    }
 }
 
 void App::renderPlayfield(const FrameInput& input) {
@@ -1190,8 +1398,16 @@ void App::renderFrame(const FrameInput& input,
     screen_.beginFrame(game_.score().failed ? 0xff200508u : 0xff050510u);
     frame_clear_timing_.add(static_cast<unsigned int>(
         nowMicroseconds() - frame_render_start_us));
-    if (run_state_ == RUN_RESULTS) {
+    if (run_state_ == RUN_RESULTS && playlist_run_.complete()) {
+        drawPlaylistSummary(screen_, playlist_run_,
+                            playlists_[playlist_run_.playlist()], level_choices_);
+    } else if (run_state_ == RUN_RESULTS) {
         drawResults(screen_, game_.score(), best_score_);
+        if (playlist_run_.hasNext()) {
+            const std::size_t next = shelf_order_[(shelf_pos_ + 1) % shelf_order_.size()];
+            drawPlaylistNext(screen_, playlist_run_, level_choices_[next],
+                             (next_song_remaining_ms_ + 999u) / 1000u);
+        }
     } else if (run_state_ == RUN_SELECT) {
         LibraryView view;
         view.position = carousel_.position();
@@ -1205,7 +1421,10 @@ void App::renderFrame(const FrameInput& input,
             ? 1.0f - since_change / 400.0f : 0.0f;
         view.preview_playing = preview_active_ && audio_.musicActive();
         view.now_ms = now_ms;
-        drawLevelLibrary(screen_, level_choices_, view);
+        view.playlist = shelf_ > 0 ? &playlists_[shelf_ - 1] : 0;
+        view.shelf = shelf_;
+        view.shelf_count = playlists_.size() + 1;
+        drawLevelLibrary(screen_, level_choices_, shelf_order_, view);
     } else if (run_state_ == RUN_AUDIO_ERROR) {
         drawAudioError(screen_, audio_start_error_);
     } else {
@@ -1236,13 +1455,13 @@ void App::saveDiagnosticFrames(const FrameInput& input) {
         if (first_frame_saved_)
             printf("First rendered frame saved: %s\n", kFirstFramePath);
     }
-    if (demo_mode_ && demo_options_.menu_test && menu_capture_path_) {
+    if (scriptedMenuRun() && menu_capture_path_) {
         // Library frames requested by the scripted menu run.
         if (screen_.savePpm(menu_capture_path_))
             printf("Menu test frame saved: %s\n", menu_capture_path_);
         menu_capture_path_ = 0;
     }
-    if (!demo_mode_ || demo_options_.menu_test || run_state_ != RUN_PLAY) return;
+    if (!demo_mode_ || scriptedMenuRun() || run_state_ != RUN_PLAY) return;
     if (!demo_frame_saved_) {
         bool visible_upper_note = false;
         bool visible_lower_note = false;
@@ -1308,7 +1527,9 @@ void App::publishDiagnostics(const FrameInput& input) {
     const char* diagnostic_phase = run_state_ == RUN_AUDIO_ERROR ? "audio_error" :
         tracking_paused_
             ? (tracking_recalibrating_ ? "tracking_recalibration" : "tracking_pause") :
-        demo_mode_ ? (!demo_options_.menu_test ? "demo_play" :
+        demo_mode_ ? (demo_options_.playlist_test
+                          ? (menu_test_done_ ? "playlist_test_done" : "playlist_test") :
+                      !demo_options_.menu_test ? "demo_play" :
                       (menu_test_done_ ? "menu_test_done" : "menu_test")) :
         paused_ ? "paused" :
         (calibrating_ ? "calibrating" :

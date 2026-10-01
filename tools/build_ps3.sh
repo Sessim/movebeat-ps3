@@ -39,8 +39,8 @@ if (( include_imported )); then
             printf 'Unsafe imported level directory name: %s\n' "$level_name" >&2
             exit 1
         fi
-        if [[ ! -f $level_dir/level.ini ]]; then
-            printf 'Imported level has no level.ini: %s\n' "$level_dir" >&2
+        if [[ ! -f $level_dir/level.ini && ! -f $level_dir/playlist.ini ]]; then
+            printf 'Imported bundle has no level.ini or playlist.ini: %s\n' "$level_dir" >&2
             exit 1
         fi
         python3 "$project_dir/tools/validate_bundle.py" "$level_dir"

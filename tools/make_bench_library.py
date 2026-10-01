@@ -9,6 +9,11 @@ and title say "bench". Use them only for local performance tests:
 
     python tools/make_bench_library.py --count 30 --output out/levels-bench
     MOVEBEAT_LEVELS_DIR=out/levels-bench bash tools/build_ps3.sh --include-imported
+
+`--playlist-test` instead writes three short tracks (about 18 seconds each)
+and two playlist bundles for tools/rpcs3_playlist_smoke.ps1: "Bench Warmup"
+names the short tracks by key, "Real Maps" names an imported level of
+out/levels by content hash (copied in when present) plus a missing map.
 """
 
 from __future__ import annotations
@@ -26,6 +31,9 @@ sys.path.insert(0, str(PROJECT))
 
 from tools.bundle_format import BUNDLE_FORMAT_VERSION, sha256_file  # noqa: E402
 from tools.library_card import write_card  # noqa: E402
+from tools.playlist_import import (  # noqa: E402
+    Playlist, PlaylistEntry, write_playlist_bundle,
+)
 
 FIRST_STEPS = PROJECT / "ps3/package/USRDIR/levels/movebeat_first_steps"
 DIRECTIONS = ["U", "D", "L", "R", "UL", "UR", "DL", "DR", "A"]
@@ -62,25 +70,28 @@ def make_chart(rng: random.Random, notes: int, bpm: float) -> str:
     return "\n".join(lines) + "\n"
 
 
-def make_bundle(output: Path, index: int) -> Path:
+def make_bundle(output: Path, index: int, *, key: str = "",
+                difficulties: list[tuple[str, int]] | None = None,
+                title: str = "", bpm: float = 0.0) -> Path:
     rng = random.Random(index)
-    key = f"bench{index:02d}"
+    key = key or f"bench{index:02d}"
     directory = output / key
     if directory.exists():
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
-    title = TITLES[(index - 1) % len(TITLES)]
+    title = title or TITLES[(index - 1) % len(TITLES)]
     artist = ARTISTS[index % len(ARTISTS)]
-    bpm = float(rng.choice([96, 110, 120, 128, 140, 150, 174]))
+    bpm = bpm or float(rng.choice([96, 110, 120, 128, 140, 150, 174]))
+    difficulties = difficulties or DIFFICULTIES
     shutil.copyfile(FIRST_STEPS / "audio.ogg", directory / "audio.ogg")
     ini = [
         "format=1", "source=beatsaver", f"source_key={key}",
         f"title={title}", f"song_author={artist}", "mapper=MoveBeat Bench",
         f"bpm={bpm:g}", "audio=audio.ogg", "cover=",
-        f"chart_count={len(DIFFICULTIES)}",
+        f"chart_count={len(difficulties)}",
     ]
     charts = []
-    for chart_index, (difficulty, notes) in enumerate(DIFFICULTIES):
+    for chart_index, (difficulty, notes) in enumerate(difficulties):
         name = f"Standard_{difficulty}.mbchart"
         (directory / name).write_text(make_chart(rng, notes, bpm),
                                       encoding="utf-8", newline="\n")
@@ -121,12 +132,52 @@ def make_bundle(output: Path, index: int) -> Path:
     return directory
 
 
+def make_playlist_test(output: Path) -> None:
+    """Short tracks (chart over in ~14 s, audio 18 s) and two playlists."""
+    titles = ["Short Spark", "Short Drift", "Short Glow"]
+    entries = []
+    for index, title in enumerate(titles, start=1):
+        key = f"short{index:02d}"
+        # 20 notes from 2 s at 120 BPM end well within the 18 s song.
+        make_bundle(output, 100 + index, key=key, title=title, bpm=120.0,
+                    difficulties=[("Normal", 16), ("Hard", 20)])
+        entries.append(PlaylistEntry(key=key, title=title, available=True))
+    # The middle song asks for Hard; the others follow the first choice.
+    entries[1].characteristic = "Standard"
+    entries[1].difficulty = "Hard"
+    for name in ("playlist-bench", "playlist-real"):
+        if (output / name).exists():
+            shutil.rmtree(output / name)
+    write_playlist_bundle(Playlist(title="Bench Warmup", author="MoveBeat Bench",
+                                   entries=entries, source_id="bench"), output)
+    real = PROJECT / "out/levels/132ce"
+    if real.is_dir():
+        if (output / "132ce").exists():
+            shutil.rmtree(output / "132ce")
+        shutil.copytree(real, output / "132ce")
+        values = dict(line.split("=", 1) for line in
+                      (real / "level.ini").read_text(encoding="utf-8").splitlines()
+                      if "=" in line)
+        write_playlist_bundle(Playlist(
+            title="Real Maps", author="MoveBeat Bench", source_id="real",
+            entries=[PlaylistEntry(hash=values["source_hash"], key="132ce",
+                                   title=values["title"], available=True),
+                     PlaylistEntry(hash="f" * 40, title="Not imported",
+                                   available=True)]), output)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--count", type=int, default=30)
     parser.add_argument("--output", type=Path,
                         default=PROJECT / "out/levels-bench")
+    parser.add_argument("--playlist-test", action="store_true")
     args = parser.parse_args()
+    if args.playlist_test:
+        args.output.mkdir(parents=True, exist_ok=True)
+        make_playlist_test(args.output)
+        print(f"Playlist test library in {args.output}")
+        return 0
     if not 1 <= args.count <= 200:
         parser.error("--count must be between 1 and 200")
     args.output.mkdir(parents=True, exist_ok=True)

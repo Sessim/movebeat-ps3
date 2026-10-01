@@ -122,25 +122,48 @@ void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
 
 void drawLevelLibrary(Framebuffer& screen,
                       const std::vector<LevelChoice>& levels,
+                      const std::vector<std::size_t>& order,
                       const LibraryView& view) {
     const int width = screen.width();
     const int height = screen.height();
     const float center_x = width * 0.5f;
     const float center_y = height * 0.5f - 12.0f;
-    drawMenuText(screen, "TRACKS", 40, 70, 4, 0xffd9e7ffu);
-    if (levels.empty()) {
+    // Header: TRACKS, or the playlist's own card (its title may be any
+    // script, so it comes pre-rendered from the PC like the track cards).
+    int counter_y = 112;
+    if (!view.playlist) {
+        drawMenuText(screen, "TRACKS", 40, 70, 4, 0xffd9e7ffu);
+    } else if (view.playlist->card.ready()) {
+        view.playlist->card.drawCover(screen, 40.0f, 34.0f, 72.0f, 1.0f);
+        view.playlist->card.drawLabel(screen, 120.0f, 34.0f, 0.75f, 1.0f);
+        counter_y = 124;
+    } else {
+        drawMenuText(screen, "PLAYLIST", 40, 70, 4, 0xffd9e7ffu);
+    }
+    // One mark per shelf (all tracks, then each playlist), Select steps.
+    if (view.shelf_count > 1) {
+        const std::size_t marks = std::min<std::size_t>(view.shelf_count, 16);
+        for (std::size_t mark = 0; mark < marks; ++mark) {
+            const bool current = mark == view.shelf;
+            screen.rectangle(40 + static_cast<int>(mark) * 18, counter_y + 40,
+                             current ? 14 : 10, 5,
+                             current ? 0xff70d8ffu : 0xff3a4766u);
+        }
+    }
+    if (order.empty()) {
         drawMenuText(screen, "NO TRACKS", width / 2 - 90,
                      static_cast<int>(center_y), 3, 0xffffa0a0u);
         return;
     }
-    const std::size_t count = levels.size();
+    const std::size_t count = order.size();
     const float nearest = std::floor(view.position + 0.5f);
     const std::size_t selected = CarouselScroll::wrap(nearest, count);
     const int counter_x = 100;
     drawNumber(screen, static_cast<unsigned int>(selected + 1),
-               counter_x - 26, 112, 4, 0xffd9e7ffu);
-    screen.line(counter_x - 5, 135, counter_x + 5, 110, 0xff7d92b2u, 2);
-    drawNumber(screen, static_cast<unsigned int>(count), counter_x + 26, 112, 4,
+               counter_x - 26, counter_y, 4, 0xffd9e7ffu);
+    screen.line(counter_x - 5, counter_y + 23, counter_x + 5, counter_y - 2,
+                0xff7d92b2u, 2);
+    drawNumber(screen, static_cast<unsigned int>(count), counter_x + 26, counter_y, 4,
                0xffd9e7ffu);
 
     // Up to seven rows plus the ones sliding in, farthest first so the
@@ -154,7 +177,7 @@ void drawLevelLibrary(Framebuffer& screen,
             if (count < 7 && std::fabs(offset) > count * 0.5f) continue;
             const RowLayout row = carouselRow(offset, center_y);
             if (row.alpha <= 0.0f) continue;
-            drawCarouselRow(screen, levels[CarouselScroll::wrap(row_index, count)],
+            drawCarouselRow(screen, levels[order[CarouselScroll::wrap(row_index, count)]],
                             row, center_x);
         }
     }
@@ -166,7 +189,7 @@ void drawLevelLibrary(Framebuffer& screen,
     const float settle = 1.0f - std::min(1.0f, between * 2.0f);
     const RowLayout selected_row = carouselRow(nearest - view.position, center_y);
     const RowPlacement place = placeRow(selected_row, center_x);
-    const LevelChoice& level = levels[selected];
+    const LevelChoice& level = levels[order[selected]];
     if (settle > 0.0f) {
         const float x0 = place.cover_x - 4.0f, y0 = place.cover_y - 4.0f;
         const float x1 = place.cover_x + selected_row.cover + 4.0f;
@@ -226,8 +249,11 @@ void drawLevelLibrary(Framebuffer& screen,
 
     drawMenuText(screen, "HOLD T  UP DOWN  SCROLL     LEFT RIGHT  DIFFICULTY",
                  width / 2 - 300, height - 56, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE    SELECT  HANDS",
-                 width / 2 - 432, height - 30, 2, 0xff9cb3d3u);
+    drawMenuText(screen, view.shelf_count > 1
+                     ? "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE    SELECT  LISTS"
+                     : "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE",
+                 view.shelf_count > 1 ? width / 2 - 432 : width / 2 - 330,
+                 height - 30, 2, 0xff9cb3d3u);
 }
 
 void drawMovePointer(Framebuffer& screen,
@@ -266,6 +292,69 @@ void drawResults(Framebuffer& screen,
                      screen.width() / 6, small / 2 + 1, 0xff40c8ffu);
     screen.rectangle(screen.width() * 7 / 12, underline_y,
                      screen.width() / 6, small / 2 + 1, 0xffff5060u);
+}
+
+void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
+                      const LevelChoice& next, unsigned int seconds_left) {
+    const int width = screen.width();
+    const int y = screen.height() * 3 / 4;
+    screen.rectangle(width / 2 - 360, y - 12, 720, 132, 0xff111b30u);
+    // Song k of n.
+    drawNumber(screen, static_cast<unsigned int>(run.position() + 1),
+               width / 2 - 318, y + 4, 4, 0xffd9e7ffu);
+    screen.line(width / 2 - 298, y + 27, width / 2 - 288, y + 2, 0xff7d92b2u, 2);
+    drawNumber(screen, static_cast<unsigned int>(run.trackCount()),
+               width / 2 - 266, y + 4, 4, 0xffd9e7ffu);
+    drawMenuText(screen, "NEXT", width / 2 - 200, y + 6, 3, 0xff9cb3d3u);
+    if (next.card.ready()) {
+        next.card.drawCover(screen, width / 2 - 110.0f, static_cast<float>(y), 72.0f, 1.0f);
+        next.card.drawLabel(screen, width / 2 - 30.0f, static_cast<float>(y), 0.75f, 1.0f);
+    } else {
+        drawMenuText(screen, "TRACK", width / 2 - 110, y + 26, 3, 0xffd9e7ffu);
+    }
+    drawNumber(screen, seconds_left, width / 2 + 330, y + 18, 6, 0xfff0d050u);
+    drawMenuText(screen, "START  NOW      TRI  STOP", width / 2 - 150, y + 92, 2,
+                 0xff9cb3d3u);
+}
+
+void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
+                         const PlaylistChoice& playlist,
+                         const std::vector<LevelChoice>& levels) {
+    const int width = screen.width();
+    const int height = screen.height();
+    if (playlist.card.ready()) {
+        playlist.card.drawCover(screen, width / 2 - 250.0f, 28.0f, 72.0f, 1.0f);
+        playlist.card.drawLabel(screen, width / 2 - 170.0f, 28.0f, 0.75f, 1.0f);
+    }
+    drawCenteredMenuText(screen, "PLAYLIST COMPLETE", 116, 3, 0xff70e0a0u);
+    drawNumber(screen, run.totalScore(), width / 2, 150, 8, 0xfff0d050u);
+    drawNumber(screen, run.totalHits(), width / 3, 210, 4, 0xff40c8ffu);
+    drawNumber(screen, run.totalMisses(), width * 2 / 3, 210, 4, 0xffff5060u);
+    // The latest songs, one row each: number, card, score.
+    const std::vector<PlaylistSongResult>& results = run.results();
+    const std::size_t rows = std::min<std::size_t>(results.size(), 7);
+    const std::size_t first = results.size() - rows;
+    for (std::size_t row = 0; row < rows; ++row) {
+        const PlaylistSongResult& result = results[first + row];
+        const int y = 252 + static_cast<int>(row) * 56;
+        screen.rectangle(width / 2 - 380, y, 760, 50,
+                         row % 2 ? 0xff0c1426u : 0xff111b30u);
+        drawNumber(screen, static_cast<unsigned int>(run.firstPosition() + first + row + 1),
+                   width / 2 - 350, y + 15, 4, 0xff7d92b2u);
+        if (result.level < levels.size() && levels[result.level].card.ready()) {
+            levels[result.level].card.drawCover(screen, width / 2 - 310.0f, y + 3.0f,
+                                                44.0f, 1.0f);
+            levels[result.level].card.drawLabel(screen, width / 2 - 258.0f, y + 3.0f,
+                                                0.46f, 1.0f);
+        } else {
+            drawMenuText(screen, "TRACK", width / 2 - 300, y + 15, 2, 0xffd9e7ffu);
+        }
+        if (result.failed)
+            drawMenuText(screen, "FAILED", width / 2 + 120, y + 16, 2, 0xffff5060u);
+        drawNumber(screen, result.score, width / 2 + 300, y + 13, 4,
+                   result.failed ? 0xffff5060u : 0xfff0d050u);
+    }
+    drawCenteredMenuText(screen, "TRI BACK TO TRACKS", height - 40, 2, 0xffd9e7ffu);
 }
 
 void drawAudioError(Framebuffer& screen, int error) {

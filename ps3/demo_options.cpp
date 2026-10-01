@@ -1,6 +1,7 @@
 #include "demo_options.hpp"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "app_paths.hpp"
@@ -42,6 +43,10 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.tracking_loss_test = true;
         else if (strcmp(line, "menu_test=1") == 0)
             options.menu_test = true;
+        else if (strcmp(line, "playlist_test=1") == 0)
+            options.playlist_test = true;
+        else if (strncmp(line, "playlist_shelf=", 15) == 0)
+            options.playlist_shelf = static_cast<unsigned int>(strtoul(line + 15, 0, 10));
         else if (strncmp(line, "level_id=", 9) == 0 &&
                  strlen(line + 9) <= 64)
             options.level_id = line + 9;

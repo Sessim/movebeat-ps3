@@ -51,6 +51,12 @@ struct RunStatus {
     // Levels started with both Move buttons; a play origin is measured.
     unsigned int menu_chord_starts;
     int pose_calibrated;
+    // Playlists found, the shelf shown (0 all tracks) and the playlist run.
+    unsigned int playlist_count;
+    unsigned int shelf;
+    unsigned int playlist_songs_played;
+    unsigned int playlist_total_score;
+    int playlist_complete;
     unsigned int sound_effects;
     unsigned int error_stage;
     unsigned int error_code;

@@ -1,9 +1,11 @@
-// Library carousel motion, Move gestures and sound effect mixing.
+// Library carousel motion, Move gestures, playlist shelves and sound effect
+// mixing.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 
+#include "library_shelf.hpp"
 #include "menu_motion.hpp"
 #include "sound_effects.hpp"
 
@@ -259,6 +261,100 @@ void testSoundBankAndMixer() {
           "the request queue is bounded and drains in one block");
 }
 
+movebeat::LevelManifest levelWith(const char* key, const char* hash,
+                                   const char* const* difficulties, int count) {
+    movebeat::LevelManifest level;
+    level.source_key = key;
+    level.source_hash = hash;
+    for (int index = 0; index < count; ++index) {
+        movebeat::LevelChart chart;
+        chart.characteristic = "Standard";
+        chart.difficulty = difficulties[index];
+        level.charts.push_back(chart);
+    }
+    return level;
+}
+
+void testPlaylistShelf() {
+    static const char* const easy_to_expert[] = {"Easy", "Normal", "Hard", "Expert"};
+    static const char* const hard_plus[] = {"Hard", "ExpertPlus"};
+    const movebeat::LevelManifest alpha = levelWith(
+        "a1", "1111111111111111111111111111111111111111", easy_to_expert, 4);
+    const movebeat::LevelManifest beta = levelWith("b2", "", hard_plus, 2);
+    const movebeat::LevelManifest gamma = levelWith(
+        "c3", "3333333333333333333333333333333333333333", easy_to_expert, 4);
+    std::vector<const movebeat::LevelManifest*> library;
+    library.push_back(&alpha);
+    library.push_back(&beta);
+    library.push_back(&gamma);
+
+    movebeat::PlaylistManifest playlist;
+    movebeat::PlaylistSong song;
+    song.hash = "3333333333333333333333333333333333333333";
+    playlist.songs.push_back(song);                       // gamma
+    song = movebeat::PlaylistSong();
+    song.hash = "9999999999999999999999999999999999999999";
+    playlist.songs.push_back(song);                       // not in the library
+    song = movebeat::PlaylistSong();
+    song.key = "B2";
+    song.difficulty = "ExpertPlus";
+    playlist.songs.push_back(song);                       // beta
+    song = movebeat::PlaylistSong();
+    song.hash = "1111111111111111111111111111111111111111";
+    song.difficulty = "Normal";
+    playlist.songs.push_back(song);                       // alpha
+    std::vector<std::size_t> songs;
+    const std::vector<std::size_t> tracks = resolvePlaylistTracks(playlist, library, songs);
+    check(tracks.size() == 3 && tracks[0] == 2 && tracks[1] == 1 && tracks[2] == 0,
+          "playlist tracks keep playlist order and skip missing maps");
+    check(songs.size() == 3 && songs[0] == 0 && songs[1] == 2 && songs[2] == 3,
+          "each playlist track remembers its playlist song");
+
+    check(choosePlaylistChart(playlist.songs[2], beta, 0) == 1,
+          "the difficulty a playlist names wins over the preferred one");
+    check(choosePlaylistChart(playlist.songs[3], alpha, 3) == 1,
+          "a named Normal is played even when Expert was preferred");
+    check(choosePlaylistChart(playlist.songs[0], alpha, 3) == 3,
+          "without a suggestion the preferred difficulty is used");
+    check(choosePlaylistChart(playlist.songs[0], beta, 3) == 0,
+          "an unavailable preferred difficulty falls back to the easier neighbour");
+    check(choosePlaylistChart(playlist.songs[0], beta, 4) == 1,
+          "an exact preferred rank is found");
+    check(choosePlaylistChart(playlist.songs[0], alpha, -1) == 0,
+          "no suggestion and no preference keep the first chart");
+    movebeat::PlaylistSong missing_named;
+    missing_named.difficulty = "Expert";
+    check(choosePlaylistChart(missing_named, beta, -1) == 0,
+          "a named difficulty the level lacks picks the nearest easier one");
+
+    PlaylistRun run;
+    check(!run.active() && !run.hasNext(), "a new run is idle");
+    run.begin(0, tracks, 1, 2);
+    check(run.active() && run.position() == 1 && run.currentLevel() == 1 &&
+          run.preferredRank() == 2, "a run starts on the chosen song");
+    PlaylistSongResult first;
+    first.level = 1;
+    first.score = 1000;
+    first.hits = 10;
+    first.misses = 2;
+    run.record(first);
+    check(run.hasNext() && !run.complete(), "a song with one after it is not the end");
+    check(run.advance() == 0 && run.position() == 2, "the run advances in playlist order");
+    PlaylistSongResult second;
+    second.level = 0;
+    second.score = 500;
+    second.hits = 5;
+    second.failed = true;
+    run.record(second);
+    check(!run.hasNext() && run.complete(), "the last song completes the run");
+    check(run.totalScore() == 1500 && run.totalHits() == 15 && run.totalMisses() == 2,
+          "the run totals every song");
+    run.stop();
+    check(!run.active() && !run.complete(), "a stopped run is idle");
+    run.begin(0, tracks, 7, -1);
+    check(!run.active(), "a start beyond the playlist does not begin a run");
+}
+
 } // namespace
 
 // Also linked into the PPU test package (see game_tests.cpp).
@@ -271,6 +367,7 @@ int runMenuTests() {
     testWristTurnsDriveGestures();
     testDifficultyColors();
     testSoundBankAndMixer();
+    testPlaylistShelf();
     if (failures) {
         std::printf("%d menu check(s) failed\n", failures);
         return failures;

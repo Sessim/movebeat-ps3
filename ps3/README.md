@@ -271,8 +271,9 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
    stays fixed for the session and also determines which Move receives rumble.
    `hand_slots_swapped=1` in `run_status.ini` means GEM slot 1 was assigned to
    the left hand. Camera X-axis orientation still needs physical verification.
-   If blue and red hands are reversed on your setup, press Select on the track
-   screen to toggle `HANDS AUTO` / `HANDS FLIPPED`; this correction is saved in
+   If blue and red hands are reversed on your setup, hold both T triggers and
+   press Select on the track screen to toggle `HANDS AUTO` / `HANDS FLIPPED`
+   (Select alone steps through the playlist shelves); this correction is saved in
    `settings.ini` and applied to the next calibration. The diagnostic
    `invert_hands_setting` shows the saved correction separately from the
    effective `hand_slots_swapped` value. After calibration, the physical Move

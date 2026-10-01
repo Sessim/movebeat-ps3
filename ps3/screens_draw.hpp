@@ -7,6 +7,7 @@
 #include "framebuffer.hpp"
 #include "gem_runtime.hpp"
 #include "level_library.hpp"
+#include "library_shelf.hpp"
 #include "menu_pointer.hpp"
 #include "movebeat/game.hpp"
 #include "movebeat/records.hpp"
@@ -27,16 +28,34 @@ struct LibraryView {
     float halo_flash;             // 1 right after a difficulty change, then 0
     bool preview_playing;
     unsigned int now_ms;
+    // The shelf shown: all tracks (playlist 0) or one playlist.
+    const PlaylistChoice* playlist;
+    std::size_t shelf;
+    std::size_t shelf_count;
+
+    LibraryView() : position(0.0f), chart_index(0), halo_color(0),
+                    halo_flash(0.0f), preview_playing(false), now_ms(0),
+                    playlist(0), shelf(0), shelf_count(1) {}
 };
 
-// Seven-row vertical carousel with the selection in the middle.
+// Seven-row vertical carousel with the selection in the middle; `order`
+// lists the library indices of the shelf in carousel order.
 void drawLevelLibrary(Framebuffer& screen,
                       const std::vector<LevelChoice>& levels,
+                      const std::vector<std::size_t>& order,
                       const LibraryView& view);
 void drawMovePointer(Framebuffer& screen, const ScreenPointer& pointer,
                      u32 color);
 void drawResults(Framebuffer& screen, const movebeat::ScoreState& score,
                  const movebeat::HighScore& best);
+// Under the results of a playlist song: which song it was, the next one
+// and the seconds until it starts.
+void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
+                      const LevelChoice& next, unsigned int seconds_left);
+// After the last song of a playlist run: totals and the latest songs.
+void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
+                         const PlaylistChoice& playlist,
+                         const std::vector<LevelChoice>& levels);
 void drawAudioError(Framebuffer& screen, int error);
 void drawTimingOffset(Framebuffer& screen, int offset_ms);
 void drawBladeLength(Framebuffer& screen, int blade_length_cm);

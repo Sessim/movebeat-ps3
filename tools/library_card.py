@@ -59,7 +59,8 @@ def _fit_text(draw: ImageDraw.ImageDraw, value: str,
 
 
 def render_card_bytes(cover: Path | None, title: str, author: str,
-                      mapper: str = "") -> bytes:
+                      mapper: str = "", detail: str = "") -> bytes:
+    """`mapper` prints as "Mapper: ..."; `detail` replaces that line as is."""
     card = Image.new("RGB", (CARD_WIDTH, CARD_HEIGHT), (14, 16, 29))
     draw = ImageDraw.Draw(card)
     if cover is not None:
@@ -90,9 +91,10 @@ def render_card_bytes(cover: Path | None, title: str, author: str,
     draw.text((COVER_SIZE + 18, 43),
               _fit_text(draw, author, author_font, label_width),
               font=author_font, fill=(150, 179, 211))
-    if mapper.strip():
+    third_line = detail.strip() or (("Mapper: " + mapper) if mapper.strip() else "")
+    if third_line:
         draw.text((COVER_SIZE + 18, 71),
-                  _fit_text(draw, "Mapper: " + mapper, mapper_font, label_width),
+                  _fit_text(draw, third_line, mapper_font, label_width),
                   font=mapper_font, fill=(126, 145, 180))
 
     rgb = card.tobytes()
