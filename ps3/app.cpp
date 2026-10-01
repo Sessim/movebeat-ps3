@@ -1152,6 +1152,10 @@ void App::playNextPlaylistSong() {
         selected_chart_index_ = choosePlaylistChart(
             playlist.manifest.songs[playlist.song_indices[shelf_pos_]],
             selected_level_, playlist_run_.preferredRank());
+        if (selected_chart_index_ < selected_level_.charts.size())
+            printf("Playlist song %u: %s\n",
+                   static_cast<unsigned int>(shelf_pos_ + 1),
+                   selected_level_.charts[selected_chart_index_].difficulty.c_str());
         if (ensureSelectedChart()) {
             beginLevel();
             return;
