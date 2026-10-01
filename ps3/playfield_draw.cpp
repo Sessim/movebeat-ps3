@@ -428,16 +428,31 @@ void drawCutFeedback(Framebuffer& screen,
         const u32 color = shadeNote(base, 10 - static_cast<int>(age * 7u /
             CutFeedback::DURATION_MS), 10);
         if (screen.effectsEnabled()) {
-            // A soft additive flash that grows and fades with the burst.
+            // The cut happens right at the blade, whose own halo is bright,
+            // so the flash must pop: it starts at about the cube's size at
+            // full strength, expands quickly and fades quadratically.
+            // A white core marks the first few frames. Two fans per cut.
+            // Hold full strength for the first quarter (~45 ms, three
+            // frames), then fade; a fade from the very first frame read as
+            // a dim smudge by the time the eye catches it.
+            const float remaining = progress < 0.25f
+                ? 1.0f : (1.0f - progress) / 0.75f;
+            const float flash_meters = 0.30f + 0.35f * progress;
             float center_x = 0.0f, center_y = 0.0f, edge_x = 0.0f, edge_y = 0.0f;
             projectFloat(movebeat::Vec3(burst.position.x, burst.position.y, z),
                          screen, center_x, center_y);
-            projectFloat(movebeat::Vec3(burst.position.x + outer * 1.4f,
+            projectFloat(movebeat::Vec3(burst.position.x + flash_meters,
                                         burst.position.y, z),
                          screen, edge_x, edge_y);
-            const float radius = std::fabs(edge_x - center_x) + 4.0f;
+            const float radius = std::fabs(edge_x - center_x) + 6.0f;
             screen.glowDisc(center_x, center_y, radius,
-                            withAlpha(base, 0.7f * (1.0f - progress)));
+                            withAlpha(base, remaining * remaining));
+            if (progress < 0.6f) {
+                const float core = progress < 0.3f
+                    ? 1.0f : (0.6f - progress) / 0.3f;
+                screen.glowDisc(center_x, center_y, radius * 0.4f,
+                                withAlpha(0xffffffffu, core));
+            }
         }
         for (int ray = 0; ray < 8; ++ray) {
             const float dx = rays[ray][0] * 0.65f;
