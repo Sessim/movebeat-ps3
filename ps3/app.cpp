@@ -957,23 +957,16 @@ void App::updateGameplay(FrameInput& input) {
         game_.update(input.level_time_ms, moves.left, moves.right);
         const movebeat::FrameEvents& events = game_.events();
         cut_feedback_.add(events, input.level_time_ms);
-        // A cut is felt in the cutting hand and heard on its side.
-        if (events.left_hit) {
-            pulseRumble(0, 3, 160);
-            audio_.playEffect(SFX_CUT, 0.8f, -0.45f);
-        }
-        if (events.right_hit) {
-            pulseRumble(1, 3, 160);
-            audio_.playEffect(SFX_CUT, 0.8f, 0.45f);
-        }
+        // Gameplay feedback is haptic only: the song stays the only sound.
+        // A cut is felt in the cutting hand.
+        if (events.left_hit) pulseRumble(0, 3, 160);
+        if (events.right_hit) pulseRumble(1, 3, 160);
         if (events.bomb_hit) {
             pulseRumble(0, 6, 230);
             pulseRumble(1, 6, 230);
-            audio_.playEffect(SFX_BOMB, 0.9f, 0.0f);
         } else if (events.miss) {
             pulseRumble(0, 3, 70);
             pulseRumble(1, 3, 70);
-            audio_.playEffect(SFX_MISS, 0.5f, 0.0f);
         }
     }
     applyRumble();
