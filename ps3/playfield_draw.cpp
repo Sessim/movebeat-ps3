@@ -706,9 +706,30 @@ void drawHud(Framebuffer& screen,
     const u32 panel = 0xff101827u;
     const u32 label = 0xff9cb3d3u;
 
-    screen.rectangle(edge, panel_y, panel_width, panel_height, panel);
-    screen.rectangle(screen.width() - edge - panel_width, panel_y,
-                     panel_width, panel_height, panel);
+    if (screen.effectsEnabled()) {
+        // Translucent panels: densest at the screen edge, fading to nothing
+        // toward the playfield so the track stays visible behind them.
+        const float top = static_cast<float>(panel_y);
+        const float bottom = static_cast<float>(panel_y + panel_height);
+        const u32 dense = withAlpha(panel, 0.78f);
+        const u32 clear = panel & 0x00ffffffu;
+        const float left_x0 = static_cast<float>(edge);
+        const float left_x1 = static_cast<float>(edge + panel_width);
+        const float left_x[4] = {left_x0, left_x1, left_x1, left_x0};
+        const float y[4] = {top, top, bottom, bottom};
+        const u32 left_colors[4] = {dense, clear, clear, dense};
+        screen.blendQuad(left_x, y, left_colors, false);
+        const float right_x0 = static_cast<float>(
+            screen.width() - edge - panel_width);
+        const float right_x1 = static_cast<float>(screen.width() - edge);
+        const float right_x[4] = {right_x0, right_x1, right_x1, right_x0};
+        const u32 right_colors[4] = {clear, dense, dense, clear};
+        screen.blendQuad(right_x, y, right_colors, false);
+    } else {
+        screen.rectangle(edge, panel_y, panel_width, panel_height, panel);
+        screen.rectangle(screen.width() - edge - panel_width, panel_y,
+                         panel_width, panel_height, panel);
+    }
     drawMenuText(screen, "SCORE", edge + screen.width() / 80,
                  label_y, label_scale, label);
     drawNumber(screen, score.score, edge + panel_width / 2,
