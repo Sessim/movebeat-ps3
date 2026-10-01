@@ -316,23 +316,18 @@ void DrawBatch::solidTriangle(const ProjectedSolidVertex& a,
 }
 
 void DrawBatch::image(int x, int y, int width, int height,
-                      const unsigned short* rgb565) {
-    if (!rgb565 || width <= 0 || height <= 0) return;
+                      const std::uint32_t* argb, unsigned int cache_key) {
+    if (!argb || width <= 0 || height <= 0) return;
     if (textures_.size() >= texture_capacity_) {
         ++dropped_;
         return;
     }
+    // No copy: the caller keeps the pixels alive until the frame is drawn.
     BatchTexture texture;
     texture.width = width;
     texture.height = height;
-    texture.pixels.resize(static_cast<std::size_t>(width) * height);
-    for (std::size_t index = 0; index < texture.pixels.size(); ++index) {
-        const unsigned short color = rgb565[index];
-        const std::uint32_t red = ((color >> 11) & 31u) * 255u / 31u;
-        const std::uint32_t green = ((color >> 5) & 63u) * 255u / 63u;
-        const std::uint32_t blue = (color & 31u) * 255u / 31u;
-        texture.pixels[index] = 0xff000000u | (red << 16) | (green << 8) | blue;
-    }
+    texture.pixels = argb;
+    texture.cache_key = cache_key;
     const int texture_index = static_cast<int>(textures_.size());
     textures_.push_back(texture);
     const float left = static_cast<float>(x);

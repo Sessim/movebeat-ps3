@@ -57,7 +57,11 @@ struct BatchRun {
 struct BatchTexture {
     int width;
     int height;
-    std::vector<std::uint32_t> pixels;
+    // Caller-owned 0xAARRGGBB pixels, valid until the batch is submitted.
+    const std::uint32_t* pixels;
+    // Non-zero: identical pixels for every frame with this key, so the RSX
+    // renderer keeps the texture resident instead of uploading it again.
+    unsigned int cache_key;
 };
 
 // Largest inverse camera depth a note can have (camera depth > 0.1).
@@ -110,9 +114,10 @@ public:
                        const ProjectedSolidVertex& b,
                        const ProjectedSolidVertex& c, std::uint32_t color_a,
                        std::uint32_t color_b, std::uint32_t color_c);
-    // Copies an RGB565 image and draws it 1:1 at (x, y).
+    // Draws an 0xAARRGGBB image 1:1 at (x, y) without copying it; see
+    // BatchTexture for the lifetime and cache_key rules.
     void image(int x, int y, int width, int height,
-               const unsigned short* rgb565);
+               const std::uint32_t* argb, unsigned int cache_key);
 
     // Effects. Coordinates are pixel edges (a pixel center is at +0.5) and
     // every vertex has its own 0xAARRGGBB color, interpolated by the RSX.

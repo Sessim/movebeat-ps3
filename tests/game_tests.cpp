@@ -1255,6 +1255,13 @@ int main() {
            movebeat::ps3::libraryCardVisible(1, 0, 64) &&
            !movebeat::ps3::libraryCardVisible(2, 0, 64),
            "only selected and adjacent library cards remain visible");
+    expect(movebeat::ps3::libraryCardDistance(0, 0, 30) == 0 &&
+           movebeat::ps3::libraryCardDistance(3, 0, 30) == 3 &&
+           movebeat::ps3::libraryCardDistance(27, 0, 30) == 3 &&
+           movebeat::ps3::libraryCardDistance(15, 0, 30) == 15 &&
+           movebeat::ps3::libraryCardDistance(1, 29, 30) == 2 &&
+           movebeat::ps3::libraryCardDistance(5, 0, 0) == 0,
+           "card window distance wraps around the library");
     expect(movebeat::ps3::libraryCardVisible(0, 1, 2) &&
            movebeat::ps3::libraryCardVisible(1, 1, 2) &&
            !movebeat::ps3::libraryCardVisible(0, 0, 0),

@@ -35,6 +35,12 @@ struct RunStatus {
     int effects_enabled;
     unsigned int batch_max_vertices;
     unsigned int batch_dropped_primitives;
+    // Library: startup scan cost and, in menu_test runs, per-step cost.
+    unsigned int library_scan_ms;
+    unsigned int menu_steps;
+    unsigned int menu_step_avg_us;
+    unsigned int menu_step_max_us;
+    unsigned int menu_idle_max_us;
     unsigned int error_stage;
     unsigned int error_code;
     int level_count;

@@ -454,25 +454,23 @@ void testGlyphHiddenBehindNearerCube() {
 void testImageIsOneToOne() {
     const int w = 6;
     const int h = 4;
-    unsigned short source[w * h];
+    std::uint32_t source[w * h];
     for (int index = 0; index < w * h; ++index)
-        source[index] = static_cast<unsigned short>(index * 2731u);
+        source[index] = 0xff000000u | static_cast<std::uint32_t>(index * 0x0a1b2cu);
     DrawBatch batch = makeBatch(32, 32);
-    batch.image(7, 9, w, h, source);
+    batch.image(7, 9, w, h, source, 42u);
+    check(batch.textures().size() == 1 && batch.textures()[0].pixels == source &&
+          batch.textures()[0].cache_key == 42u,
+          "image keeps the caller's pixels and cache key without copying");
     Image gpu(32, 32);
     replay(batch, gpu);
     bool exact = true;
     for (int y = 0; y < h; ++y)
-        for (int x = 0; x < w; ++x) {
-            const unsigned short color = source[y * w + x];
-            const std::uint32_t expected = 0xff000000u |
-                ((((color >> 11) & 31u) * 255u / 31u) << 16) |
-                ((((color >> 5) & 63u) * 255u / 63u) << 8) |
-                ((color & 31u) * 255u / 31u);
-            if (gpu.pixels[static_cast<std::size_t>(9 + y) * 32 + 7 + x] != expected)
+        for (int x = 0; x < w; ++x)
+            if (gpu.pixels[static_cast<std::size_t>(9 + y) * 32 + 7 + x] !=
+                source[y * w + x])
                 exact = false;
-        }
-    check(exact, "library card texels land 1:1 with the software conversion");
+    check(exact, "library card texels land 1:1");
     check(coloredPixels(gpu) == w * h, "image covers exactly its rectangle");
 }
 

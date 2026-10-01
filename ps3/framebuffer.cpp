@@ -380,21 +380,20 @@ void Framebuffer::circle(int center_x, int center_y, int radius, u32 color) {
 }
 
 void Framebuffer::image(int x, int y, int width, int height,
-                        const unsigned short* rgb565) {
-    if (!initialized_ || !rgb565) return;
+                        const std::uint32_t* argb, unsigned int cache_key) {
+    if (!initialized_ || !argb || width <= 0 || height <= 0) return;
     if (rsx_) {
-        batch_.image(x, y, width, height, rgb565);
+        batch_.image(x, y, width, height, argb, cache_key);
         return;
     }
-    for (int row = 0; row < height; ++row) {
-        for (int column = 0; column < width; ++column) {
-            const unsigned short color = rgb565[row * width + column];
-            const u32 red = ((color >> 11) & 31u) * 255u / 31u;
-            const u32 green = ((color >> 5) & 63u) * 255u / 63u;
-            const u32 blue = (color & 31u) * 255u / 31u;
-            pixel(x + column, y + row,
-                  0xff000000u | (red << 16) | (green << 8) | blue);
-        }
+    // Clip once, then copy whole rows.
+    const int left = std::max(0, x);
+    const int right = std::min(width_, x + width);
+    if (left >= right) return;
+    for (int row = std::max(0, y); row < std::min(height_, y + height); ++row) {
+        memcpy(buffers_[current_].pixels + row * width_ + left,
+               argb + (row - y) * width + (left - x),
+               static_cast<std::size_t>(right - left) * sizeof(u32));
     }
 }
 

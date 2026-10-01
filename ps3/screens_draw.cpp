@@ -69,6 +69,9 @@ void drawLevelLibrary(Framebuffer& screen,
             drawMenuText(screen, "TRACK", card_x + 115, y + 31, 3,
                          0xffd9e7ffu);
         }
+        if (levels[index].chart_broken)
+            drawMenuText(screen, "CHART ERROR", card_x + 300, y + 70, 2,
+                         0xffff6470u);
     }
     drawMenuText(screen, "TRI PREV  X NEXT  MOVE T SELECT", center_x - 270,
                  screen.height() - 108, 2, 0xff9cb3d3u);

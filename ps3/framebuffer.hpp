@@ -42,9 +42,11 @@ public:
     void quadrilateral(int x0, int y0, int x1, int y1,
                        int x2, int y2, int x3, int y3, u32 color);
     void circle(int center_x, int center_y, int radius, u32 color);
-    // Draws an RGB565 image 1:1 at (x, y).
+    // Draws an 0xAARRGGBB image 1:1 at (x, y). The pixels must stay valid
+    // until present(). A non-zero cache_key promises identical pixels for
+    // the same key, so the RSX path uploads the texture only once.
     void image(int x, int y, int width, int height,
-               const unsigned short* rgb565);
+               const std::uint32_t* argb, unsigned int cache_key);
     // Direction glyphs and bombs obey the 3D note depth buffer when active.
     // They lie on the note's front plane at world depth plane_z, whose
     // depth is evaluated per pixel (the plane is tilted to the camera).

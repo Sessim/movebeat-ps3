@@ -24,9 +24,13 @@ RsxBatchRenderer::RsxBatchRenderer()
       color_program_offset_(0), texture_program_(0),
       texture_program_offset_(0), texture_unit_(0) {
     vertex_buffers_[0] = vertex_buffers_[1] = 0;
-    texture_buffers_[0] = texture_buffers_[1] = 0;
     vertex_offsets_[0] = vertex_offsets_[1] = 0;
-    texture_offsets_[0] = texture_offsets_[1] = 0;
+    texture_cache_ = 0;
+    texture_cache_offset_ = 0;
+    frame_counter_ = 0;
+    texture_uploads_ = 0;
+    for (std::size_t slot = 0; slot < kTextureCapacity; ++slot)
+        slot_key_[slot] = slot_used_frame_[slot] = 0;
 }
 RsxBatchRenderer::~RsxBatchRenderer() {}
 bool RsxBatchRenderer::initialize(gcmContextData*, int, int) { return false; }
@@ -90,9 +94,13 @@ RsxBatchRenderer::RsxBatchRenderer()
       color_program_offset_(0), texture_program_(0),
       texture_program_offset_(0), texture_unit_(0) {
     vertex_buffers_[0] = vertex_buffers_[1] = 0;
-    texture_buffers_[0] = texture_buffers_[1] = 0;
     vertex_offsets_[0] = vertex_offsets_[1] = 0;
-    texture_offsets_[0] = texture_offsets_[1] = 0;
+    texture_cache_ = 0;
+    texture_cache_offset_ = 0;
+    frame_counter_ = 0;
+    texture_uploads_ = 0;
+    for (std::size_t slot = 0; slot < kTextureCapacity; ++slot)
+        slot_key_[slot] = slot_used_frame_[slot] = 0;
 }
 
 RsxBatchRenderer::~RsxBatchRenderer() {
@@ -112,10 +120,12 @@ bool RsxBatchRenderer::initialize(gcmContextData* context, int width,
     for (int slot = 0; ok && slot < 2; ++slot) {
         vertex_buffers_[slot] = allocate(
             128, kVertexCapacity * sizeof(BatchVertex), vertex_offsets_[slot]);
-        texture_buffers_[slot] = allocate(
-            128, kTextureCapacity * kTextureBytes, texture_offsets_[slot]);
-        ok = vertex_buffers_[slot] && texture_buffers_[slot];
+        ok = vertex_buffers_[slot] != 0;
     }
+    ok = ok && (texture_cache_ = allocate(
+        128, kTextureCapacity * kTextureBytes, texture_cache_offset_)) != 0;
+    for (std::size_t slot = 0; slot < kTextureCapacity; ++slot)
+        slot_key_[slot] = slot_used_frame_[slot] = 0;
     ok = ok &&
         uploadFragmentProgram(colorProgram(), color_program_,
                               color_program_offset_) &&
@@ -138,8 +148,8 @@ void RsxBatchRenderer::shutdown() {
     release(depth_buffer_);
     for (int slot = 0; slot < 2; ++slot) {
         release(vertex_buffers_[slot]);
-        release(texture_buffers_[slot]);
     }
+    release(texture_cache_);
     release(color_program_);
     release(texture_program_);
     ready_ = false;
@@ -187,16 +197,46 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
     if (vertex_count)
         memcpy(vertex_buffers_[slot_], &vertices[0],
                vertex_count * sizeof(BatchVertex));
+    // Map this frame's textures to resident slots. A slot whose key matches
+    // is reused as is; otherwise the least recently used slot that this
+    // frame does not need is overwritten. Framebuffer waits for the
+    // previous flip before recording, so no earlier draw still reads it.
+    ++frame_counter_;
+    if (frame_counter_ == 0) frame_counter_ = 1;
     const std::vector<BatchTexture>& textures = batch.textures();
-    unsigned char* texture_memory =
-        static_cast<unsigned char*>(texture_buffers_[slot_]);
+    int texture_slot[kTextureCapacity];
+    unsigned char* texture_memory = static_cast<unsigned char*>(texture_cache_);
+    for (std::size_t index = 0; index < kTextureCapacity; ++index)
+        texture_slot[index] = -1;
     for (std::size_t index = 0;
          index < textures.size() && index < kTextureCapacity; ++index) {
         const BatchTexture& texture = textures[index];
-        if (texture.width > kMaxTextureWidth ||
+        if (!texture.pixels || texture.width > kMaxTextureWidth ||
             texture.height > kMaxTextureHeight) continue;
-        memcpy(texture_memory + index * kTextureBytes, &texture.pixels[0],
-               texture.pixels.size() * 4u);
+        int chosen = -1;
+        if (texture.cache_key) {
+            for (std::size_t slot = 0; slot < kTextureCapacity; ++slot)
+                if (slot_key_[slot] == texture.cache_key) chosen = static_cast<int>(slot);
+        }
+        if (chosen < 0) {
+            for (std::size_t slot = 0; slot < kTextureCapacity; ++slot) {
+                if (slot_used_frame_[slot] == frame_counter_) continue;
+                if (chosen < 0 || slot_used_frame_[slot] <
+                                  slot_used_frame_[static_cast<std::size_t>(chosen)])
+                    chosen = static_cast<int>(slot);
+            }
+            if (chosen < 0) continue;
+            unsigned char* destination = texture_memory +
+                static_cast<std::size_t>(chosen) * kTextureBytes;
+            const std::size_t row_bytes = static_cast<std::size_t>(texture.width) * 4u;
+            for (int row = 0; row < texture.height; ++row)
+                memcpy(destination + row * row_bytes,
+                       texture.pixels + row * texture.width, row_bytes);
+            slot_key_[chosen] = texture.cache_key;
+            ++texture_uploads_;
+        }
+        slot_used_frame_[chosen] = frame_counter_;
+        texture_slot[index] = chosen;
     }
 
     bindSurface(color_offset);
@@ -300,8 +340,9 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
             texture.depth = 1;
             texture.location = GCM_LOCATION_RSX;
             texture.pitch = static_cast<u32>(image.width) * 4u;
-            texture.offset = texture_offsets_[slot_] +
-                static_cast<u32>(run.texture * kTextureBytes);
+            if (texture_slot[run.texture] < 0) continue;
+            texture.offset = texture_cache_offset_ + static_cast<u32>(
+                static_cast<std::size_t>(texture_slot[run.texture]) * kTextureBytes);
             rsxLoadTexture(context_, texture_unit_, &texture);
             rsxTextureControl(context_, texture_unit_, GCM_TRUE, 0 << 8,
                               12 << 8, GCM_TEXTURE_MAX_ANISO_1);

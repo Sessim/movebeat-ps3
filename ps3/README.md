@@ -431,3 +431,24 @@ measured independently.
 
 Initialization failures are printed to the debug console and shown as a red
 screen. Error `-1003` means the attached camera is not a PlayStation Eye.
+
+## Library performance
+
+The library scans only `level.ini` files at startup (charts are parsed when
+a level starts, hidden behind the one-second calibration), keeps the cards
+within three entries of the selection loaded (one disk read per frame at
+most), converts cards to display format once and lets the RSX keep their
+textures resident. To measure with a large library:
+
+```sh
+python tools/make_bench_library.py --count 30 --output out/levels-bench
+cp -r out/levels/* out/levels-bench/   # optional: add real bundles
+MOVEBEAT_LEVELS_DIR=out/levels-bench bash tools/build_ps3.sh --include-imported
+```
+
+Install the package (for example with `tools/rpcs3_pkg_install_smoke.ps1`)
+and run `tools/rpcs3_menu_smoke.ps1 -AppPath <run>/app`. It sets
+`menu_test=1` in `demo_mode.ini`: the game scrolls through every track one
+press at a time, holds a button for auto-repeat, changes difficulties and
+reports `library_scan_ms`, `menu_step_avg_us`, `menu_step_max_us` and
+`menu_idle_max_us`.

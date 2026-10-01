@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <dirent.h>
+#include <stdio.h>
 
 #include "app_paths.hpp"
 #include "library_window.hpp"
@@ -10,13 +11,45 @@ namespace movebeat {
 namespace ps3 {
 namespace {
 
+// ASCII letters fold to lower case; other bytes (e.g. UTF-8 Cyrillic)
+// compare as they are, which keeps their alphabetical byte order.
+int compareTitles(const std::string& left, const std::string& right) {
+    const std::size_t length = std::min(left.size(), right.size());
+    for (std::size_t index = 0; index < length; ++index) {
+        unsigned char a = static_cast<unsigned char>(left[index]);
+        unsigned char b = static_cast<unsigned char>(right[index]);
+        if (a >= 'A' && a <= 'Z') a = static_cast<unsigned char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = static_cast<unsigned char>(b - 'A' + 'a');
+        if (a != b) return a < b ? -1 : 1;
+    }
+    if (left.size() == right.size()) return 0;
+    return left.size() < right.size() ? -1 : 1;
+}
+
 bool levelChoiceLess(const LevelChoice& left, const LevelChoice& right) {
     const bool left_current = left.directory == std::string(kLevelRoot) + "/current";
     const bool right_current = right.directory == std::string(kLevelRoot) + "/current";
     if (left_current != right_current) return left_current;
-    if (left.manifest.title != right.manifest.title)
-        return left.manifest.title < right.manifest.title;
+    const int titles = compareTitles(left.manifest.title, right.manifest.title);
+    if (titles != 0) return titles < 0;
     return left.directory < right.directory;
+}
+
+bool levelChartFilesExist(const std::string& directory,
+                          const movebeat::LevelManifest& manifest) {
+    if (manifest.charts.empty()) return false;
+    for (std::size_t index = 0; index < manifest.charts.size(); ++index) {
+        const std::string path = directory + "/" + manifest.charts[index].file;
+        FILE* file = 0;
+#if defined(_MSC_VER)
+        fopen_s(&file, path.c_str(), "rb");
+#else
+        file = fopen(path.c_str(), "rb");
+#endif
+        if (!file) return false;
+        fclose(file);
+    }
+    return true;
 }
 
 movebeat::Note makeNote(unsigned int time_ms, int lane, int row,
@@ -38,7 +71,8 @@ std::vector<LevelChoice> discoverLevels() {
     std::vector<LevelChoice> choices;
     DIR* directory = opendir(kLevelRoot);
     if (!directory) return choices;
-    for (dirent* entry = readdir(directory); entry && choices.size() < 64;
+    for (dirent* entry = readdir(directory);
+         entry && choices.size() < kMaxLibraryLevels;
          entry = readdir(directory)) {
         const std::string name(entry->d_name);
         if (name.empty() || name == "." || name == ".." ||
@@ -47,10 +81,10 @@ std::vector<LevelChoice> discoverLevels() {
         LevelChoice choice;
         choice.directory = std::string(kLevelRoot) + "/" + name;
         std::string error;
-        movebeat::Chart validation_chart;
+        // Only level.ini is parsed here; charts are parsed when a level is
+        // started, so startup cost no longer grows with chart sizes.
         if (movebeat::loadLevelDirectory(choice.directory, choice.manifest, error) &&
-            movebeat::loadLevelChart(choice.directory, choice.manifest, 0,
-                                     validation_chart, error)) {
+            levelChartFilesExist(choice.directory, choice.manifest)) {
             choices.push_back(choice);
         }
     }
@@ -59,15 +93,28 @@ std::vector<LevelChoice> discoverLevels() {
     return choices;
 }
 
-void updateLibraryCards(std::vector<LevelChoice>& levels, std::size_t selected) {
-    for (std::size_t index = 0; index < levels.size(); ++index) {
-        if (libraryCardVisible(index, selected, levels.size())) {
-            if (!levels[index].card.ready())
-                levels[index].card.load(levels[index].directory);
-        } else {
+unsigned int updateLibraryCards(std::vector<LevelChoice>& levels,
+                                std::size_t selected, unsigned int max_loads) {
+    const std::size_t count = levels.size();
+    for (std::size_t index = 0; index < count; ++index)
+        if (libraryCardDistance(index, selected, count) > kLibraryCardWindow)
             levels[index].card.clear();
+    // Nearest first: the selected card, then +1, -1, +2, -2, ...
+    unsigned int loads = 0;
+    for (std::size_t distance = 0;
+         distance <= kLibraryCardWindow && distance <= count / 2u; ++distance) {
+        for (int side = 0; side < 2 && loads < max_loads; ++side) {
+            if (distance == 0 && side == 1) break;
+            const std::size_t index = side == 0
+                ? (selected + distance) % count
+                : (selected + count - distance % count) % count;
+            LevelChoice& choice = levels[index];
+            if (choice.card.ready() || choice.card_missing) continue;
+            if (!choice.card.load(choice.directory)) choice.card_missing = true;
+            ++loads;
         }
     }
+    return loads;
 }
 
 void recordLibraryCardMemory(RunStatus& diagnostic,
@@ -76,9 +123,7 @@ void recordLibraryCardMemory(RunStatus& diagnostic,
     for (std::size_t index = 0; index < levels.size(); ++index)
         if (levels[index].card.ready()) ++loaded;
     diagnostic.library_cards_loaded = loaded;
-    diagnostic.library_card_bytes = loaded *
-        LibraryCard::WIDTH *
-        LibraryCard::HEIGHT * sizeof(unsigned short);
+    diagnostic.library_card_bytes = loaded * LibraryCard::BYTES;
 }
 
 movebeat::Chart tutorialChart() {

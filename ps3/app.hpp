@@ -80,6 +80,8 @@ private:
     void checkAudioStream();
     void readInput(FrameInput& input);
     void readDemoInput(FrameInput& input);
+    void readMenuTestInput(FrameInput& input);
+    void recordMenuTest(const FrameInput& input);
 
     // Library scene.
     void handleHandToggle(FrameInput& input);
@@ -88,6 +90,7 @@ private:
     void handleLibrarySettings(const FrameInput& input);
     void handleBackButtons(const FrameInput& input);
     void reloadSelectedChart();
+    bool ensureSelectedChart();
     void saveSettings();
 
     // Calibration and tracking recovery.
@@ -125,6 +128,8 @@ private:
     bool imported_level_;
     std::size_t selected_level_index_;
     std::size_t selected_chart_index_;
+    // selected_chart_ holds the parsed chart of the current selection.
+    bool selected_chart_loaded_;
     movebeat::GameConfig game_config_;
     movebeat::Game game_;
     unsigned int chart_duration_ms_;
@@ -172,6 +177,10 @@ private:
     unsigned int demo_cycles_;
     unsigned long long demo_loss_started_us_;
     bool demo_loss_finished_;
+    unsigned int menu_test_frame_;
+    bool menu_test_done_;
+    unsigned int last_frame_active_us_;
+    unsigned long long menu_step_total_us_;
 };
 
 } // namespace ps3

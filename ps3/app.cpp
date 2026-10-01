@@ -96,7 +96,8 @@ App::FrameInput::FrameInput()
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
       imported_level_(false), selected_level_index_(0),
-      selected_chart_index_(0), chart_duration_ms_(0), audio_clock_(false),
+      selected_chart_index_(0), selected_chart_loaded_(false),
+      chart_duration_ms_(0), audio_clock_(false),
       audio_start_error_(0), level_start_us_(0), run_state_(RUN_SELECT),
       hand_slots_swapped_(false), hand_assignment_established_(false),
       calibrating_(false), left_rumble_frames_(0), right_rumble_frames_(0),
@@ -105,18 +106,20 @@ App::App()
       previous_diagnostic_phase_(""), first_frame_saved_(false),
       demo_frame_saved_(false), demo_scored_frame_saved_(false),
       demo_timed_frame_saved_(false),
-      demo_cycles_(0), demo_loss_started_us_(0), demo_loss_finished_(false) {}
+      demo_cycles_(0), demo_loss_started_us_(0), demo_loss_finished_(false),
+      menu_test_frame_(0), menu_test_done_(false), last_frame_active_us_(0),
+      menu_step_total_us_(0) {}
 
 int App::run() {
     int exit_code = 0;
     if (!initializeSystems(exit_code)) return exit_code;
     if (!selectInitialLevel(exit_code)) return exit_code;
     loadSettings();
-    if (demo_mode_) startDemo();
+    if (demo_mode_ && !demo_options_.menu_test) startDemo();
 
     diagnostic_.state = "running";
     diagnostic_.phase = run_state_ == RUN_AUDIO_ERROR ? "audio_error" :
-        (demo_mode_ ? "demo_play" : "select");
+        (demo_mode_ && !demo_options_.menu_test ? "demo_play" : "select");
     diagnostic_.level_count = static_cast<int>(level_choices_.size());
     diagnostic_.imported_level = imported_level_ ? 1 : 0;
     diagnostic_.level_id = imported_level_ ? selected_level_.source_key : "builtin_tutorial";
@@ -196,7 +199,10 @@ void App::runStartupFailure(GemRuntime::InitStage stage, int error) {
 }
 
 bool App::selectInitialLevel(int& exit_code) {
+    const unsigned long long scan_start_us = nowMicroseconds();
     level_choices_ = discoverLevels();
+    diagnostic_.library_scan_ms = static_cast<unsigned int>(
+        (nowMicroseconds() - scan_start_us) / 1000ull);
     selected_chart_ = tutorialChart();
     if (demo_mode_ && !demo_options_.level_id.empty()) {
         bool found = false;
@@ -223,7 +229,9 @@ bool App::selectInitialLevel(int& exit_code) {
         }
     }
     if (!level_choices_.empty()) {
-        updateLibraryCards(level_choices_, selected_level_index_);
+        // Fill the whole card window once at startup.
+        updateLibraryCards(level_choices_, selected_level_index_,
+                           static_cast<unsigned int>(kLibraryCardWindow * 2 + 1));
         recordLibraryCardMemory(diagnostic_, level_choices_);
         level_directory_ = level_choices_[selected_level_index_].directory;
         selected_level_ = level_choices_[selected_level_index_].manifest;
@@ -239,6 +247,7 @@ bool App::selectInitialLevel(int& exit_code) {
                                  selected_chart_index_,
                                  selected_chart_, level_error_)) {
         imported_level_ = true;
+        selected_chart_loaded_ = true;
         printf("Loaded level: %s (%s)\n", selected_level_.title.c_str(),
                selected_level_.charts[selected_chart_index_].difficulty.c_str());
     } else {
@@ -304,11 +313,18 @@ void App::runFrame() {
     handleLibraryNavigation(input);
     handleLibrarySettings(input);
     handleBackButtons(input);
+    if (run_state_ == RUN_SELECT && !level_choices_.empty()) {
+        // One card read per frame at most keeps the window around the
+        // selection filled while scrolling without a long frame.
+        if (updateLibraryCards(level_choices_, selected_level_index_, 1u))
+            recordLibraryCardMemory(diagnostic_, level_choices_);
+    }
     updateTrackingPause(input);
     updateCalibration(input);
     handleStart(input);
     updateGameplay(input);
     renderFrame(input, frame_work_start_us);
+    if (demo_mode_ && demo_options_.menu_test) recordMenuTest(input);
     publishDiagnostics(input);
 }
 
@@ -351,7 +367,51 @@ void App::checkAudioStream() {
     }
 }
 
+void App::readMenuTestInput(FrameInput& input) {
+    // Scripted library run: every track one press at a time, then a held
+    // button (auto-repeat), then difficulty changes. 60 frames per second.
+    input.moves.left_connected = true;
+    input.moves.right_connected = true;
+    const unsigned int count = static_cast<unsigned int>(level_choices_.size());
+    const unsigned int presses = count * 2u + 1u;
+    const unsigned int frame = menu_test_frame_++;
+    const unsigned int single_end = presses * 8u;
+    const unsigned int hold_end = single_end + 240u;
+    const unsigned int pause_end = hold_end + 10u;
+    const unsigned int difficulty_end = pause_end + 12u * 8u;
+    unsigned short buttons = 0;
+    if (frame < single_end) {
+        if (frame % 8u < 2u) buttons = GEM_BUTTON_CROSS;
+    } else if (frame < hold_end) {
+        buttons = GEM_BUTTON_CROSS;
+    } else if (frame >= pause_end && frame < difficulty_end) {
+        if ((frame - pause_end) % 8u < 2u) buttons = GEM_BUTTON_CIRCLE;
+    } else if (frame >= difficulty_end) {
+        menu_test_done_ = true;
+    }
+    input.moves.right_buttons = buttons;
+}
+
+void App::recordMenuTest(const FrameInput& input) {
+    if (menu_test_done_) return;
+    if (input.level_pressed || input.selection_pressed) {
+        ++diagnostic_.menu_steps;
+        menu_step_total_us_ += last_frame_active_us_;
+        diagnostic_.menu_step_avg_us = static_cast<unsigned int>(
+            menu_step_total_us_ / diagnostic_.menu_steps);
+        diagnostic_.menu_step_max_us = std::max(
+            diagnostic_.menu_step_max_us, last_frame_active_us_);
+    } else if (menu_test_frame_ > 30u) {
+        diagnostic_.menu_idle_max_us = std::max(
+            diagnostic_.menu_idle_max_us, last_frame_active_us_);
+    }
+}
+
 void App::readDemoInput(FrameInput& input) {
+    if (demo_options_.menu_test) {
+        readMenuTestInput(input);
+        return;
+    }
     const unsigned int elapsed_ms = unpausedElapsedMs(
         nowMicroseconds(), level_start_us_, pause_started_us_, paused_);
     input.moves = scriptedDemoFrame(
@@ -504,28 +564,36 @@ void App::handleLibraryNavigation(const FrameInput& input) {
     } else if (input.level_pressed & kButtonTriangle) {
         candidate = candidate == 0 ? level_choices_.size() - 1 : candidate - 1;
     }
-    movebeat::Chart replacement;
-    if (movebeat::loadLevelChart(level_choices_[candidate].directory,
-                                 level_choices_[candidate].manifest, 0,
-                                 replacement, level_error_)) {
-        selected_level_index_ = candidate;
-        updateLibraryCards(level_choices_, selected_level_index_);
-        recordLibraryCardMemory(diagnostic_, level_choices_);
-        selected_chart_index_ = 0;
-        level_directory_ = level_choices_[candidate].directory;
-        selected_level_ = level_choices_[candidate].manifest;
-        selected_chart_ = replacement;
-        chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
-        imported_level_ = true;
-        audio_start_error_ = 0;
-        diagnostic_.audio_error_code = 0;
-        audio_path_ = level_directory_ + "/" + selected_level_.audio;
-        reloadSelectedChart();
-        printf("Selected level: %s (%s)\n", selected_level_.title.c_str(),
-               selected_level_.charts[0].difficulty.c_str());
-    } else {
-        printf("Level selection failed: %s\n", level_error_.c_str());
+    // Selection only: the chart is parsed when the level starts
+    // (ensureSelectedChart), so scrolling never waits for a chart.
+    selected_level_index_ = candidate;
+    selected_chart_index_ = 0;
+    level_directory_ = level_choices_[candidate].directory;
+    selected_level_ = level_choices_[candidate].manifest;
+    selected_chart_loaded_ = false;
+    imported_level_ = true;
+    audio_start_error_ = 0;
+    diagnostic_.audio_error_code = 0;
+    audio_path_ = level_directory_ + "/" + selected_level_.audio;
+    printf("Selected level: %s (%s)\n", selected_level_.title.c_str(),
+           selected_level_.charts[0].difficulty.c_str());
+}
+
+bool App::ensureSelectedChart() {
+    if (!imported_level_ || selected_chart_loaded_) return true;
+    movebeat::Chart chart;
+    if (!movebeat::loadLevelChart(level_directory_, selected_level_,
+                                  selected_chart_index_, chart, level_error_)) {
+        printf("Chart load failed: %s\n", level_error_.c_str());
+        if (selected_level_index_ < level_choices_.size())
+            level_choices_[selected_level_index_].chart_broken = true;
+        return false;
     }
+    selected_chart_ = chart;
+    chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
+    reloadSelectedChart();
+    selected_chart_loaded_ = true;
+    return true;
 }
 
 void App::handleLibrarySettings(const FrameInput& input) {
@@ -559,19 +627,10 @@ void App::handleLibrarySettings(const FrameInput& input) {
             selected_chart_index_ = selected_chart_index_ == 0
                 ? selected_level_.charts.size() - 1 : selected_chart_index_ - 1;
         }
-        movebeat::Chart replacement;
-        if (movebeat::loadLevelChart(level_directory_, selected_level_,
-                                     selected_chart_index_, replacement,
-                                     level_error_)) {
-            selected_chart_ = replacement;
-            chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
-            reloadSelectedChart();
-            printf("Selected chart: %s/%s\n",
-                   selected_level_.charts[selected_chart_index_].characteristic.c_str(),
-                   selected_level_.charts[selected_chart_index_].difficulty.c_str());
-        } else {
-            printf("Chart selection failed: %s\n", level_error_.c_str());
-        }
+        selected_chart_loaded_ = false;
+        printf("Selected chart: %s/%s\n",
+               selected_level_.charts[selected_chart_index_].characteristic.c_str(),
+               selected_level_.charts[selected_chart_index_].difficulty.c_str());
     }
 }
 
@@ -694,13 +753,16 @@ void App::handleStart(const FrameInput& input) {
         }
     } else if (input.start_pressed && run_state_ == RUN_SELECT && !paused_ &&
                !input.cancel_calibration && !input.hand_toggle) {
+        // Parse the chart now; the one-second calibration hides the cost.
+        if (!ensureSelectedChart()) return;
         pose_calibration_.reset();
         calibrating_ = true;
         printf("Hold both Move steady in a comfortable forward pose for one second\n");
     } else if (input.calibrated_start ||
                (input.start_pressed && run_state_ == RUN_RESULTS && !paused_ &&
                 input.moves.left.tracked && input.moves.right.tracked)) {
-        if (run_state_ == RUN_SELECT || run_state_ == RUN_RESULTS) {
+        if ((run_state_ == RUN_SELECT || run_state_ == RUN_RESULTS) &&
+            ensureSelectedChart()) {
             run_state_ = RUN_PLAY;
             tracking_paused_ = false;
             tracking_recalibrating_ = false;
@@ -937,6 +999,8 @@ void App::renderFrame(const FrameInput& input,
     const unsigned int frame_work_us = static_cast<unsigned int>(
         frame_work_end_us - frame_work_start_us);
     frame_work_timing_.add(frame_work_us);
+    last_frame_active_us_ = frame_work_us > frame_wait_us
+        ? frame_work_us - frame_wait_us : 0u;
     frame_active_timing_.add(frame_work_us > frame_wait_us
         ? frame_work_us - frame_wait_us : 0u);
     frame_render_timing_.add(static_cast<unsigned int>(
@@ -1021,7 +1085,8 @@ void App::publishDiagnostics(const FrameInput& input) {
     const char* diagnostic_phase = run_state_ == RUN_AUDIO_ERROR ? "audio_error" :
         tracking_paused_
             ? (tracking_recalibrating_ ? "tracking_recalibration" : "tracking_pause") :
-        demo_mode_ ? "demo_play" :
+        demo_mode_ ? (!demo_options_.menu_test ? "demo_play" :
+                      (menu_test_done_ ? "menu_test_done" : "menu_test")) :
         paused_ ? "paused" :
         (calibrating_ ? "calibrating" :
          (run_state_ == RUN_PLAY ? "play" :

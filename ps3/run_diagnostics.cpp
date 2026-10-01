@@ -19,7 +19,8 @@ RunStatus::RunStatus()
       gpu_note_fallback_frames(0),
       software_note_draw_calls(0), software_note_max_cubes(0),
       renderer("none"), effects_enabled(0), batch_max_vertices(0),
-      batch_dropped_primitives(0),
+      batch_dropped_primitives(0), library_scan_ms(0), menu_steps(0),
+      menu_step_avg_us(0), menu_step_max_us(0), menu_idle_max_us(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
@@ -63,6 +64,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "software_note_draw_calls=%u\nsoftware_note_max_cubes=%u\n"
             "renderer=%s\neffects_enabled=%d\nbatch_max_vertices=%u\n"
             "batch_dropped_primitives=%u\n"
+            "library_scan_ms=%u\nmenu_steps=%u\nmenu_step_avg_us=%u\n"
+            "menu_step_max_us=%u\nmenu_idle_max_us=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
             "imported_level=%d\nlevel_id=%s\nchart_difficulty=%s\n"
@@ -102,6 +105,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.software_note_draw_calls, status.software_note_max_cubes,
             status.renderer, status.effects_enabled, status.batch_max_vertices,
             status.batch_dropped_primitives,
+            status.library_scan_ms, status.menu_steps, status.menu_step_avg_us,
+            status.menu_step_max_us, status.menu_idle_max_us,
             status.error_stage, status.error_code,
             status.level_count, status.library_cards_loaded,
             status.library_card_bytes, status.imported_level,

@@ -40,6 +40,8 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.automatic_cuts = false;
         else if (strcmp(line, "tracking_loss_test=1") == 0)
             options.tracking_loss_test = true;
+        else if (strcmp(line, "menu_test=1") == 0)
+            options.menu_test = true;
         else if (strncmp(line, "level_id=", 9) == 0 &&
                  strlen(line + 9) <= 64)
             options.level_id = line + 9;

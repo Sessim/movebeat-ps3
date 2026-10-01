@@ -14,10 +14,14 @@ struct EmulatorDemoOptions {
     unsigned int chart_index;
     // Song time for one extra saved frame (demo_timed_frame.ppm); 0 = off.
     unsigned int capture_at_ms;
+    // Stay in the library and replay a scripted navigation run to measure
+    // the cost of each step (tools/rpcs3_menu_smoke.ps1).
+    bool menu_test;
 
     EmulatorDemoOptions() : enabled(false), automatic_cuts(true),
                             tracking_loss_test(false),
-                            chart_index(0), capture_at_ms(0) {}
+                            chart_index(0), capture_at_ms(0),
+                            menu_test(false) {}
 };
 
 EmulatorDemoOptions readEmulatorDemoOptions();
