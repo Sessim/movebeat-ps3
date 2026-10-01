@@ -74,7 +74,9 @@ try {
         }
         $process.Refresh()
         if ($process.HasExited) { $outcome = 'exited'; break }
-        Start-Sleep -Milliseconds 250
+        # RPCS3 can crash replacing run_status.ini while Windows reads it;
+        # poll gently to keep that race rare.
+        Start-Sleep -Milliseconds 1000
     }
 } finally {
     if ($null -ne $process) {
@@ -93,6 +95,13 @@ try {
     }
 }
 
+foreach ($name in @('demo_frame.ppm', 'demo_timed_frame.ppm')) {
+    $frame = Join-Path $usrdir $name
+    if ((Test-Path -LiteralPath $frame) -and
+        (Get-Item -LiteralPath $frame).LastWriteTimeUtc -gt $baseline) {
+        Copy-Item -LiteralPath $frame -Destination (Join-Path $reportDir $name)
+    }
+}
 if (Test-Path -LiteralPath $statusPath) {
     Copy-Item -LiteralPath $statusPath -Destination (Join-Path $reportDir 'run_status.ini')
 }
@@ -108,6 +117,12 @@ $report = [pscustomobject]@{
     menu_step_max_us = [int]$status['menu_step_max_us']
     menu_idle_max_us = [int]$status['menu_idle_max_us']
     batch_max_vertices = [int]$status['batch_max_vertices']
+    menu_ticks = [int]$status['menu_ticks']
+    menu_flicks = [int]$status['menu_flicks']
+    menu_difficulty_changes = [int]$status['menu_difficulty_changes']
+    menu_randomizer_spins = [int]$status['menu_randomizer_spins']
+    menu_preview_starts = [int]$status['menu_preview_starts']
+    sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii
 $report | Format-List

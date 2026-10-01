@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+#include "movebeat/types.hpp"
+
 namespace movebeat {
 namespace ps3 {
 
@@ -210,6 +212,25 @@ private:
     float velocity_;
     unsigned int last_ms_;
 };
+
+// The point a menu gesture follows: kGesturePointerReach meters along the
+// blade from the handle. Moving the arm moves it, and so does turning the
+// wrist: tilting the Move up/down or turning it left/right by 10 degrees
+// shifts it by about 6 cm. Returns false for an untracked or degenerate
+// pose.
+const float kGesturePointerReach = 0.35f;
+
+inline bool gesturePoint(const SaberPose& pose, float& x, float& y) {
+    if (!pose.tracked) return false;
+    const float dx = pose.tip.x - pose.handle.x;
+    const float dy = pose.tip.y - pose.handle.y;
+    const float dz = pose.tip.z - pose.handle.z;
+    const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (!(length > 0.01f)) return false;
+    x = pose.handle.x + dx / length * kGesturePointerReach;
+    y = pose.handle.y + dy / length * kGesturePointerReach;
+    return std::isfinite(x) && std::isfinite(y);
+}
 
 // Difficulty rank for the halo color: Easy 0 ... Expert+ 4.
 inline int difficultyRank(const std::string& name) {

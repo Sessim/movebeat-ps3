@@ -87,7 +87,7 @@ add_executable(movebeat_menu_tests
     tests/menu_tests.cpp
     ps3/sound_effects.cpp
 )
-target_include_directories(movebeat_menu_tests PRIVATE ps3)
+target_include_directories(movebeat_menu_tests PRIVATE ps3 core/include)
 add_test(NAME movebeat_menu_tests COMMAND movebeat_menu_tests)
 
 add_executable(movebeat_run_diagnostics_tests

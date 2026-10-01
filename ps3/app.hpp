@@ -203,6 +203,7 @@ private:
     bool demo_loss_finished_;
     unsigned int menu_test_frame_;
     bool menu_test_done_;
+    const char* menu_capture_path_;
     unsigned int last_frame_active_us_;
     unsigned long long menu_step_total_us_;
 };

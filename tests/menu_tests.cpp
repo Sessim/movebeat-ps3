@@ -151,6 +151,59 @@ void testGestureHorizontal() {
     check(!events.released, "ending a sideways stroke does not flick the list");
 }
 
+// Handle fixed in space, the Move only turned by `degrees` up or sideways.
+movebeat::SaberPose turned(float pitch_degrees, float yaw_degrees) {
+    const float pitch = pitch_degrees * 0.01745329f;
+    const float yaw = yaw_degrees * 0.01745329f;
+    // Pointing forward (+z) at 0/0; pitch turns up (+y), yaw turns right (+x).
+    const movebeat::Vec3 direction(std::sin(yaw) * std::cos(pitch),
+                                   std::sin(pitch),
+                                   std::cos(yaw) * std::cos(pitch));
+    return movebeat::SaberPose(movebeat::Vec3(0.1f, 0.2f, 0.5f),
+                               movebeat::Vec3(0.1f + direction.x * 0.9f,
+                                              0.2f + direction.y * 0.9f,
+                                              0.5f + direction.z * 0.9f),
+                               true);
+}
+
+void testWristTurnsDriveGestures() {
+    float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+    check(gesturePoint(turned(0.0f, 0.0f), x0, y0) &&
+          gesturePoint(turned(10.0f, 0.0f), x1, y1) &&
+          std::fabs((y1 - y0) - 0.06f) < 0.005f && std::fabs(x1 - x0) < 1e-4f,
+          "tilting the Move up 10 degrees moves the gesture point 6 cm up");
+    check(!gesturePoint(movebeat::SaberPose(), x0, y0),
+          "an untracked Move has no gesture point");
+    // Tilt up from 0 to 40 degrees with T held: a vertical drag, then a flick.
+    MenuGesture gesture;
+    float rows = 0.0f;
+    bool started = false;
+    for (int frame = 0; frame <= 10; ++frame) {
+        float x = 0.0f, y = 0.0f;
+        gesturePoint(turned(frame * 4.0f, 0.0f), x, y);
+        const MenuGestureEvents events = gesture.update(
+            true, true, x, y, static_cast<unsigned int>(frame * 16));
+        started = started || events.drag_started;
+        rows += events.drag_rows;
+    }
+    check(started && gesture.vertical() && rows > 2.0f,
+          "a wrist tilt alone scrolls the carousel");
+    // Turn right 0 to 60 degrees: difficulty steps, no scrolling.
+    MenuGesture sideways;
+    int steps = 0;
+    float sideways_rows = 0.0f;
+    for (int frame = 0; frame <= 15; ++frame) {
+        float x = 0.0f, y = 0.0f;
+        gesturePoint(turned(0.0f, frame * 4.0f), x, y);
+        const MenuGestureEvents events = sideways.update(
+            true, true, x, y, static_cast<unsigned int>(frame * 16));
+        steps += events.difficulty_step;
+        sideways_rows += events.drag_rows;
+    }
+    check(sideways.horizontal() && steps >= 1 && sideways_rows == 0.0f,
+          "turning the Move sideways changes difficulty without scrolling");
+}
+
 void testDifficultyColors() {
     check(difficultyRank("Easy") == 0 && difficultyRank("ExpertPlus") == 4 &&
           difficultyRank("Expert+") == 4 && difficultyRank("expert plus") == 4 &&
@@ -215,6 +268,7 @@ int runMenuTests() {
     testRandomizerSpin();
     testGestureVertical();
     testGestureHorizontal();
+    testWristTurnsDriveGestures();
     testDifficultyColors();
     testSoundBankAndMixer();
     if (failures) {

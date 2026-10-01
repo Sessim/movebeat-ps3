@@ -110,7 +110,7 @@ App::App()
       demo_frame_saved_(false), demo_scored_frame_saved_(false),
       demo_timed_frame_saved_(false),
       demo_cycles_(0), demo_loss_started_us_(0), demo_loss_finished_(false),
-      menu_test_frame_(0), menu_test_done_(false), last_frame_active_us_(0),
+      menu_test_frame_(0), menu_test_done_(false), menu_capture_path_(0), last_frame_active_us_(0),
       menu_step_total_us_(0) {}
 
 int App::run() {
@@ -387,14 +387,16 @@ void App::readMenuTestInput(FrameInput& input) {
     const unsigned int hold_end = single_end + 240u;
     const unsigned int pause_end = hold_end + 10u;
     const unsigned int difficulty_end = pause_end + 12u * 8u;
-    // Then the Move gestures: a 30 cm upward flick with T held (1.5 m/s),
-    // time to coast, settle and start the preview, a 36 cm sideways stroke
-    // (two difficulty steps), and the Move button randomizer.
-    const unsigned int flick_end = difficulty_end + 12u;
+    // Then the Move gestures on the same track (bench tracks have three
+    // difficulties): a 36 cm sideways stroke (two difficulty steps), a
+    // 30 cm upward flick with T held (1.5 m/s), time to coast, settle and
+    // start the preview, and the Move button randomizer.
+    const unsigned int swipe_start = difficulty_end + 10u;
+    const unsigned int swipe_end = swipe_start + 20u;
+    const unsigned int flick_start = swipe_end + 30u;
+    const unsigned int flick_end = flick_start + 12u;
     const unsigned int coast_end = flick_end + 150u;
-    const unsigned int swipe_end = coast_end + 20u;
-    const unsigned int swipe_rest = swipe_end + 30u;
-    const unsigned int random_end = swipe_rest + 2u;
+    const unsigned int random_end = coast_end + 2u;
     const unsigned int final_end = random_end + 150u;
     unsigned short buttons = 0;
     float hand_x = 0.0f;
@@ -405,15 +407,20 @@ void App::readMenuTestInput(FrameInput& input) {
         buttons = GEM_BUTTON_CROSS;
     } else if (frame >= pause_end && frame < difficulty_end) {
         if ((frame - pause_end) % 8u < 2u) buttons = GEM_BUTTON_CIRCLE;
-    } else if (frame >= difficulty_end && frame < flick_end) {
+    } else if (frame >= swipe_start && frame < swipe_end) {
         input.moves.right_trigger = 255;
-        hand_y = (frame - difficulty_end) * 0.025f;
-    } else if (frame >= coast_end && frame < swipe_end) {
+        hand_x = (frame - swipe_start) * 0.018f;
+    } else if (frame >= flick_start && frame < flick_end) {
         input.moves.right_trigger = 255;
-        hand_x = (frame - coast_end) * 0.018f;
-    } else if (frame >= swipe_rest && frame < random_end) {
+        hand_y = (frame - flick_start) * 0.025f;
+    } else if (frame >= coast_end && frame < random_end) {
         buttons = GEM_BUTTON_MOVE;
-    } else if (frame >= final_end) {
+    }
+    // Two library frames: resting with the preview after the flick, and
+    // right after the sideways stroke while the halo flares.
+    if (frame == coast_end - 5u) menu_capture_path_ = kDemoFramePath;
+    if (frame == swipe_end + 2u) menu_capture_path_ = kDemoTimedFramePath;
+    if (frame >= final_end) {
         menu_test_done_ = true;
     }
     input.moves.right = movebeat::SaberPose(
@@ -704,8 +711,12 @@ void App::updateLibraryMotion(const FrameInput& input) {
                           (gesture_hand_ == 1 ? right_t : left_t);
         const movebeat::SaberPose& pose =
             gesture_hand_ == 0 ? input.moves.left : input.moves.right;
+        // Follow a point along the blade, so arm motion and wrist turns
+        // (pointing the Move up, down or sideways) both count.
+        float point_x = 0.0f, point_y = 0.0f;
+        const bool pointing = gesturePoint(pose, point_x, point_y);
         const MenuGestureEvents events = gesture_.update(
-            held, pose.tracked, pose.handle.x, pose.handle.y, now_ms);
+            held, pointing, point_x, point_y, now_ms);
         if (events.drag_started) {
             carousel_.beginDrag();
             randomizer_spinning_ = false;
@@ -1169,6 +1180,12 @@ void App::saveDiagnosticFrames(const FrameInput& input) {
         first_frame_saved_ = screen_.savePpm(kFirstFramePath);
         if (first_frame_saved_)
             printf("First rendered frame saved: %s\n", kFirstFramePath);
+    }
+    if (demo_mode_ && demo_options_.menu_test && menu_capture_path_) {
+        // Library frames requested by the scripted menu run.
+        if (screen_.savePpm(menu_capture_path_))
+            printf("Menu test frame saved: %s\n", menu_capture_path_);
+        menu_capture_path_ = 0;
     }
     if (!demo_mode_ || run_state_ != RUN_PLAY) return;
     if (!demo_frame_saved_) {

@@ -63,8 +63,9 @@ RowLayout carouselRow(float offset, float center_y) {
     const float near = std::min(1.0f, distance);
     const float beyond = std::max(0.0f, distance - 1.0f);
     RowLayout row;
-    const float travel = distance <= 1.0f ? distance * 150.0f
-                                          : 150.0f + beyond * 84.0f;
+    // Compact enough that the outer rows clear the header and the hints.
+    const float travel = distance <= 1.0f ? distance * 146.0f
+                                          : 146.0f + beyond * 64.0f;
     row.y = center_y + (offset < 0.0f ? -travel : travel);
     row.cover = lerp(200.0f, 72.0f, near) * (1.0f - beyond * 0.1f);
     row.label_scale = lerp(1.0f, 0.62f, near) - beyond * 0.06f;
@@ -126,7 +127,7 @@ void drawLevelLibrary(Framebuffer& screen,
     const int height = screen.height();
     const float center_x = width * 0.5f;
     const float center_y = height * 0.5f - 12.0f;
-    drawMenuText(screen, "TRACKS", width / 2 - 72, 30, 4, 0xffd9e7ffu);
+    drawMenuText(screen, "TRACKS", 40, 70, 4, 0xffd9e7ffu);
     if (levels.empty()) {
         drawMenuText(screen, "NO TRACKS", width / 2 - 90,
                      static_cast<int>(center_y), 3, 0xffffa0a0u);
@@ -135,11 +136,11 @@ void drawLevelLibrary(Framebuffer& screen,
     const std::size_t count = levels.size();
     const float nearest = std::floor(view.position + 0.5f);
     const std::size_t selected = CarouselScroll::wrap(nearest, count);
-    const int counter_x = width / 2 + 210;
+    const int counter_x = 100;
     drawNumber(screen, static_cast<unsigned int>(selected + 1),
-               counter_x - 22, 38, 4, 0xffd9e7ffu);
-    screen.line(counter_x - 5, 61, counter_x + 5, 36, 0xff7d92b2u, 2);
-    drawNumber(screen, static_cast<unsigned int>(count), counter_x + 22, 38, 4,
+               counter_x - 26, 112, 4, 0xffd9e7ffu);
+    screen.line(counter_x - 5, 135, counter_x + 5, 110, 0xff7d92b2u, 2);
+    drawNumber(screen, static_cast<unsigned int>(count), counter_x + 26, 112, 4,
                0xffd9e7ffu);
 
     // Up to seven rows plus the ones sliding in, farthest first so the
@@ -196,7 +197,8 @@ void drawLevelLibrary(Framebuffer& screen,
 
     // Difficulties of the selected track under its label.
     const int chips_y = static_cast<int>(selected_row.y + 58.0f);
-    int chip_x = static_cast<int>(place.label_x);
+    // Clear of the halo around the cover.
+    int chip_x = static_cast<int>(place.label_x) + 16;
     for (std::size_t index = 0; index < level.manifest.charts.size() && index < 5;
          ++index) {
         const std::string name = menuLabel(level.manifest.charts[index].difficulty);
