@@ -44,10 +44,17 @@ RSX path each call is recorded into a `DrawBatch` (`draw_batch.cpp`) as
 clip-space triangles, and `RsxBatchRenderer` (`rsx_batch_renderer.cpp`) draws
 the batch at `present()`: one clear, then one draw per run of equal state.
 Runs are flat (painter's order), note cube faces (depth LESS with write),
-note glyphs (depth LEQUAL, no write) and textured library cards. Cube faces
-come from `forEachNoteCubeTriangle`, the same generator the software
+note glyphs (depth LEQUAL, no write) and textured library cards. Note bodies
+come from `forEachRoundedNoteTriangle`, the same generator the software
 rasterizer uses, and depth is the software inverse depth mapped linearly to
-[0, 1], so both paths occlude alike. `tests/draw_batch_tests.cpp` replays the
+[0, 1], so both paths occlude alike. A note body is a superellipsoid
+(exponent 6) on a 7x7 grid per visible face: corners round off more than
+edges, the RSX shades it per vertex (key light plus a soft highlight) and
+the PPU fallback per triangle. Each face center stays on the cube's front
+plane and the rest of the body bulges behind it. Glyphs take their depth
+from that plane per vertex (RSX) or per pixel (PPU): the plane is tilted
+toward the pitched camera, and a single center depth used to hide the
+upper half of arrows and dots. `tests/draw_batch_tests.cpp` replays the
 batch pixel by pixel and compares it with the software primitives.
 
 Effects are geometry, not post-processing, because the RSX is fill-rate

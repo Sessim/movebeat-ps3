@@ -2,6 +2,7 @@
 // renderer. A small reference rasterizer replays the batch the way the RSX
 // samples it (pixel centers, depth modes) and the result is compared with the
 // software primitives from framebuffer.cpp and software_note_renderer.hpp.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -322,37 +323,106 @@ void testNoteCubesMatchSoftware() {
     std::vector<float> inverse(static_cast<std::size_t>(width) * height, 0.0f);
     const SoftwareNoteTarget target = {&cpu.pixels[0], &inverse[0], width, height};
     DrawBatch batch = makeBatch(width, height);
+    const float side = 0.32f;
+    const float depth = gameplayNoteDepth(side);
     for (int n = 0; n < 5; ++n) {
-        const NoteCubeMesh cube = makeNoteCube(centers[n], 0.32f, width, height,
-                                               gameplayNoteDepth(0.32f));
-        rasterizeNoteCube(target, cube, colors[n]);
-        forEachNoteCubeTriangle(cube, colors[n], width, height, batch);
+        rasterizeRoundedNote(target, centers[n], side, depth, colors[n]);
+        forEachRoundedNoteTriangle(centers[n], side, depth, colors[n], width,
+                                   height, batch);
     }
-    // Arrows far-to-near, like drawNotes: each is drawn at its face depth.
+    // Arrows far-to-near, like drawNotes, on each note's front plane.
     for (int n = 4; n >= 0; --n) {
-        const NoteCubeMesh cube = makeNoteCube(centers[n], 0.32f, width, height,
-                                               gameplayNoteDepth(0.32f));
-        const float face_depth = toNoteCameraSpace(Vec3(
-            centers[n].x, centers[n].y, centers[n].z - 0.16f)).depth;
+        const NoteCubeMesh cube = makeNoteCube(centers[n], side, width, height,
+                                               depth);
+        const float plane_z = centers[n].z - depth * 0.5f;
         const int x = cube.front_center.x;
         const int y = cube.front_center.y;
-        batch.noteLine(x - 4, y, x + 4, y, 0xfff0f0f0u, 3, face_depth);
-        const float inverse_depth = 1.0f / face_depth;
+        batch.noteLine(x - 4, y, x + 4, y, 0xfff0f0f0u, 3, plane_z);
         for (int px = x - 5; px <= x + 5; ++px)
             for (int py = y - 1; py <= y + 1; ++py)
-                paintNoteInverseDepthPixel(target, px, py, inverse_depth,
-                                           0xfff0f0f0u);
+                paintNoteDepthPixel(target, px, py, plane_z, 0xfff0f0f0u);
     }
     Image gpu(width, height);
     replay(batch, gpu);
-    const int diff = differingPixels(gpu, cpu);
-    const int area = coloredPixels(cpu);
+    // The RSX shades smoothly per vertex while the PPU fills each small
+    // triangle with one shade, so compare what each pixel shows: nothing,
+    // a glyph, or a note body.
+    int diff = 0;
+    int area = 0;
+    for (std::size_t index = 0; index < cpu.pixels.size(); ++index) {
+        const std::uint32_t a = cpu.pixels[index];
+        const std::uint32_t b = gpu.pixels[index];
+        const int class_a = a == 0u ? 0 : (a == 0xfff0f0f0u ? 1 : 2);
+        const int class_b = b == 0u ? 0 : (b == 0xfff0f0f0u ? 1 : 2);
+        if (class_a != 0) ++area;
+        if (class_a != class_b) ++diff;
+    }
     char message[96];
     std::snprintf(message, sizeof(message),
-                  "note cubes and arrows match software (%d of %d differ)",
+                  "note bodies and arrows match software (%d of %d differ)",
                   diff, area);
-    check(area > 1000, "note scene has visible cubes");
+    check(area > 600, "note scene has visible notes");
     check(diff * 100 < area, message);
+}
+
+// The front face is tilted toward the pitched camera, so its upper half is
+// nearer than its center. A glyph must still be visible over the whole face.
+void testGlyphFullyVisibleOnTiltedFace() {
+    const int width = 640;
+    const int height = 360;
+    const float side = 0.32f;
+    const float depth = gameplayNoteDepth(side);
+    const Vec3 centers[] = {
+        Vec3(0.3f, 0.55f, 0.6f), Vec3(-0.5f, -0.5f, 1.2f), Vec3(0.0f, 0.0f, 3.0f)
+    };
+    for (int n = 0; n < 3; ++n) {
+        const NoteCubeMesh cube = makeNoteCube(centers[n], side, width, height,
+                                               depth);
+        const float plane_z = centers[n].z - depth * 0.5f;
+        const int x = cube.front_center.x;
+        const int y = cube.front_center.y;
+        const int reach = std::max(2, (cube.screen[3].y - cube.screen[0].y) / 3);
+        // RSX path.
+        DrawBatch batch = makeBatch(width, height);
+        forEachRoundedNoteTriangle(centers[n], side, depth, 0xffe83048u, width,
+                                   height, batch);
+        batch.noteLine(x, y - reach, x, y + reach, 0xfff0f0f0u, 3, plane_z);
+        Image gpu(width, height);
+        replay(batch, gpu);
+        DrawBatch alone = makeBatch(width, height);
+        alone.line(x, y - reach, x, y + reach, 0xfff0f0f0u, 3);
+        Image expected(width, height);
+        replay(alone, expected);
+        // Software path.
+        Image cpu(width, height);
+        std::vector<float> inverse(static_cast<std::size_t>(width) * height, 0.0f);
+        const SoftwareNoteTarget target = {&cpu.pixels[0], &inverse[0], width,
+                                           height};
+        rasterizeRoundedNote(target, centers[n], side, depth, 0xffe83048u);
+        int software_glyph = 0;
+        for (int py = y - reach - 1; py <= y + reach + 1; ++py)
+            for (int px = x - 1; px <= x + 1; ++px)
+                if (py >= y - reach && py <= y + reach &&
+                    paintNoteDepthPixel(target, px, py, plane_z, 0xfff0f0f0u))
+                    ++software_glyph;
+        int gpu_glyph = 0;
+        int expected_glyph = 0;
+        int upper_half = 0;
+        for (std::size_t index = 0; index < gpu.pixels.size(); ++index) {
+            if (expected.pixels[index] == 0xfff0f0f0u) ++expected_glyph;
+            if (gpu.pixels[index] == 0xfff0f0f0u) {
+                ++gpu_glyph;
+                if (static_cast<int>(index / width) < y) ++upper_half;
+            }
+        }
+        char message[128];
+        std::snprintf(message, sizeof(message),
+                      "glyph on note %d is whole: rsx %d of %d, upper half %d, "
+                      "software %d of %d", n, gpu_glyph, expected_glyph,
+                      upper_half, software_glyph, 3 * (2 * reach + 1));
+        check(gpu_glyph == expected_glyph && upper_half >= reach * 3 - 3 &&
+              software_glyph == 3 * (2 * reach + 1), message);
+    }
 }
 
 void testGlyphHiddenBehindNearerCube() {
@@ -362,16 +432,14 @@ void testGlyphHiddenBehindNearerCube() {
     const Vec3 near_center(0.0f, 0.0f, 0.3f);
     const NoteCubeMesh cube = makeNoteCube(near_center, 0.32f, width, height,
                                            gameplayNoteDepth(0.32f));
-    forEachNoteCubeTriangle(cube, 0xffe83048u, width, height, batch);
+    forEachRoundedNoteTriangle(near_center, 0.32f, gameplayNoteDepth(0.32f),
+                               0xffe83048u, width, height, batch);
     // A far note's arrow projects onto the near cube: it must stay hidden.
-    const float far_depth = toNoteCameraSpace(Vec3(0.0f, 0.0f, 3.0f)).depth;
     batch.noteCircle(cube.front_center.x, cube.front_center.y, 4,
-                     0xff00ff00u, far_depth);
+                     0xff00ff00u, 3.0f - 0.16f);
     // The near note's own arrow must remain visible on its face.
-    const float near_depth = toNoteCameraSpace(Vec3(
-        near_center.x, near_center.y, near_center.z - 0.16f)).depth;
     batch.noteCircle(cube.front_center.x + 12, cube.front_center.y, 2,
-                     0xfff0f0f0u, near_depth);
+                     0xfff0f0f0u, near_center.z - 0.16f);
     Image gpu(width, height);
     replay(batch, gpu);
     int green = 0;
@@ -427,7 +495,7 @@ void testRunsAndCapacity() {
     check(modes.runs()[1].mode == BATCH_NOTE_GLYPH, "glyph run keeps its mode");
 
     DrawBatch invalid = makeBatch(64, 64);
-    invalid.noteLine(0, 0, 10, 10, 0xffffffffu, 3, 0.05f);
+    invalid.noteLine(0, 0, 10, 10, 0xffffffffu, 3, -5.0f);
     invalid.noteCircle(5, 5, 3, 0xffffffffu, NAN);
     check(invalid.vertices().empty(), "glyphs behind the camera are skipped");
 }
@@ -705,6 +773,7 @@ int runDrawBatchTests() {
     testDepthMapping();
     testNoteCubesMatchSoftware();
     testGlyphHiddenBehindNearerCube();
+    testGlyphFullyVisibleOnTiltedFace();
     testImageIsOneToOne();
     testRunsAndCapacity();
     testBlendRunsAndBudget();

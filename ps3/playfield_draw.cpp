@@ -156,6 +156,50 @@ void drawHilt(Framebuffer& screen, const SaberModel& model) {
     screen.circle(roundPixel(bx), roundPixel(by), roundPixel(base_radius), cap);
 }
 
+// A "^" chevron pointing along (dx, dy) (unit), centered at (cx, cy) in
+// pixel-edge coordinates: arms reach `reach` sideways, strokes are
+// `thickness` wide, and the strokes meet in a mitered point.
+void drawChevron(Framebuffer& screen, float cx, float cy, float dx, float dy,
+                 float reach, float thickness, u32 color, float plane_z) {
+    const float sx = -dy;
+    const float sy = dx;
+    const float apex_x = cx + dx * reach * 0.35f;
+    const float apex_y = cy + dy * reach * 0.35f;
+    const float half = thickness * 0.5f;
+    for (int arm = -1; arm <= 1; arm += 2) {
+        const float end_x = apex_x - dx * reach * 0.7f + sx * reach * arm;
+        const float end_y = apex_y - dy * reach * 0.7f + sy * reach * arm;
+        float ux = end_x - apex_x;
+        float uy = end_y - apex_y;
+        const float length = std::sqrt(ux * ux + uy * uy);
+        if (!(length > 0.0f)) return;
+        ux /= length;
+        uy /= length;
+        // Sine of the angle between the arm and the axis; both outer and
+        // inner edges cross the axis half a stroke / sine from the apex.
+        const float sine = std::fabs(ux * dy - uy * dx);
+        if (sine < 0.2f) return;
+        const float miter = half / sine;
+        // Arm normal on the side the chevron points to.
+        float nx = -uy;
+        float ny = ux;
+        if (nx * dx + ny * dy < 0.0f) {
+            nx = -nx;
+            ny = -ny;
+        }
+        const float outer_x = apex_x + dx * miter;
+        const float outer_y = apex_y + dy * miter;
+        const float inner_x = apex_x - dx * miter;
+        const float inner_y = apex_y - dy * miter;
+        const float ax[3] = {outer_x, end_x + nx * half, end_x - nx * half};
+        const float ay[3] = {outer_y, end_y + ny * half, end_y - ny * half};
+        const float bx[3] = {outer_x, end_x - nx * half, inner_x};
+        const float by[3] = {outer_y, end_y - ny * half, inner_y};
+        screen.noteTriangle(ax, ay, color, plane_z);
+        screen.noteTriangle(bx, by, color, plane_z);
+    }
+}
+
 // Translucent fill of one wall face; edges are drawn separately.
 void fillObstacleFace(Framebuffer& screen, const movebeat::Vec3& minimum,
                       const movebeat::Vec3& maximum, float z, u32 color) {
@@ -521,20 +565,17 @@ void drawNotes(Framebuffer& screen, const movebeat::Game& game,
             (note.hand == movebeat::HAND_LEFT ? 0xff2098e8u : 0xffe83048u);
         if (note.kind == movebeat::NOTE_BOMB) {
             const float bomb_front_z = position.z - 0.16f;
-        const float bomb_front_depth =
-                toNoteCameraSpace(movebeat::Vec3(
-                    position.x, position.y, bomb_front_z)).depth;
-            screen.noteCircle(x, y, size / 2, 0xff60606cu, bomb_front_depth);
-            screen.noteCircle(x, y, size / 2 - 2, color, bomb_front_depth);
-            screen.noteCircle(x, y, size / 5, 0xffd0d0d8u, bomb_front_depth);
+            screen.noteCircle(x, y, size / 2, 0xff60606cu, bomb_front_z);
+            screen.noteCircle(x, y, size / 2 - 2, color, bomb_front_z);
+            screen.noteCircle(x, y, size / 5, 0xffd0d0d8u, bomb_front_z);
             continue;
         }
         const float side = (note.kind == movebeat::NOTE_CHAIN ? 0.16f : 0.32f) *
                            arrival.scale;
         const float depth = gameplayNoteDepth(side);
+        // Glyphs lie on the front plane; the rounded body bulges only
+        // behind it, so they always stay on top of their own note.
         const float face_z = position.z - depth * 0.5f;
-        const float face_depth = toNoteCameraSpace(
-            movebeat::Vec3(position.x, position.y, face_z)).depth;
         const NoteCubeMesh cube = makeNoteCube(
             position, side, screen.width(), screen.height(), depth);
         if (draw_software_faces) drawNoteCube(screen, cube, color);
@@ -544,9 +585,9 @@ void drawNotes(Framebuffer& screen, const movebeat::Game& game,
         const int face_height = cube.screen[3].y - cube.screen[0].y;
         size = std::max(4, std::min(face_width, face_height));
         if (note.kind == movebeat::NOTE_CHAIN) {
-            screen.noteCircle(x, y, size / 3 + 1, 0xfff0f0f0u, face_depth);
+            screen.noteCircle(x, y, size / 3 + 1, 0xfff0f0f0u, face_z);
         } else if (note.direction == movebeat::CUT_ANY) {
-            screen.noteCircle(x, y, size / 8 + 1, 0xfff0f0f0u, face_depth);
+            screen.noteCircle(x, y, size / 8 + 1, 0xfff0f0f0u, face_z);
         } else {
             int dx = 0;
             int dy = 0;
@@ -573,28 +614,14 @@ void drawNotes(Framebuffer& screen, const movebeat::Game& game,
                 direction_x /= magnitude;
                 direction_y /= magnitude;
             }
-            const int arrow_length = size / 3;
-            const int tail_x = roundPixel(
-                x - direction_x * arrow_length / 2.0f);
-            const int tail_y = roundPixel(
-                y - direction_y * arrow_length / 2.0f);
-            const int head_x = roundPixel(
-                x + direction_x * arrow_length / 2.0f);
-            const int head_y = roundPixel(
-                y + direction_y * arrow_length / 2.0f);
-            const float side_x = -direction_y;
-            const float side_y = direction_x;
-            const int wing = size / 7 + 1;
-            screen.noteLine(tail_x, tail_y, head_x, head_y,
-                        0xfff0f0f0u, 3, face_depth);
-            screen.noteLine(head_x, head_y,
-                        roundPixel(head_x - direction_x * wing + side_x * wing),
-                        roundPixel(head_y - direction_y * wing + side_y * wing),
-                        0xfff0f0f0u, 3, face_depth);
-            screen.noteLine(head_x, head_y,
-                        roundPixel(head_x - direction_x * wing - side_x * wing),
-                        roundPixel(head_y - direction_y * wing - side_y * wing),
-                        0xfff0f0f0u, 3, face_depth);
+            // A plain wide chevron "^" pointing in the cut direction, like
+            // the First Steps library icon: no stem, thick strokes, centered
+            // on the face.
+            // Filled, so the two strokes meet in a clean mitered point
+            // instead of overlapping square caps: four triangles.
+            drawChevron(screen, x + 0.5f, y + 0.5f, direction_x, direction_y,
+                        size * 0.30f, std::max(3.0f, size / 9.0f),
+                        0xfff0f0f0u, face_z);
         }
     }
 }

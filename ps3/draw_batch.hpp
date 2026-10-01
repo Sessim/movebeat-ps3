@@ -92,16 +92,24 @@ public:
     void line(int x0, int y0, int x1, int y1, std::uint32_t color,
               int thickness);
     void circle(int center_x, int center_y, int radius, std::uint32_t color);
-    // Depth-tested glyphs; camera_depth is the note's camera-space distance.
+    // Depth-tested glyphs drawn on a note's front plane at world depth
+    // plane_z. Depth is evaluated per vertex on that plane: the face is
+    // tilted toward the pitched camera, so one center depth would hide the
+    // half of a glyph that lies nearer than the face center.
     void noteLine(int x0, int y0, int x1, int y1, std::uint32_t color,
-                  int thickness, float camera_depth);
+                  int thickness, float plane_z);
     void noteCircle(int center_x, int center_y, int radius,
-                    std::uint32_t color, float camera_depth);
-    // A note cube face triangle in software-rasterizer coordinates: sampled
-    // at pixel centers (x + 0.5), with inverse camera depth per vertex.
+                    std::uint32_t color, float plane_z);
+    // Filled glyph triangle in pixel-edge coordinates on the same plane.
+    void noteTriangle(const float (&x)[3], const float (&y)[3],
+                      std::uint32_t color, float plane_z);
+    // A note body triangle in software-rasterizer coordinates: sampled at
+    // pixel centers (x + 0.5), with inverse camera depth and a color per
+    // vertex.
     void solidTriangle(const ProjectedSolidVertex& a,
                        const ProjectedSolidVertex& b,
-                       const ProjectedSolidVertex& c, std::uint32_t color);
+                       const ProjectedSolidVertex& c, std::uint32_t color_a,
+                       std::uint32_t color_b, std::uint32_t color_c);
     // Copies an RGB565 image and draws it 1:1 at (x, y).
     void image(int x, int y, int width, int height,
                const unsigned short* rgb565);
@@ -121,11 +129,12 @@ public:
     void glowDisc(float center_x, float center_y, float radius,
                   std::uint32_t color, int segments);
 
-    // Functor form of solidTriangle for forEachNoteCubeTriangle.
+    // Functor form of solidTriangle for forEachRoundedNoteTriangle.
     void operator()(const ProjectedSolidVertex& a,
                     const ProjectedSolidVertex& b,
-                    const ProjectedSolidVertex& c, std::uint32_t color) {
-        solidTriangle(a, b, c, color);
+                    const ProjectedSolidVertex& c, std::uint32_t color_a,
+                    std::uint32_t color_b, std::uint32_t color_c) {
+        solidTriangle(a, b, c, color_a, color_b, color_c);
     }
 
     const std::vector<BatchVertex>& vertices() const { return vertices_; }
@@ -155,11 +164,16 @@ private:
     void pushDisc(BatchMode mode, int center_x, int center_y, int radius,
                   std::uint32_t color, float depth);
 
+    bool glyphPlaneDepth(float x, float y, float& depth) const;
+
     int width_;
     int height_;
     std::size_t vertex_capacity_;
     std::size_t texture_capacity_;
     unsigned int dropped_;
+    // Set while noteLine/noteCircle emit vertices on a note's front plane.
+    bool glyph_plane_active_;
+    float glyph_plane_z_;
     std::vector<BatchVertex> vertices_;
     std::vector<BatchRun> runs_;
     std::vector<BatchTexture> textures_;

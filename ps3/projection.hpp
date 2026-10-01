@@ -88,7 +88,7 @@ inline float projectionVerticalCenterOffset(int height) {
 // Reconstruct camera-space depth where a screen-space glyph intersects a
 // world-Z plane. Direction arrows are rasterized after the cube mesh, so their
 // depth must vary across the tilted face instead of using one center depth.
-inline float cameraDepthAtScreenPointOnWorldZ(int x, int y, int width,
+inline float cameraDepthAtScreenPointOnWorldZ(float x, float y, int width,
                                                int height, float world_z) {
     const float target_distance = kProjectionDepth + kProjectionTargetDepth;
     const float horizontal_distance = std::sqrt(

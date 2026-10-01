@@ -1193,43 +1193,58 @@ int main() {
     const int center_x = front_point.x + track_center.x - note_center.x;
     const int center_y = front_point.y + track_center.y - note_center.y;
     const int center_pixel = center_y * render_width + center_x;
-    movebeat::ps3::rasterizeNoteCube(target, front_cube, 0xffe83048u);
-    movebeat::ps3::rasterizeNoteCube(target, rear_cube, 0xff2098e8u);
-    const std::size_t front_face_pixels = static_cast<std::size_t>(
-        std::count(pixels.begin(), pixels.end(), 0xffe83048u));
-    const std::size_t top_face_pixels = static_cast<std::size_t>(
-        std::count(pixels.begin(), pixels.end(),
-                   movebeat::ps3::shadeSolidFace(0xffe83048u, 0.84f)));
-    const std::size_t side_face_pixels = static_cast<std::size_t>(
-        std::count(pixels.begin(), pixels.end(),
-                   movebeat::ps3::shadeSolidFace(0xffe83048u, 0.54f)));
-    expect(front_face_pixels > 0 && top_face_pixels > 0 && side_face_pixels > 0,
-           "software rasterizer draws separate front, top and side cube planes");
-    expect(top_face_pixels * 8 >= front_face_pixels &&
-           side_face_pixels * 8 >= front_face_pixels,
-           "rasterized top and side faces occupy visible areas, not edge lines");
-    expect(pixels[center_pixel] == 0xffe83048u,
-           "near 3D front face occludes a farther cube regardless of draw order");
-    const float rear_front_depth = movebeat::ps3::toNoteCameraSpace(
-        movebeat::Vec3(-1.5f, -0.55f, 1.0f)).depth;
-    const float near_front_depth = movebeat::ps3::toNoteCameraSpace(
-        movebeat::Vec3(-1.5f, -0.55f, -0.2f)).depth;
-    expect(!movebeat::ps3::paintNoteInverseDepthPixel(
-               target, center_x, center_y, 1.0f / rear_front_depth,
-               0xffffffffu) &&
-           pixels[center_pixel] == 0xffe83048u,
-           "far cut arrow cannot show through a nearer cube");
-    expect(movebeat::ps3::paintNoteInverseDepthPixel(
-               target, center_x, center_y, 1.0f / near_front_depth,
-               0xffffffffu) &&
+    // Rounded notes are shaded smoothly, so classify pixels by hue: the
+    // red note dominates in red, the blue one in blue.
+    const auto isRed = [](std::uint32_t color) {
+        return color != 0xff000000u && ((color >> 16) & 255u) > (color & 255u);
+    };
+    const auto isBlue = [](std::uint32_t color) {
+        return color != 0xff000000u && (color & 255u) > ((color >> 16) & 255u);
+    };
+    movebeat::ps3::rasterizeRoundedNote(target, render_center, 0.4f, 0.4f,
+                                        0xffe83048u);
+    movebeat::ps3::rasterizeRoundedNote(
+        target, movebeat::Vec3(-1.5f, -0.55f, 1.0f), 0.4f, 0.4f, 0xff2098e8u);
+    std::size_t front_pixels = 0, top_pixels = 0, side_pixels = 0;
+    std::size_t shades = 0;
+    std::vector<std::uint32_t> seen;
+    for (int y = 0; y < render_height; ++y) {
+        for (int x = 0; x < render_width; ++x) {
+            const std::uint32_t color = pixels[y * render_width + x];
+            if (!isRed(color)) continue;
+            if (y < front_cube.screen[0].y) ++top_pixels;
+            else if (x > front_cube.screen[1].x) ++side_pixels;
+            else ++front_pixels;
+            if (seen.size() < 64 &&
+                std::find(seen.begin(), seen.end(), color) == seen.end())
+                seen.push_back(color);
+        }
+    }
+    shades = seen.size();
+    expect(front_pixels > 0 && top_pixels > 0 && side_pixels > 0,
+           "rounded note shows its front, top and camera-facing side");
+    expect(top_pixels * 12 >= front_pixels && side_pixels * 12 >= front_pixels,
+           "top and side of a rounded note occupy visible areas");
+    expect(shades >= 8, "rounded note is shaded smoothly, not in flat planes");
+    expect(isRed(pixels[center_pixel]),
+           "near rounded note occludes a farther note regardless of draw order");
+    expect(!movebeat::ps3::paintNoteDepthPixel(
+               target, center_x, center_y, 1.0f - 0.2f, 0xffffffffu) &&
+           isRed(pixels[center_pixel]),
+           "far cut arrow cannot show through a nearer note");
+    expect(movebeat::ps3::paintNoteDepthPixel(
+               target, center_x, center_y, -0.2f, 0xffffffffu) &&
            pixels[center_pixel] == 0xffffffffu,
            "a cut arrow remains visible on its own front face");
     std::fill(pixels.begin(), pixels.end(), 0xff000000u);
     std::fill(depth.begin(), depth.end(), 0.0f);
-    movebeat::ps3::rasterizeNoteCube(target, rear_cube, 0xff2098e8u);
-    movebeat::ps3::rasterizeNoteCube(target, front_cube, 0xffe83048u);
-    expect(pixels[center_pixel] == 0xffe83048u,
-           "near 3D front face occludes a farther cube in either draw order");
+    movebeat::ps3::rasterizeRoundedNote(
+        target, movebeat::Vec3(-1.5f, -0.55f, 1.0f), 0.4f, 0.4f, 0xff2098e8u);
+    movebeat::ps3::rasterizeRoundedNote(target, render_center, 0.4f, 0.4f,
+                                        0xffe83048u);
+    expect(isRed(pixels[center_pixel]) && !isBlue(pixels[center_pixel]),
+           "near rounded note occludes a farther note in either draw order");
+    (void)rear_cube;
     std::fill(pixels.begin(), pixels.end(), 0xff000000u);
     std::fill(depth.begin(), depth.end(), 0.0f);
     expect(pixels[center_pixel] == 0xff000000u,

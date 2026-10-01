@@ -258,10 +258,12 @@ bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms
         const u32 color = note.hand == HAND_LEFT ? 0xff2098e8u : 0xffe83048u;
         const float side = (note.kind == NOTE_CHAIN ? 0.16f : 0.32f) *
                            arrival.scale;
-        const NoteCubeMesh cube = makeNoteCube(
-            position, side, width_, height_, gameplayNoteDepth(side));
-        if (rsx_) forEachNoteCubeTriangle(cube, color, width_, height_, batch_);
-        else rasterizeNoteCube(target, cube, color);
+        const float depth = gameplayNoteDepth(side);
+        if (rsx_)
+            forEachRoundedNoteTriangle(position, side, depth, color,
+                                       width_, height_, batch_);
+        else
+            rasterizeRoundedNote(target, position, side, depth, color);
         ++last_solid_note_count_;
     }
     return true;
@@ -429,21 +431,19 @@ void Framebuffer::glowDisc(float center_x, float center_y, float radius,
 }
 
 void Framebuffer::noteLine(int x0, int y0, int x1, int y1, u32 color,
-                           int thickness, float camera_depth) {
+                           int thickness, float plane_z) {
     if (!note_depth_active_) {
         line(x0, y0, x1, y1, color, thickness);
         return;
     }
     if (rsx_) {
-        batch_.noteLine(x0, y0, x1, y1, color, thickness, camera_depth);
+        batch_.noteLine(x0, y0, x1, y1, color, thickness, plane_z);
         return;
     }
     const SoftwareNoteTarget target = {
         buffers_[current_].pixels, software_depth_, width_, height_
     };
-    const float distance = camera_depth;
-    if (!std::isfinite(distance) || distance <= 0.1f) return;
-    const float inverse_depth = 1.0f / distance;
+    if (!std::isfinite(plane_z)) return;
     const int dx = absolute(x1 - x0);
     const int sx = x0 < x1 ? 1 : -1;
     const int dy = -absolute(y1 - y0);
@@ -453,7 +453,7 @@ void Framebuffer::noteLine(int x0, int y0, int x1, int y1, u32 color,
     for (;;) {
         for (int y = y0 - radius; y <= y0 + radius; ++y)
             for (int x = x0 - radius; x <= x0 + radius; ++x)
-                paintNoteInverseDepthPixel(target, x, y, inverse_depth, color);
+                paintNoteDepthPixel(target, x, y, plane_z, color);
         if (x0 == x1 && y0 == y1) break;
         const int doubled = error * 2;
         if (doubled >= dy) { error += dy; x0 += sx; }
@@ -461,27 +461,68 @@ void Framebuffer::noteLine(int x0, int y0, int x1, int y1, u32 color,
     }
 }
 
+void Framebuffer::noteTriangle(const float (&x)[3], const float (&y)[3],
+                               u32 color, float plane_z) {
+    if (!initialized_ || !std::isfinite(plane_z)) return;
+    if (rsx_) {
+        if (note_depth_active_) batch_.noteTriangle(x, y, color, plane_z);
+        else {
+            const std::uint32_t colors[3] = {color, color, color};
+            batch_.blendTriangle(x, y, colors, BLEND_OPAQUE);
+        }
+        return;
+    }
+    const float area = (x[1] - x[0]) * (y[2] - y[0]) -
+                       (y[1] - y[0]) * (x[2] - x[0]);
+    if (!(std::fabs(area) > 0.0001f)) return;
+    const int left = std::max(0, static_cast<int>(std::floor(
+        std::min(x[0], std::min(x[1], x[2])))));
+    const int right = std::min(width_ - 1, static_cast<int>(std::ceil(
+        std::max(x[0], std::max(x[1], x[2])))));
+    const int top = std::max(0, static_cast<int>(std::floor(
+        std::min(y[0], std::min(y[1], y[2])))));
+    const int bottom = std::min(height_ - 1, static_cast<int>(std::ceil(
+        std::max(y[0], std::max(y[1], y[2])))));
+    const SoftwareNoteTarget target = {
+        buffers_[current_].pixels, software_depth_, width_, height_
+    };
+    for (int py = top; py <= bottom; ++py) {
+        for (int px = left; px <= right; ++px) {
+            const float sx = px + 0.5f;
+            const float sy = py + 0.5f;
+            const float w0 = ((x[1] - sx) * (y[2] - sy) -
+                              (y[1] - sy) * (x[2] - sx)) / area;
+            const float w1 = ((x[2] - sx) * (y[0] - sy) -
+                              (y[2] - sy) * (x[0] - sx)) / area;
+            const float w2 = 1.0f - w0 - w1;
+            if (w0 < 0.0f || w1 < 0.0f || w2 < 0.0f) continue;
+            if (note_depth_active_)
+                paintNoteDepthPixel(target, px, py, plane_z, color);
+            else
+                buffers_[current_].pixels[py * width_ + px] = color;
+        }
+    }
+}
+
 void Framebuffer::noteCircle(int center_x, int center_y, int radius,
-                             u32 color, float camera_depth) {
+                             u32 color, float plane_z) {
     if (!note_depth_active_) {
         circle(center_x, center_y, radius, color);
         return;
     }
     if (rsx_) {
-        batch_.noteCircle(center_x, center_y, radius, color, camera_depth);
+        batch_.noteCircle(center_x, center_y, radius, color, plane_z);
         return;
     }
     const SoftwareNoteTarget target = {
         buffers_[current_].pixels, software_depth_, width_, height_
     };
-    const float distance = camera_depth;
-    if (!std::isfinite(distance) || distance <= 0.1f) return;
-    const float inverse_depth = 1.0f / distance;
+    if (!std::isfinite(plane_z)) return;
     for (int y = -radius; y <= radius; ++y)
         for (int x = -radius; x <= radius; ++x)
             if (x * x + y * y <= radius * radius)
-                paintNoteInverseDepthPixel(target, center_x + x, center_y + y,
-                                           inverse_depth, color);
+                paintNoteDepthPixel(target, center_x + x, center_y + y,
+                                    plane_z, color);
 }
 
 } // namespace ps3

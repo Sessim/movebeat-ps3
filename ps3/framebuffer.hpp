@@ -46,10 +46,16 @@ public:
     void image(int x, int y, int width, int height,
                const unsigned short* rgb565);
     // Direction glyphs and bombs obey the 3D note depth buffer when active.
+    // They lie on the note's front plane at world depth plane_z, whose
+    // depth is evaluated per pixel (the plane is tilted to the camera).
     void noteLine(int x0, int y0, int x1, int y1, u32 color,
-                  int thickness, float camera_depth);
+                  int thickness, float plane_z);
     void noteCircle(int center_x, int center_y, int radius, u32 color,
-                    float camera_depth);
+                    float plane_z);
+    // Filled glyph triangle; coordinates are pixel edges (a pixel's center
+    // is at +0.5), as for the effect primitives.
+    void noteTriangle(const float (&x)[3], const float (&y)[3], u32 color,
+                      float plane_z);
     // Draw cuttable notes as 3D mesh triangles with perspective and a Z-buffer.
     // Returns false if the software depth buffer cannot be allocated.
     bool drawSolidNotes(const movebeat::Game& game, unsigned int now_ms);

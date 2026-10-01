@@ -39,19 +39,10 @@ inline bool paintNoteDepthPixel(const SoftwareNoteTarget& target,
                                 int x, int y, float world_z,
                                 std::uint32_t color) {
     const float distance = cameraDepthAtScreenPointOnWorldZ(
-        x, y, target.width, target.height, world_z);
+        static_cast<float>(x), static_cast<float>(y), target.width,
+        target.height, world_z);
     if (!std::isfinite(distance) || distance <= 0.1f) return false;
     return paintNoteInverseDepthPixel(target, x, y, 1.0f / distance, color);
-}
-
-inline std::uint32_t shadeSolidFace(std::uint32_t color, float light) {
-    const unsigned int red = std::min(255u, static_cast<unsigned int>(
-        ((color >> 16) & 255u) * light));
-    const unsigned int green = std::min(255u, static_cast<unsigned int>(
-        ((color >> 8) & 255u) * light));
-    const unsigned int blue = std::min(255u, static_cast<unsigned int>(
-        (color & 255u) * light));
-    return 0xff000000u | (red << 16) | (green << 8) | blue;
 }
 
 struct ProjectedSolidVertex {
@@ -162,55 +153,247 @@ inline void rasterizeSolidQuad(const SoftwareNoteTarget& target,
     rasterizeSolidTriangle(target, a, c, d, color);
 }
 
-// Emits the visible faces of a note cube as screen-space triangles with
-// inverse camera depth. The software rasterizer and the RSX batch both use
-// this, so the two renderers share one note geometry.
-template <typename TriangleSink>
-void forEachNoteCubeTriangle(const NoteCubeMesh& cube, std::uint32_t color,
-                             int width, int height, TriangleSink& sink) {
-    const NoteCubeVisibleFaces faces = visibleNoteCubeFaces(cube);
-    const int quad[5][4] = {
-        {4, 0, 3, 7}, {1, 5, 6, 2}, {0, 1, 5, 4}, {3, 2, 6, 7},
-        {0, 1, 2, 3}
-    };
-    const auto emitNoteQuad = [&](int face, std::uint32_t face_color) {
-        ProjectedSolidVertex projected[4];
-        for (int corner = 0; corner < 4; ++corner) {
-            const int index = quad[face][corner];
-            if (!projectSolidVertex(cube.world[index], width, height,
-                                    projected[corner])) return;
-            // Geometry comes from the local three-quarter projection, while
-            // depth remains in the track camera so overlapping notes stay
-            // ordered on their original straight lanes.
-            projected[corner].x = static_cast<float>(cube.screen[index].x);
-            projected[corner].y = static_cast<float>(cube.screen[index].y);
-        }
-        sink(projected[0], projected[1], projected[2], face_color);
-        sink(projected[0], projected[2], projected[3], face_color);
-    };
-    if (faces.left)
-        emitNoteQuad(0, shadeSolidFace(color, 0.50f));
-    else if (faces.right)
-        emitNoteQuad(1, shadeSolidFace(color, 0.54f));
-    if (faces.top)
-        emitNoteQuad(2, shadeSolidFace(color, 0.84f));
-    else if (faces.bottom)
-        emitNoteQuad(3, shadeSolidFace(color, 0.42f));
-    emitNoteQuad(4, color);
+// Like projectSolidVertex, but with the principal-point shift used by
+// projectWorldPoint, so the mesh lines up with the track and the glyphs.
+inline bool projectNoteVertex(const Vec3& point, int width, int height,
+                              ProjectedSolidVertex& result) {
+    if (!projectSolidVertex(point, width, height, result)) return false;
+    result.y += projectionVerticalCenterOffset(height);
+    return std::isfinite(result.y);
 }
 
+// Rounded note body: a superellipsoid |x|^n + |y|^n + |z|^n = 1 scaled to
+// the cube. Its corners round off more than its edges ("inflated" corners,
+// slightly less inflated edges) while each face center stays exactly on the
+// cube's face plane, so glyphs drawn on that plane always sit on top.
+const float kRoundedNoteExponent = 6.0f;
+// Grid across a face, denser toward the rounded border where it bends.
+const int kRoundedNoteGridPoints = 7;
+inline float roundedNoteGrid(int index) {
+    static const float grid[kRoundedNoteGridPoints] = {
+        -1.0f, -0.8f, -0.45f, 0.0f, 0.45f, 0.8f, 1.0f
+    };
+    return grid[index];
+}
+
+// Maps a point on the unit cube surface (max norm 1) onto the superellipsoid.
+inline Vec3 roundedNoteSurface(const Vec3& cube_point) {
+    const float n = kRoundedNoteExponent;
+    const float sum = std::pow(std::fabs(cube_point.x), n) +
+                      std::pow(std::fabs(cube_point.y), n) +
+                      std::pow(std::fabs(cube_point.z), n);
+    const float scale = sum > 0.0f ? std::pow(sum, -1.0f / n) : 1.0f;
+    return Vec3(cube_point.x * scale, cube_point.y * scale,
+                cube_point.z * scale);
+}
+
+// Unit normal of the scaled superellipsoid at a surface point q.
+inline Vec3 roundedNoteNormal(const Vec3& q, float half_x, float half_y,
+                              float half_z) {
+    const float n = kRoundedNoteExponent - 1.0f;
+    const auto component = [n](float value, float half) {
+        const float magnitude = std::pow(std::fabs(value), n) / half;
+        return value < 0.0f ? -magnitude : magnitude;
+    };
+    Vec3 normal(component(q.x, half_x), component(q.y, half_y),
+                component(q.z, half_z));
+    const float length = std::sqrt(normal.x * normal.x + normal.y * normal.y +
+                                   normal.z * normal.z);
+    if (length > 0.0f) {
+        normal.x /= length;
+        normal.y /= length;
+        normal.z /= length;
+    }
+    return normal;
+}
+
+// Key light from the upper left, on the player's side, plus a soft
+// highlight so the rounded corners catch light. Returns the diffuse factor
+// and the additive highlight for a unit normal.
+inline void roundedNoteLight(const Vec3& normal, float& light, float& specular) {
+    const float lx = -0.35f, ly = 0.6f, lz = -0.7f;
+    const float light_length = std::sqrt(lx * lx + ly * ly + lz * lz);
+    float diffuse = (normal.x * lx + normal.y * ly + normal.z * lz) /
+                    light_length;
+    if (diffuse < 0.0f) diffuse = 0.0f;
+    // Half vector between the light and a viewer looking along +Z.
+    const float hx = lx / light_length, hy = ly / light_length,
+                hz = lz / light_length - 1.0f;
+    const float half_length = std::sqrt(hx * hx + hy * hy + hz * hz);
+    specular = (normal.x * hx + normal.y * hy + normal.z * hz) / half_length;
+    specular = specular > 0.0f ? std::pow(specular, 24.0f) * 0.35f : 0.0f;
+    light = 0.4f + 0.8f * diffuse;
+}
+
+inline std::uint32_t applyRoundedNoteLight(std::uint32_t color, float light,
+                                           float specular) {
+    const float highlight = 255.0f * specular;
+    const auto channel = [light, highlight](unsigned int value) {
+        const float shaded = value * light + highlight;
+        return shaded >= 255.0f ? 255u : static_cast<unsigned int>(shaded);
+    };
+    return 0xff000000u | (channel((color >> 16) & 255u) << 16) |
+           (channel((color >> 8) & 255u) << 8) | channel(color & 255u);
+}
+
+// The unit body never changes, so its surface points and lighting are
+// computed once: six faces (index axis * 2 + positive side) on the grid.
+// Notes are true cubes (gameplayNoteDepth == side), so one table serves
+// every size. This keeps per-vertex work to a few multiplies on the PPU.
+struct RoundedNoteTable {
+    Vec3 point[6][kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    float light[6][kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    float specular[6][kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+};
+
+inline const RoundedNoteTable& roundedNoteTable() {
+    static RoundedNoteTable table;
+    static bool ready = false;
+    if (ready) return table;
+    for (int face = 0; face < 6; ++face) {
+        const int axis = face / 2;
+        const float sign = face % 2 ? 1.0f : -1.0f;
+        for (int row = 0; row < kRoundedNoteGridPoints; ++row) {
+            for (int column = 0; column < kRoundedNoteGridPoints; ++column) {
+                const float u = roundedNoteGrid(column);
+                const float v = roundedNoteGrid(row);
+                Vec3 cube_point;
+                if (axis == 2) cube_point = Vec3(u, v, sign);
+                else if (axis == 0) cube_point = Vec3(sign, v, u);
+                else cube_point = Vec3(u, sign, v);
+                const Vec3 q = roundedNoteSurface(cube_point);
+                table.point[face][row][column] = q;
+                roundedNoteLight(roundedNoteNormal(q, 1.0f, 1.0f, 1.0f),
+                                 table.light[face][row][column],
+                                 table.specular[face][row][column]);
+            }
+        }
+    }
+    ready = true;
+    return table;
+}
+
+// Emits the visible part of a rounded note as screen-space triangles with
+// inverse camera depth and per-vertex shading:
+// sink(a, b, c, color_a, color_b, color_c). The software rasterizer and the
+// RSX batch both use this, so the two renderers share one note geometry.
+template <typename TriangleSink>
+void forEachRoundedNoteTriangle(const Vec3& center, float side, float depth,
+                                std::uint32_t color, int width, int height,
+                                TriangleSink& sink) {
+    const float half_x = side * 0.5f;
+    const float half_y = side * 0.5f;
+    const float half_z = depth * 0.5f;
+    // The camera transform is affine, so project through a basis built
+    // once per note instead of re-deriving the camera for every vertex.
+    const CameraPoint origin = toNoteCameraSpace(center);
+    const CameraPoint along_x = toNoteCameraSpace(
+        Vec3(center.x + half_x, center.y, center.z));
+    const CameraPoint along_y = toNoteCameraSpace(
+        Vec3(center.x, center.y + half_y, center.z));
+    const CameraPoint along_z = toNoteCameraSpace(
+        Vec3(center.x, center.y, center.z + half_z));
+    const float basis[3][3] = {
+        {along_x.x - origin.x, along_x.y - origin.y, along_x.depth - origin.depth},
+        {along_y.x - origin.x, along_y.y - origin.y, along_y.depth - origin.depth},
+        {along_z.x - origin.x, along_z.y - origin.y, along_z.depth - origin.depth}
+    };
+    const float focal = height * kProjectionFocalHeight * kProjectionDepth;
+    const float center_x = width * 0.5f;
+    const float center_y = height * 0.5f + projectionVerticalCenterOffset(height);
+    const RoundedNoteTable& table = roundedNoteTable();
+    // Same face choice as the flat cube: the front plus the side and the
+    // top/bottom facing the camera; hidden faces never rely on Z.
+    const bool left = kNoteCameraX < center.x - half_x;
+    const bool right = kNoteCameraX > center.x + half_x;
+    const float eye_y = kProjectionEyeHeight + kNoteCameraHeight;
+    const bool top = eye_y > center.y + half_y;
+    const bool bottom = eye_y < center.y - half_y;
+    // Face: fixed axis (0 = x, 1 = y, 2 = z) and its sign.
+    int faces[3][2];
+    int face_count = 0;
+    faces[face_count][0] = 2; faces[face_count][1] = -1; ++face_count;
+    if (left || right) {
+        faces[face_count][0] = 0; faces[face_count][1] = left ? -1 : 1;
+        ++face_count;
+    }
+    if (top || bottom) {
+        faces[face_count][0] = 1; faces[face_count][1] = top ? 1 : -1;
+        ++face_count;
+    }
+    const int points = kRoundedNoteGridPoints;
+    ProjectedSolidVertex projected[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    std::uint32_t shaded[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    bool valid[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    for (int face = 0; face < face_count; ++face) {
+        const int index = faces[face][0] * 2 + (faces[face][1] > 0 ? 1 : 0);
+        for (int row = 0; row < points; ++row) {
+            for (int column = 0; column < points; ++column) {
+                const Vec3& q = table.point[index][row][column];
+                const float camera_x = origin.x + q.x * basis[0][0] +
+                    q.y * basis[1][0] + q.z * basis[2][0];
+                const float camera_y = origin.y + q.x * basis[0][1] +
+                    q.y * basis[1][1] + q.z * basis[2][1];
+                const float camera_depth = origin.depth + q.x * basis[0][2] +
+                    q.y * basis[1][2] + q.z * basis[2][2];
+                ProjectedSolidVertex& out = projected[row][column];
+                valid[row][column] = camera_depth > 0.1f;
+                if (valid[row][column]) {
+                    out.inverse_depth = 1.0f / camera_depth;
+                    out.x = center_x + camera_x * focal * out.inverse_depth;
+                    out.y = center_y - camera_y * focal * out.inverse_depth;
+                    valid[row][column] = std::isfinite(out.x) &&
+                                         std::isfinite(out.y);
+                }
+                shaded[row][column] = applyRoundedNoteLight(
+                    color, table.light[index][row][column],
+                    table.specular[index][row][column]);
+            }
+        }
+        for (int row = 0; row + 1 < points; ++row) {
+            for (int column = 0; column + 1 < points; ++column) {
+                if (!valid[row][column] || !valid[row][column + 1] ||
+                    !valid[row + 1][column] || !valid[row + 1][column + 1])
+                    continue;
+                sink(projected[row][column], projected[row][column + 1],
+                     projected[row + 1][column + 1], shaded[row][column],
+                     shaded[row][column + 1], shaded[row + 1][column + 1]);
+                sink(projected[row][column], projected[row + 1][column + 1],
+                     projected[row + 1][column], shaded[row][column],
+                     shaded[row + 1][column + 1], shaded[row + 1][column]);
+            }
+        }
+    }
+}
+
+inline std::uint32_t averageColor(std::uint32_t a, std::uint32_t b,
+                                  std::uint32_t c) {
+    std::uint32_t result = 0xff000000u;
+    for (int shift = 0; shift <= 16; shift += 8) {
+        const unsigned int sum = ((a >> shift) & 255u) + ((b >> shift) & 255u) +
+                                 ((c >> shift) & 255u);
+        result |= ((sum + 1u) / 3u) << shift;
+    }
+    return result;
+}
+
+// The PPU fallback fills each small triangle with its average shade.
 struct SoftwareTriangleSink {
     const SoftwareNoteTarget& target;
     void operator()(const ProjectedSolidVertex& a, const ProjectedSolidVertex& b,
-                    const ProjectedSolidVertex& c, std::uint32_t color) {
-        rasterizeProjectedTriangle(target, a, b, c, color);
+                    const ProjectedSolidVertex& c, std::uint32_t color_a,
+                    std::uint32_t color_b, std::uint32_t color_c) {
+        rasterizeProjectedTriangle(target, a, b, c,
+                                   averageColor(color_a, color_b, color_c));
     }
 };
 
-inline void rasterizeNoteCube(const SoftwareNoteTarget& target,
-                              const NoteCubeMesh& cube, std::uint32_t color) {
+inline void rasterizeRoundedNote(const SoftwareNoteTarget& target,
+                                 const Vec3& center, float side, float depth,
+                                 std::uint32_t color) {
     SoftwareTriangleSink sink = {target};
-    forEachNoteCubeTriangle(cube, color, target.width, target.height, sink);
+    forEachRoundedNoteTriangle(center, side, depth, color, target.width,
+                               target.height, sink);
 }
 
 } // namespace ps3

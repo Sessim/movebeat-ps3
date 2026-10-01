@@ -12,18 +12,11 @@ int absolute(int value) {
     return value < 0 ? -value : value;
 }
 
-bool glyphDepth(float camera_depth, float& depth) {
-    if (!std::isfinite(camera_depth) || camera_depth <= 0.1f) return false;
-    depth = batchDepthFromInverse(1.0f / camera_depth +
-                                  kBatchGlyphDepthTolerance);
-    return true;
-}
-
 } // namespace
 
 DrawBatch::DrawBatch()
     : width_(0), height_(0), vertex_capacity_(0), texture_capacity_(0),
-      dropped_(0) {}
+      dropped_(0), glyph_plane_active_(false), glyph_plane_z_(0.0f) {}
 
 void DrawBatch::reset(int width, int height, std::size_t vertex_capacity,
                       std::size_t texture_capacity) {
@@ -54,6 +47,12 @@ bool DrawBatch::pushColoredTriangle(BatchMode mode, BatchBlend blend,
                                     const std::uint32_t (&colors)[3],
                                     const float (*texcoord)[2]) {
     if (width_ <= 0 || height_ <= 0) return false;
+    float corner_depth[3] = {depth[0], depth[1], depth[2]};
+    if (mode == BATCH_NOTE_GLYPH && glyph_plane_active_) {
+        for (int corner = 0; corner < 3; ++corner)
+            if (!glyphPlaneDepth(x[corner], y[corner], corner_depth[corner]))
+                return false;  // behind the camera: nothing to draw
+    }
     if (vertices_.size() + 3u > vertex_capacity_) {
         ++dropped_;
         return false;
@@ -73,7 +72,7 @@ bool DrawBatch::pushColoredTriangle(BatchMode mode, BatchBlend blend,
         BatchVertex vertex;
         vertex.position[0] = x[corner] * 2.0f / width_ - 1.0f;
         vertex.position[1] = 1.0f - y[corner] * 2.0f / height_;
-        vertex.position[2] = depth[corner] * 2.0f - 1.0f;
+        vertex.position[2] = corner_depth[corner] * 2.0f - 1.0f;
         vertex.position[3] = 1.0f;
         vertex.color[0] = ((color >> 16) & 255u) / 255.0f;
         vertex.color[1] = ((color >> 8) & 255u) / 255.0f;
@@ -260,23 +259,49 @@ void DrawBatch::circle(int center_x, int center_y, int radius,
 }
 
 void DrawBatch::noteLine(int x0, int y0, int x1, int y1, std::uint32_t color,
-                         int thickness, float camera_depth) {
-    float depth = 0.0f;
-    if (!glyphDepth(camera_depth, depth)) return;
-    pushLine(BATCH_NOTE_GLYPH, x0, y0, x1, y1, color, thickness, depth);
+                         int thickness, float plane_z) {
+    if (!std::isfinite(plane_z)) return;
+    glyph_plane_z_ = plane_z;
+    glyph_plane_active_ = true;
+    pushLine(BATCH_NOTE_GLYPH, x0, y0, x1, y1, color, thickness, 0.0f);
+    glyph_plane_active_ = false;
 }
 
 void DrawBatch::noteCircle(int center_x, int center_y, int radius,
-                           std::uint32_t color, float camera_depth) {
-    float depth = 0.0f;
-    if (!glyphDepth(camera_depth, depth)) return;
-    pushDisc(BATCH_NOTE_GLYPH, center_x, center_y, radius, color, depth);
+                           std::uint32_t color, float plane_z) {
+    if (!std::isfinite(plane_z)) return;
+    glyph_plane_z_ = plane_z;
+    glyph_plane_active_ = true;
+    pushDisc(BATCH_NOTE_GLYPH, center_x, center_y, radius, color, 0.0f);
+    glyph_plane_active_ = false;
+}
+
+void DrawBatch::noteTriangle(const float (&x)[3], const float (&y)[3],
+                             std::uint32_t color, float plane_z) {
+    if (!std::isfinite(plane_z)) return;
+    glyph_plane_z_ = plane_z;
+    glyph_plane_active_ = true;
+    const float z[3] = {0.0f, 0.0f, 0.0f};
+    pushTriangle(BATCH_NOTE_GLYPH, -1, x, y, z, color, 0);
+    glyph_plane_active_ = false;
+}
+
+bool DrawBatch::glyphPlaneDepth(float x, float y, float& depth) const {
+    // Pixel-edge coordinates; the software path evaluates the plane at the
+    // integer pixel index, i.e. half a pixel up-left of the center.
+    const float camera_depth = cameraDepthAtScreenPointOnWorldZ(
+        x - 0.5f, y - 0.5f, width_, height_, glyph_plane_z_);
+    if (!std::isfinite(camera_depth) || camera_depth <= 0.1f) return false;
+    depth = batchDepthFromInverse(1.0f / camera_depth +
+                                  kBatchGlyphDepthTolerance);
+    return true;
 }
 
 void DrawBatch::solidTriangle(const ProjectedSolidVertex& a,
                               const ProjectedSolidVertex& b,
                               const ProjectedSolidVertex& c,
-                              std::uint32_t color) {
+                              std::uint32_t color_a, std::uint32_t color_b,
+                              std::uint32_t color_c) {
     // rasterizeProjectedTriangle samples (x + 0.5, y + 0.5) against these
     // coordinates, exactly like the RSX; no shift is needed.
     const float x[3] = {a.x, b.x, c.x};
@@ -286,7 +311,8 @@ void DrawBatch::solidTriangle(const ProjectedSolidVertex& a,
         batchDepthFromInverse(b.inverse_depth),
         batchDepthFromInverse(c.inverse_depth)
     };
-    pushTriangle(BATCH_NOTE_SOLID, -1, x, y, z, color, 0);
+    const std::uint32_t colors[3] = {color_a, color_b, color_c};
+    pushColoredTriangle(BATCH_NOTE_SOLID, BLEND_OPAQUE, -1, x, y, z, colors, 0);
 }
 
 void DrawBatch::image(int x, int y, int width, int height,
