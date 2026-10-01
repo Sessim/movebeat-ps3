@@ -60,6 +60,17 @@ regardless of frame rate, hold at most 12 samples and restart on tracking
 loss or on tip jumps faster than 18 m/s. Effects exist only on the RSX path;
 `effects=off` in `USRDIR/renderer.ini` disables them for A/B checks.
 
+The stage behind the track (`stage_layout.hpp`, effects only) is a sky
+gradient, seven neon frames drifting toward the player at 1.2 m/s and a
+portal in the far wall; the frames and the portal pulse on the level's beat.
+Notes emerge small from the portal's center and settle into their cells
+during the first 35% of their flight (`note_spawn.hpp`): the upper row
+rises, the lower rows drop. This is drawing only; a note closer than 1.5 m
+is always drawn at its gameplay position, even for maps with a very short
+jump distance. Sabers (`saber_model.hpp`) have a black cylindrical hilt for
+the Move in the hand and a sphere in the saber's color where the Move's
+light is; cuts still use the game's handle-to-tip segment.
+
 If the RSX resources cannot be created the app falls back to the PPU
 software rasterizer. The fallback can also be forced for A/B checks by
 writing `renderer=software` to `USRDIR/renderer.ini`. `run_status.ini`

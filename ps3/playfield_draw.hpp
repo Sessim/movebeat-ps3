@@ -11,6 +11,10 @@ namespace ps3 {
 // Gameplay scene layers, drawn back to front by the caller. Effects (floor,
 // translucent walls, glow, trails, flashes) appear only when
 // screen.effectsEnabled(); otherwise the scene looks as before.
+// Sky, drifting neon frames and the portal notes emerge from; beat_pulse is
+// 1 on the beat and decays before the next one. Draw first.
+void drawBackground(Framebuffer& screen, float far_z, unsigned int now_ms,
+                    float beat_pulse);
 void drawFloor(Framebuffer& screen, float far_z);
 void drawGrid(Framebuffer& screen, float far_z);
 void drawObstacles(Framebuffer& screen, const movebeat::Game& game,

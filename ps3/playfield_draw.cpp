@@ -4,7 +4,10 @@
 #include <cmath>
 
 #include "note_cube.hpp"
+#include "note_spawn.hpp"
 #include "projection.hpp"
+#include "saber_model.hpp"
+#include "stage_layout.hpp"
 #include "text_draw.hpp"
 
 namespace movebeat {
@@ -55,6 +58,102 @@ void projectFloat(const movebeat::Vec3& point, const Framebuffer& screen,
     const ScreenPoint projected = projectTrackPoint(point, screen);
     x = projected.x + 0.5f;
     y = projected.y + 0.5f;
+}
+
+// Screen pixels per world meter at a point, for sizing round objects.
+float pixelsPerMeter(const movebeat::Vec3& point, const Framebuffer& screen) {
+    float depth = toCameraSpace(point).depth;
+    if (depth < 0.1f) depth = 0.1f;
+    return screen.height() * kProjectionFocalHeight * kProjectionDepth / depth;
+}
+
+void quad(Framebuffer& screen, const float (&x)[4], const float (&y)[4],
+          u32 color) {
+    screen.quadrilateral(roundPixel(x[0]), roundPixel(y[0]),
+                         roundPixel(x[1]), roundPixel(y[1]),
+                         roundPixel(x[2]), roundPixel(y[2]),
+                         roundPixel(x[3]), roundPixel(y[3]), color);
+}
+
+// Black cylinder standing in for the PS Move in the hand: a rim-lit
+// silhouette, a matte body, a lengthwise highlight, two grip rings and a
+// bottom cap. Opaque, so it looks the same on both renderers.
+void drawHilt(Framebuffer& screen, const SaberModel& model) {
+    float bx, by, tx, ty;
+    projectFloat(model.hilt_base, screen, bx, by);
+    projectFloat(model.hilt_top, screen, tx, ty);
+    const float base_radius = std::max(2.0f,
+        kHiltRadius * pixelsPerMeter(model.hilt_base, screen));
+    const float top_radius = std::max(2.0f,
+        kHiltRadius * pixelsPerMeter(model.hilt_top, screen));
+    const u32 rim = 0xff3c4250u;
+    const u32 body = 0xff0d0e12u;
+    const u32 cap = 0xff17181du;
+    float dx = tx - bx;
+    float dy = ty - by;
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length >= 1.0f) {
+        dx /= length;
+        dy /= length;
+        // Light from above: the highlight goes on the side facing up.
+        float nx = -dy;
+        float ny = dx;
+        if (ny > 0.0f) {
+            nx = -nx;
+            ny = -ny;
+        }
+        const float edge = 1.5f;
+        const float outline_x[4] = {
+            bx + nx * (base_radius + edge), tx + nx * (top_radius + edge),
+            tx - nx * (top_radius + edge), bx - nx * (base_radius + edge)
+        };
+        const float outline_y[4] = {
+            by + ny * (base_radius + edge), ty + ny * (top_radius + edge),
+            ty - ny * (top_radius + edge), by - ny * (base_radius + edge)
+        };
+        screen.circle(roundPixel(bx), roundPixel(by),
+                      roundPixel(base_radius + edge), rim);
+        quad(screen, outline_x, outline_y, rim);
+        const float body_x[4] = {
+            bx + nx * base_radius, tx + nx * top_radius,
+            tx - nx * top_radius, bx - nx * base_radius
+        };
+        const float body_y[4] = {
+            by + ny * base_radius, ty + ny * top_radius,
+            ty - ny * top_radius, by - ny * base_radius
+        };
+        quad(screen, body_x, body_y, body);
+        const float stripe_x[4] = {
+            bx + nx * base_radius * 0.65f, tx + nx * top_radius * 0.65f,
+            tx + nx * top_radius * 0.35f, bx + nx * base_radius * 0.35f
+        };
+        const float stripe_y[4] = {
+            by + ny * base_radius * 0.65f, ty + ny * top_radius * 0.65f,
+            ty + ny * top_radius * 0.35f, by + ny * base_radius * 0.35f
+        };
+        quad(screen, stripe_x, stripe_y, 0xff4a505eu);
+        for (int ring = 1; ring <= 2; ++ring) {
+            const float at = ring / 3.0f;
+            const float cx = bx + (tx - bx) * at;
+            const float cy = by + (ty - by) * at;
+            const float radius = base_radius + (top_radius - base_radius) * at;
+            const float half = 1.0f;
+            const float ring_x[4] = {
+                cx - dx * half + nx * radius, cx + dx * half + nx * radius,
+                cx + dx * half - nx * radius, cx - dx * half - nx * radius
+            };
+            const float ring_y[4] = {
+                cy - dy * half + ny * radius, cy + dy * half + ny * radius,
+                cy + dy * half - ny * radius, cy - dy * half - ny * radius
+            };
+            quad(screen, ring_x, ring_y, 0xff272a32u);
+        }
+    } else {
+        // Pointing straight at the camera: only the round end is visible.
+        screen.circle(roundPixel(bx), roundPixel(by),
+                      roundPixel(base_radius + 1.5f), rim);
+    }
+    screen.circle(roundPixel(bx), roundPixel(by), roundPixel(base_radius), cap);
 }
 
 // Translucent fill of one wall face; edges are drawn separately.
@@ -120,7 +219,87 @@ void drawNoteCube(Framebuffer& screen,
     // Face shading carries the depth cue; no border is painted over the front.
 }
 
+void drawTunnelRings(Framebuffer& screen, float far_z, unsigned int now_ms,
+                     float pulse, bool behind_portal) {
+    const float scale = effectScale(screen);
+    for (unsigned int index = 0; index < kTunnelRingCount; ++index) {
+        const TunnelRing ring = tunnelRing(index, now_ms, far_z);
+        if (ring.alpha <= 0.01f || ring.z <= kTunnelVanishZ) continue;
+        if ((ring.z > far_z) != behind_portal) continue;
+        float x[4];
+        float y[4];
+        projectFloat(movebeat::Vec3(-kTunnelHalfWidth, kTunnelBottom, ring.z),
+                     screen, x[0], y[0]);
+        projectFloat(movebeat::Vec3(kTunnelHalfWidth, kTunnelBottom, ring.z),
+                     screen, x[1], y[1]);
+        projectFloat(movebeat::Vec3(kTunnelHalfWidth, kTunnelTop, ring.z),
+                     screen, x[2], y[2]);
+        projectFloat(movebeat::Vec3(-kTunnelHalfWidth, kTunnelTop, ring.z),
+                     screen, x[3], y[3]);
+        const u32 hue = index % 2u ? 0xff4060ffu : 0xff9040ffu;
+        const float strength = ring.alpha * (0.35f + 0.45f * pulse);
+        for (int edge = 0; edge < 4; ++edge) {
+            const int next = (edge + 1) % 4;
+            screen.glowLine(x[edge], y[edge], x[next], y[next], 7.0f * scale,
+                            withAlpha(hue, strength));
+            screen.glowLine(x[edge], y[edge], x[next], y[next], 1.5f * scale,
+                            withAlpha(0xffd8d0ffu, strength));
+        }
+    }
+}
+
 } // namespace
+
+void drawBackground(Framebuffer& screen, float far_z, unsigned int now_ms,
+                    float beat_pulse) {
+    if (!screen.effectsEnabled()) return;
+    const float width = static_cast<float>(screen.width());
+    const float height = static_cast<float>(screen.height());
+    // Sky: one full-screen opaque layer, brightest at the portal's horizon.
+    float horizon_x = 0.0f, horizon = 0.0f;
+    projectFloat(movebeat::Vec3(0.0f, 0.14f, far_z), screen, horizon_x, horizon);
+    if (horizon < 1.0f) horizon = 1.0f;
+    if (horizon > height - 1.0f) horizon = height - 1.0f;
+    const u32 zenith = 0xff06061au;
+    const u32 glow = 0xff161436u;
+    const u32 ground = 0xff05050fu;
+    const float sky_x[4] = {0.0f, width, width, 0.0f};
+    const float sky_y[4] = {0.0f, 0.0f, horizon, horizon};
+    const u32 sky_colors[4] = {zenith, zenith, glow, glow};
+    screen.gradientQuad(sky_x, sky_y, sky_colors);
+    const float low_y[4] = {horizon, horizon, height, height};
+    const u32 low_colors[4] = {glow, glow, ground, ground};
+    screen.gradientQuad(sky_x, low_y, low_colors);
+
+    // Frames beyond the portal show dimmed through it.
+    drawTunnelRings(screen, far_z, now_ms, beat_pulse, true);
+
+    // The portal in the far wall that notes fly out of.
+    const float ground_y = kPortalBottom;
+    const float outer_x = kPortalHalfWidth;
+    const float top_y = kPortalTop;
+    float x[4];
+    float y[4];
+    projectFloat(movebeat::Vec3(-outer_x, ground_y, far_z), screen, x[0], y[0]);
+    projectFloat(movebeat::Vec3(outer_x, ground_y, far_z), screen, x[1], y[1]);
+    projectFloat(movebeat::Vec3(outer_x, top_y, far_z), screen, x[2], y[2]);
+    projectFloat(movebeat::Vec3(-outer_x, top_y, far_z), screen, x[3], y[3]);
+    const u32 veil = 0xa8070616u;
+    const u32 veil_colors[4] = {veil, veil, veil, veil};
+    screen.blendQuad(x, y, veil_colors, false);
+    const float center_x = (x[0] + x[1] + x[2] + x[3]) * 0.25f;
+    const float center_y = (y[0] + y[1] + y[2] + y[3]) * 0.25f;
+    screen.glowDisc(center_x, center_y, (x[1] - x[0]) * 0.55f,
+                    withAlpha(0xff6040c0u, 0.25f + 0.35f * beat_pulse));
+    const float scale = effectScale(screen);
+    const u32 rim = withAlpha(0xff8060f0u, 0.5f + 0.4f * beat_pulse);
+    for (int edge = 0; edge < 4; ++edge) {
+        const int next = (edge + 1) % 4;
+        screen.glowLine(x[edge], y[edge], x[next], y[next], 10.0f * scale, rim);
+    }
+
+    drawTunnelRings(screen, far_z, now_ms, beat_pulse, false);
+}
 
 void drawFloor(Framebuffer& screen, float far_z) {
     if (!screen.effectsEnabled()) return;
@@ -239,7 +418,8 @@ void drawArcs(Framebuffer& screen, const movebeat::Game& game,
     const unsigned int segments = 16;
     for (std::size_t index = 0; index < game.arcCount(); ++index) {
         const movebeat::Arc& arc = game.arc(index);
-        movebeat::Vec3 previous = game.arcPoint(arc, now_ms, 0.0f);
+        movebeat::Vec3 previous =
+            visualArcPoint(game, game.arcPoint(arc, now_ms, 0.0f));
         const u32 core = arc.hand == movebeat::HAND_LEFT
             ? 0xff70d8ffu : 0xffff6878u;
         const u32 glow = arc.hand == movebeat::HAND_LEFT
@@ -247,7 +427,8 @@ void drawArcs(Framebuffer& screen, const movebeat::Game& game,
         for (unsigned int segment = 1; segment <= segments; ++segment) {
             const float progress = static_cast<float>(segment) /
                 static_cast<float>(segments);
-            const movebeat::Vec3 current = game.arcPoint(arc, now_ms, progress);
+            const movebeat::Vec3 current =
+                visualArcPoint(game, game.arcPoint(arc, now_ms, progress));
             if (previous.z >= -0.8f && previous.z <= game.noteSpawnDepth() &&
                 current.z >= -0.8f && current.z <= game.noteSpawnDepth()) {
                 const ScreenPoint from = projectTrackPoint(previous, screen);
@@ -262,23 +443,33 @@ void drawArcs(Framebuffer& screen, const movebeat::Game& game,
 
 void drawSaber(Framebuffer& screen, const movebeat::SaberPose& saber,
                u32 core, u32 glow) {
-    if (!saber.tracked) return;
-    const ScreenPoint handle = projectTrackPoint(saber.handle, screen);
-    const ScreenPoint tip = projectTrackPoint(saber.tip, screen);
+    const SaberModel model = saberModel(saber);
+    if (!model.valid) return;
+    const ScreenPoint emitter = projectTrackPoint(model.emitter, screen);
+    const ScreenPoint tip = projectTrackPoint(model.blade_tip, screen);
     if (screen.effectsEnabled()) {
         // Additive halo instead of the opaque dark band, then a colored
         // blade with a white-hot center.
         const float scale = effectScale(screen);
-        screen.glowLine(handle.x + 0.5f, handle.y + 0.5f,
+        screen.glowLine(emitter.x + 0.5f, emitter.y + 0.5f,
                         tip.x + 0.5f, tip.y + 0.5f, 20.0f * scale,
                         withAlpha(core, 0.55f));
-        screen.line(handle.x, handle.y, tip.x, tip.y, core, 5);
-        screen.line(handle.x, handle.y, tip.x, tip.y, 0xfff2f8ffu, 1);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 5);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, 0xfff2f8ffu, 1);
     } else {
-        screen.line(handle.x, handle.y, tip.x, tip.y, glow, 15);
-        screen.line(handle.x, handle.y, tip.x, tip.y, core, 5);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, glow, 15);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 5);
     }
-    screen.circle(handle.x, handle.y, 11, 0xffe8e8f0u);
+    drawHilt(screen, model);
+    // The Move's sphere glows in the saber's color at the blade's root.
+    const int sphere = std::max(3, roundPixel(
+        kEmitterRadius * pixelsPerMeter(model.emitter, screen)));
+    if (screen.effectsEnabled())
+        screen.glowDisc(emitter.x + 0.5f, emitter.y + 0.5f, sphere * 3.0f,
+                        withAlpha(core, 0.6f));
+    screen.circle(emitter.x, emitter.y, sphere, core);
+    screen.circle(emitter.x - sphere / 3, emitter.y - sphere / 3,
+                  std::max(1, sphere / 3), 0xfff2f8ffu);
 }
 
 void drawSaberTrail(Framebuffer& screen, const SaberTrail& trail,
@@ -315,9 +506,10 @@ void drawNotes(Framebuffer& screen, const movebeat::Game& game,
     for (std::size_t index = game.noteCount(); index-- > 0;) {
         if (!game.notePending(index)) continue;
         const movebeat::Note& note = game.note(index);
-        const movebeat::Vec3 position = game.notePosition(note, now_ms);
+        const NoteArrival arrival = visualNote(game, note, now_ms);
+        const movebeat::Vec3 position = arrival.position;
         if (position.z < -0.8f || position.z > far_z) continue;
-        float depth_scale = 1.0f - position.z / kProjectionDepth;
+        float depth_scale = arrival.scale * (1.0f - position.z / kProjectionDepth);
         if (depth_scale < 0.0f) depth_scale = 0.0f;
         if (depth_scale > 1.0f) depth_scale = 1.0f;
         const ScreenPoint projected = projectTrackPoint(position, screen);
@@ -337,7 +529,8 @@ void drawNotes(Framebuffer& screen, const movebeat::Game& game,
             screen.noteCircle(x, y, size / 5, 0xffd0d0d8u, bomb_front_depth);
             continue;
         }
-        const float side = note.kind == movebeat::NOTE_CHAIN ? 0.16f : 0.32f;
+        const float side = (note.kind == movebeat::NOTE_CHAIN ? 0.16f : 0.32f) *
+                           arrival.scale;
         const float depth = gameplayNoteDepth(side);
         const float face_z = position.z - depth * 0.5f;
         const float face_depth = toNoteCameraSpace(

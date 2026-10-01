@@ -1,5 +1,6 @@
 #include "framebuffer.hpp"
 #include "note_cube.hpp"
+#include "note_spawn.hpp"
 #include "software_note_renderer.hpp"
 
 #include <algorithm>
@@ -250,11 +251,13 @@ bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms
         if (!game.notePending(index)) continue;
         const Note& note = game.note(index);
         if (note.kind == NOTE_BOMB) continue;
-        const Vec3 position = game.notePosition(note, now_ms);
+        const NoteArrival arrival = visualNote(game, note, now_ms);
+        const Vec3& position = arrival.position;
         if (position.z < -0.8f || position.z > game.noteSpawnDepth()) continue;
         if (last_solid_note_count_ >= kMaxSolidNotes) break;
         const u32 color = note.hand == HAND_LEFT ? 0xff2098e8u : 0xffe83048u;
-        const float side = note.kind == NOTE_CHAIN ? 0.16f : 0.32f;
+        const float side = (note.kind == NOTE_CHAIN ? 0.16f : 0.32f) *
+                           arrival.scale;
         const NoteCubeMesh cube = makeNoteCube(
             position, side, width_, height_, gameplayNoteDepth(side));
         if (rsx_) forEachNoteCubeTriangle(cube, color, width_, height_, batch_);
@@ -400,6 +403,15 @@ void Framebuffer::blendQuad(const float (&x)[4], const float (&y)[4],
         colors[0], colors[1], colors[2], colors[3]
     };
     batch_.blendQuad(x, y, batch_colors, additive ? BLEND_ADD : BLEND_ALPHA);
+}
+
+void Framebuffer::gradientQuad(const float (&x)[4], const float (&y)[4],
+                               const u32 (&colors)[4]) {
+    if (!initialized_ || !effectsEnabled()) return;
+    const std::uint32_t batch_colors[4] = {
+        colors[0], colors[1], colors[2], colors[3]
+    };
+    batch_.blendQuad(x, y, batch_colors, BLEND_OPAQUE);
 }
 
 void Framebuffer::glowLine(float x0, float y0, float x1, float y1,

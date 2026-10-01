@@ -115,13 +115,19 @@ inline void rasterizeProjectedTriangle(const SoftwareNoteTarget& target,
     float depth_row = pc.inverse_depth +
         (pa.inverse_depth - pc.inverse_depth) * wa_row +
         (pb.inverse_depth - pc.inverse_depth) * wb_row;
+    // The weights are stepped, not recomputed, so rounding drifts along a
+    // row. Pixels on the diagonal shared by a face's two triangles could
+    // then fall just outside both and leave a dark seam; accept a hair of
+    // overlap instead (the second write loses the strict depth test).
+    const float edge_tolerance = -1e-4f;
     for (int y = top; y <= bottom; ++y) {
         float wa = wa_row;
         float wb = wb_row;
         float inverse_depth = depth_row;
         for (int x = left; x <= right; ++x) {
             const float wc = 1.0f - wa - wb;
-            if (wa >= 0.0f && wb >= 0.0f && wc >= 0.0f) {
+            if (wa >= edge_tolerance && wb >= edge_tolerance &&
+                wc >= edge_tolerance) {
                 const int index = y * target.width + x;
                 if (inverse_depth > target.inverse_depth[index]) {
                     target.inverse_depth[index] = inverse_depth;

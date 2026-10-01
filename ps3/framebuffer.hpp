@@ -62,6 +62,9 @@ public:
     void setEffectsEnabled(bool enabled) { effects_ = enabled; }
     void blendQuad(const float (&x)[4], const float (&y)[4],
                    const u32 (&colors)[4], bool additive);
+    // Opaque quad with per-corner colors, e.g. the sky gradient.
+    void gradientQuad(const float (&x)[4], const float (&y)[4],
+                      const u32 (&colors)[4]);
     void glowLine(float x0, float y0, float x1, float y1, float half_width,
                   u32 color);
     void glowDisc(float center_x, float center_y, float radius, u32 color);

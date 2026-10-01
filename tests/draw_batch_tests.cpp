@@ -10,7 +10,10 @@
 
 #include "draw_batch.hpp"
 #include "note_cube.hpp"
+#include "note_spawn.hpp"
+#include "saber_model.hpp"
 #include "saber_trail.hpp"
+#include "stage_layout.hpp"
 #include "software_note_renderer.hpp"
 
 using movebeat::Vec3;
@@ -594,6 +597,102 @@ void testSaberTrail() {
           span60 + 33u >= span30 && span30 + 33u >= span60, message);
 }
 
+void testNoteArrival() {
+    const float spawn = 5.0f;
+    const Vec3 upper(0.825f, 0.55f + spawn * -0.03f, spawn);
+    const float middle = spawn * -0.03f;
+    const NoteArrival start = noteArrival(upper, middle, spawn);
+    check(std::fabs(start.position.x - upper.x * kArrivalLateralStart) < 1e-5f &&
+          std::fabs(start.position.y - middle) < 1e-5f &&
+          std::fabs(start.scale - kArrivalStartScale) < 1e-5f,
+          "a note leaves the portal small, near its center");
+    // Upper rows rise into place, lower rows drop into place.
+    const Vec3 lower(-0.825f, -0.55f + 4.5f * -0.03f, 4.5f);
+    const NoteArrival rising = noteArrival(Vec3(0.0f, 0.55f, 4.5f), 0.0f, spawn);
+    const NoteArrival falling = noteArrival(lower, 4.5f * -0.03f, spawn);
+    check(rising.position.y < 0.55f && rising.position.y > 0.0f,
+          "upper-row notes rise into place");
+    check(falling.position.y > lower.y && falling.position.y < 4.5f * -0.03f,
+          "lower-row notes drop into place");
+    float previous = 0.0f;
+    bool monotonic = true;
+    for (int step = 0; step <= 20; ++step) {
+        const float z = spawn - step * 0.1f;
+        const float y = noteArrival(Vec3(0.0f, 0.55f, z), 0.0f, spawn).position.y;
+        if (y + 1e-6f < previous) monotonic = false;
+        previous = y;
+    }
+    check(monotonic, "arrival never moves a note away from its cell");
+    const NoteArrival settled = noteArrival(
+        Vec3(0.3f, 0.4f, spawn * (1.0f - kArrivalFraction) - 0.01f), 0.0f, spawn);
+    check(settled.position.x == 0.3f && settled.position.y == 0.4f &&
+          settled.scale == 1.0f, "a note is settled after the arrival distance");
+    // Whatever the map's jump distance, the strike zone is untouched.
+    const float depths[] = {0.25f, 0.8f, 1.5f, 2.0f, 3.0f, 5.0f, 12.0f, 24.0f};
+    bool strike_zone_exact = true;
+    for (int d = 0; d < 8; ++d) {
+        for (int step = 0; step <= 46; ++step) {
+            const float z = -0.8f + step * 0.05f;  // up to 1.5 m
+            if (z > depths[d]) break;
+            const Vec3 position(0.825f, 0.55f, z);
+            const NoteArrival visual = noteArrival(position, 0.0f, depths[d]);
+            if (visual.position.x != position.x || visual.position.y != position.y ||
+                visual.position.z != position.z || visual.scale != 1.0f)
+                strike_zone_exact = false;
+        }
+    }
+    check(strike_zone_exact,
+          "notes within 1.5 m are always drawn at their gameplay position");
+}
+
+void testSaberModel() {
+    const SaberModel untracked = saberModel(movebeat::SaberPose());
+    check(!untracked.valid, "untracked saber has no model");
+    const SaberModel stub = saberModel(movebeat::SaberPose(
+        Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.1f, 0.0f), true));
+    check(!stub.valid, "a blade shorter than the hilt is not drawn");
+    const movebeat::SaberPose pose(Vec3(0.1f, -0.6f, -0.3f),
+                                   Vec3(0.1f, 0.4f, -0.3f), true);
+    const SaberModel model = saberModel(pose);
+    check(model.valid, "tracked saber has a model");
+    const float hilt = model.hilt_top.y - model.hilt_base.y;
+    check(std::fabs(hilt - (kHiltBelowHandle + kHiltAboveHandle)) < 1e-5f &&
+          model.hilt_base.y < pose.handle.y && model.hilt_top.y > pose.handle.y,
+          "hilt spans the hand around the tracked handle");
+    check(model.emitter.y > model.hilt_top.y && model.emitter.y < pose.tip.y &&
+          model.blade_tip.y == pose.tip.y && model.emitter.x == 0.1f,
+          "emitter sits on top of the hilt, under the blade");
+}
+
+void testStageLayout() {
+    const float far_z = 5.0f;
+    const float span = kTunnelRingCount * kTunnelRingSpacing;
+    bool in_range = true;
+    bool faded_ends = true;
+    for (unsigned int ms = 0; ms < 20000; ms += 37) {
+        for (unsigned int index = 0; index < kTunnelRingCount; ++index) {
+            const TunnelRing ring = tunnelRing(index, ms, far_z);
+            if (ring.z > far_z + kTunnelBeyondPortal + 1e-4f ||
+                ring.z < far_z + kTunnelBeyondPortal - span - 1e-4f)
+                in_range = false;
+            if ((ring.z <= kTunnelVanishZ && ring.alpha > 0.0f) ||
+                ring.alpha < 0.0f || ring.alpha > 1.0f)
+                faded_ends = false;
+        }
+    }
+    check(in_range, "tunnel frames stay within their loop");
+    check(faded_ends, "tunnel frames fade out before reaching the player");
+    const TunnelRing a = tunnelRing(0, 1000, far_z);
+    const TunnelRing b = tunnelRing(0, 1100, far_z);
+    check(a.z - b.z > 0.11f && a.z - b.z < 0.13f,
+          "tunnel frames drift toward the player at 1.2 m/s");
+    check(std::fabs(beatPulse(1000, 120.0f) - 1.0f) < 1e-5f &&
+          std::fabs(beatPulse(1250, 120.0f) - 0.125f) < 1e-4f,
+          "beat pulse peaks on the beat and decays");
+    check(beatPulse(1000, 0.0f) == 0.0f && beatPulse(1000, NAN) == 0.0f,
+          "beat pulse is off without a valid tempo");
+}
+
 } // namespace
 
 // Also linked into the PPU test package (see game_tests.cpp), so the batch
@@ -613,6 +712,9 @@ int runDrawBatchTests() {
     testBlendEquations();
     testGlowDiscFadesOutward();
     testSaberTrail();
+    testNoteArrival();
+    testSaberModel();
+    testStageLayout();
     if (failures) {
         std::printf("%d draw batch check(s) failed\n", failures);
         return failures;

@@ -14,6 +14,7 @@
 #include "playfield_draw.hpp"
 #include "projection.hpp"
 #include "screens_draw.hpp"
+#include "stage_layout.hpp"
 #include "text_draw.hpp"
 
 namespace movebeat {
@@ -822,6 +823,13 @@ void App::finishLevel() {
 void App::renderPlayfield(const FrameInput& input) {
     const unsigned int level_time_ms = input.level_time_ms;
     const unsigned long long frame_scene_start_us = nowMicroseconds();
+    // The built-in tutorial is 120 BPM; imported levels carry their own.
+    const float bpm = imported_level_ && selected_level_.bpm > 0.0f
+        ? selected_level_.bpm : 120.0f;
+    // A failed level keeps the red clear color as its warning.
+    if (!game_.score().failed)
+        drawBackground(screen_, game_.noteSpawnDepth(), level_time_ms,
+                       beatPulse(level_time_ms, bpm));
     drawFloor(screen_, game_.noteSpawnDepth());
     drawGrid(screen_, game_.noteSpawnDepth());
     drawObstacles(screen_, game_, level_time_ms);

@@ -84,6 +84,7 @@ public:
     explicit Game(const GameConfig& config = GameConfig());
 
     void setConfig(const GameConfig& config);
+    const GameConfig& config() const { return config_; }
     float noteSpawnDepth() const;
     void load(const Chart& chart);
     void reset();
