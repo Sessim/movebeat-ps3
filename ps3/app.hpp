@@ -16,6 +16,7 @@
 #include "move_input.hpp"
 #include "run_diagnostics.hpp"
 #include "saber_trail.hpp"
+#include "menu_motion.hpp"
 #include "tracking_pause.hpp"
 #include "movebeat/calibration.hpp"
 #include "movebeat/game.hpp"
@@ -91,6 +92,15 @@ private:
     void handleBackButtons(const FrameInput& input);
     void reloadSelectedChart();
     bool ensureSelectedChart();
+    void selectLevel(std::size_t index);
+    // step: +1 harder, -1 easier; wrap for buttons, clamp for gestures;
+    // hand: 0 left, 1 right, -1 none (feedback side).
+    void changeDifficulty(int step, bool wrap, int hand);
+    // Carousel motion, Move gestures, randomizer, ticks and song preview.
+    void updateLibraryMotion(const FrameInput& input);
+    void stopPreview(unsigned int fade_ms);
+    void pulseRumble(int hand, int frames, int power);
+    void applyRumble();
     void saveSettings();
 
     // Calibration and tracking recovery.
@@ -154,6 +164,20 @@ private:
     MenuNavigationRepeat menu_navigation_repeat_;
     int left_rumble_frames_;
     int right_rumble_frames_;
+    int left_rumble_power_;
+    int right_rumble_power_;
+
+    // Library carousel.
+    CarouselScroll carousel_;
+    MenuGesture gesture_;
+    int gesture_hand_;
+    MenuRandom random_;
+    bool randomizer_spinning_;
+    unsigned int last_motion_ms_;
+    float last_tick_row_;
+    unsigned int selection_changed_ms_;
+    bool preview_active_;
+    unsigned int halo_flash_ms_;
     bool paused_;
     bool tracking_paused_;
     bool tracking_recalibrating_;

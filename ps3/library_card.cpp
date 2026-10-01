@@ -63,5 +63,22 @@ void LibraryCard::draw(Framebuffer& screen, int x, int y) const {
     screen.image(x, y, WIDTH, HEIGHT, &pixels_[0], id_);
 }
 
+void LibraryCard::drawCover(Framebuffer& screen, float x, float y, float size,
+                            float alpha) const {
+    if (!ready()) return;
+    screen.imageRegion(x, y, size, size, &pixels_[0], WIDTH, HEIGHT,
+                       0.0f, 0.0f, static_cast<float>(COVER),
+                       static_cast<float>(COVER), id_, alpha);
+}
+
+void LibraryCard::drawLabel(Framebuffer& screen, float x, float y, float scale,
+                            float alpha) const {
+    if (!ready()) return;
+    screen.imageRegion(x, y, LABEL_WIDTH * scale, HEIGHT * scale, &pixels_[0],
+                       WIDTH, HEIGHT, static_cast<float>(LABEL_X), 0.0f,
+                       static_cast<float>(WIDTH), static_cast<float>(HEIGHT),
+                       id_, alpha);
+}
+
 } // namespace ps3
 } // namespace movebeat

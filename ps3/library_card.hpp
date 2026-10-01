@@ -23,6 +23,14 @@ public:
     void clear();
     bool ready() const { return pixels_.size() == WIDTH * HEIGHT; }
     void draw(Framebuffer& screen, int x, int y) const;
+    // The 96x96 cover square, scaled to `size` pixels.
+    void drawCover(Framebuffer& screen, float x, float y, float size,
+                   float alpha) const;
+    // The text part (title, artist, mapper) scaled by `scale`; it is
+    // LABEL_WIDTH x HEIGHT pixels at scale 1.
+    void drawLabel(Framebuffer& screen, float x, float y, float scale,
+                   float alpha) const;
+    enum { COVER = 96, LABEL_X = 101, LABEL_WIDTH = WIDTH - LABEL_X };
 
 private:
     std::vector<std::uint32_t> pixels_;

@@ -4,6 +4,7 @@
 #include "software_note_renderer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
@@ -394,6 +395,39 @@ void Framebuffer::image(int x, int y, int width, int height,
         memcpy(buffers_[current_].pixels + row * width_ + left,
                argb + (row - y) * width + (left - x),
                static_cast<std::size_t>(right - left) * sizeof(u32));
+    }
+}
+
+void Framebuffer::imageRegion(float x, float y, float width, float height,
+                              const std::uint32_t* argb, int texture_width,
+                              int texture_height, float source_x0,
+                              float source_y0, float source_x1, float source_y1,
+                              unsigned int cache_key, float alpha) {
+    if (!initialized_ || !argb || !(width > 0.0f) || !(height > 0.0f)) return;
+    if (rsx_) {
+        batch_.imageRegion(x, y, width, height, argb, texture_width,
+                           texture_height, source_x0, source_y0, source_x1,
+                           source_y1, cache_key, alpha);
+        return;
+    }
+    if (alpha < 0.35f) return;
+    const int left = std::max(0, static_cast<int>(std::floor(x + 0.5f)));
+    const int right = std::min(width_, static_cast<int>(std::floor(x + width + 0.5f)));
+    const int top = std::max(0, static_cast<int>(std::floor(y + 0.5f)));
+    const int bottom = std::min(height_, static_cast<int>(std::floor(y + height + 0.5f)));
+    const float scale_x = (source_x1 - source_x0) / width;
+    const float scale_y = (source_y1 - source_y0) / height;
+    for (int row = top; row < bottom; ++row) {
+        int source_row = static_cast<int>(source_y0 + (row + 0.5f - y) * scale_y);
+        source_row = std::max(0, std::min(texture_height - 1, source_row));
+        const std::uint32_t* source = argb + source_row * texture_width;
+        u32* destination = buffers_[current_].pixels + row * width_;
+        for (int column = left; column < right; ++column) {
+            int source_column = static_cast<int>(
+                source_x0 + (column + 0.5f - x) * scale_x);
+            source_column = std::max(0, std::min(texture_width - 1, source_column));
+            destination[column] = source[source_column];
+        }
     }
 }
 

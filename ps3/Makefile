@@ -40,7 +40,7 @@ export PKGFILES  := $(CURDIR)/package
 
 CPPFILES := main.cpp app.cpp demo_options.cpp level_library.cpp playfield_draw.cpp \
             screens_draw.cpp text_draw.cpp framebuffer.cpp draw_batch.cpp \
-            rsx_batch_renderer.cpp library_card.cpp \
+            rsx_batch_renderer.cpp sound_effects.cpp library_card.cpp \
             move_input.cpp demo_input.cpp gem_runtime.cpp audio_player.cpp \
             run_diagnostics.cpp newlib_malloc_lock.cpp chart.cpp game.cpp level.cpp \
             records.cpp settings.cpp

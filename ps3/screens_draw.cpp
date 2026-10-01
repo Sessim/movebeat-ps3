@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <string.h>
 
+#include <cmath>
+
+#include "menu_motion.hpp"
 #include "text_draw.hpp"
 
 namespace movebeat {
@@ -33,73 +36,196 @@ void drawConnection(Framebuffer& screen, int index,
     screen.rectangle(x, y, size, size, status_color);
 }
 
+namespace {
+
+std::uint32_t withOpacity(std::uint32_t color, float alpha) {
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return (static_cast<std::uint32_t>(alpha * 255.0f + 0.5f) << 24) |
+           (color & 0x00ffffffu);
+}
+
+float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+// Where and how large a carousel row is drawn, by its offset from the
+// selection (fractional while scrolling).
+struct RowLayout {
+    float y;
+    float cover;
+    float label_scale;
+    float alpha;
+};
+
+RowLayout carouselRow(float offset, float center_y) {
+    const float distance = std::fabs(offset);
+    const float near = std::min(1.0f, distance);
+    const float beyond = std::max(0.0f, distance - 1.0f);
+    RowLayout row;
+    const float travel = distance <= 1.0f ? distance * 150.0f
+                                          : 150.0f + beyond * 84.0f;
+    row.y = center_y + (offset < 0.0f ? -travel : travel);
+    row.cover = lerp(200.0f, 72.0f, near) * (1.0f - beyond * 0.1f);
+    row.label_scale = lerp(1.0f, 0.62f, near) - beyond * 0.06f;
+    row.alpha = distance <= 2.2f ? 1.0f
+                                 : std::max(0.0f, 1.0f - (distance - 2.2f) / 1.3f);
+    return row;
+}
+
+// Cover and label of one row, centered as a pair on center_x.
+struct RowPlacement {
+    float cover_x;
+    float cover_y;
+    float label_x;
+    float label_y;
+    float label_width;
+    float label_height;
+};
+
+RowPlacement placeRow(const RowLayout& row, float center_x) {
+    RowPlacement place;
+    const float gap = 14.0f * row.label_scale;
+    place.label_width = LibraryCard::LABEL_WIDTH * row.label_scale;
+    place.label_height = LibraryCard::HEIGHT * row.label_scale;
+    place.cover_x = center_x - (row.cover + gap + place.label_width) * 0.5f;
+    place.cover_y = row.y - row.cover * 0.5f;
+    place.label_x = place.cover_x + row.cover + gap;
+    place.label_y = row.y - place.label_height * 0.5f;
+    return place;
+}
+
+void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
+                     const RowLayout& row, float center_x) {
+    const RowPlacement place = placeRow(row, center_x);
+    if (level.card.ready()) {
+        level.card.drawCover(screen, place.cover_x, place.cover_y, row.cover,
+                             row.alpha);
+        level.card.drawLabel(screen, place.label_x, place.label_y,
+                             row.label_scale, row.alpha);
+    } else if (row.alpha > 0.35f) {
+        screen.rectangle(static_cast<int>(place.cover_x),
+                         static_cast<int>(place.cover_y),
+                         static_cast<int>(row.cover), static_cast<int>(row.cover),
+                         0xff1c2f4eu);
+        drawMenuText(screen, "TRACK", static_cast<int>(place.label_x),
+                     static_cast<int>(row.y) - 7, 2, 0xffd9e7ffu);
+    }
+    if (level.chart_broken && row.alpha > 0.35f)
+        drawMenuText(screen, "CHART ERROR", static_cast<int>(place.label_x + 4),
+                     static_cast<int>(place.label_y + place.label_height + 4), 2,
+                     0xffff6470u);
+}
+
+} // namespace
+
 void drawLevelLibrary(Framebuffer& screen,
                       const std::vector<LevelChoice>& levels,
-                      std::size_t selected, std::size_t chart_index) {
-    const int center_x = screen.width() / 2;
-    const int card_x = center_x - LibraryCard::WIDTH / 2;
-    const int center_y = screen.height() / 2 - 55;
-    drawMenuText(screen, "TRACKS", center_x - 72, 46, 4, 0xffd9e7ffu);
+                      const LibraryView& view) {
+    const int width = screen.width();
+    const int height = screen.height();
+    const float center_x = width * 0.5f;
+    const float center_y = height * 0.5f - 12.0f;
+    drawMenuText(screen, "TRACKS", width / 2 - 72, 30, 4, 0xffd9e7ffu);
     if (levels.empty()) {
-        drawMenuText(screen, "NO TRACKS", center_x - 90, center_y, 3,
-                     0xffffa0a0u);
+        drawMenuText(screen, "NO TRACKS", width / 2 - 90,
+                     static_cast<int>(center_y), 3, 0xffffa0a0u);
         return;
     }
-    const int counter_x = center_x + 210;
+    const std::size_t count = levels.size();
+    const float nearest = std::floor(view.position + 0.5f);
+    const std::size_t selected = CarouselScroll::wrap(nearest, count);
+    const int counter_x = width / 2 + 210;
     drawNumber(screen, static_cast<unsigned int>(selected + 1),
-               counter_x - 22, 54, 4, 0xffd9e7ffu);
-    screen.line(counter_x - 5, 77, counter_x + 5, 52, 0xff7d92b2u, 2);
-    drawNumber(screen, static_cast<unsigned int>(levels.size()),
-               counter_x + 22, 54, 4, 0xffd9e7ffu);
-    const int offsets[] = {-1, 0, 1};
-    for (int slot = 0; slot < 3; ++slot) {
-        if (levels.size() == 1 && offsets[slot] != 0) continue;
-        if (levels.size() == 2 && offsets[slot] < 0) continue;
-        const std::size_t index = offsets[slot] < 0
-            ? (selected == 0 ? levels.size() - 1 : selected - 1)
-            : (selected + static_cast<std::size_t>(offsets[slot])) % levels.size();
-        const int y = center_y + offsets[slot] * 116;
-        const bool active = offsets[slot] == 0;
-        screen.rectangle(card_x - 5, y - 5, 522, 106,
-                         active ? 0xff54d8fcu : 0xff303950u);
-        if (levels[index].card.ready())
-            levels[index].card.draw(screen, card_x, y);
-        else {
-            screen.rectangle(card_x, y, 512, 96, 0xff121a2eu);
-            drawMenuText(screen, "TRACK", card_x + 115, y + 31, 3,
-                         0xffd9e7ffu);
-        }
-        if (levels[index].chart_broken)
-            drawMenuText(screen, "CHART ERROR", card_x + 300, y + 70, 2,
-                         0xffff6470u);
-    }
-    drawMenuText(screen, "TRI PREV  X NEXT  MOVE T SELECT", center_x - 270,
-                 screen.height() - 108, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "SQ PREV  O NEXT DIFF", center_x - 228,
-                 screen.height() - 82, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "START CALIBRATE", center_x - 168,
-                 screen.height() - 56, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "SELECT SWAP HANDS", center_x - 183,
-                 screen.height() - 30, 2, 0xff9cb3d3u);
-    if (!levels[selected].manifest.charts.empty()) {
-        const int count = static_cast<int>(levels[selected].manifest.charts.size());
-        for (int index = 0; index < count && index < 20; ++index)
-            screen.rectangle(center_x + (index - count / 2) * 18,
-                             center_y + 102, 11, 7,
-                             static_cast<std::size_t>(index) == chart_index
-                                 ? 0xfff6e79au : 0xff4a5574u);
-        if (chart_index < levels[selected].manifest.charts.size()) {
-            const movebeat::LevelChart& chart =
-                levels[selected].manifest.charts[chart_index];
-            const int label_x = card_x + LibraryCard::WIDTH + 22;
-            drawMenuText(screen, "DIFFICULTY", label_x, center_y + 7,
-                         2, 0xff96a9ccu);
-            drawMenuText(screen, menuLabel(chart.characteristic).c_str(),
-                         label_x, center_y + 36, 2, 0xffb9c9e5u);
-            drawMenuText(screen, menuLabel(chart.difficulty).c_str(),
-                         label_x, center_y + 61, 3, 0xfff6e79au);
+               counter_x - 22, 38, 4, 0xffd9e7ffu);
+    screen.line(counter_x - 5, 61, counter_x + 5, 36, 0xff7d92b2u, 2);
+    drawNumber(screen, static_cast<unsigned int>(count), counter_x + 22, 38, 4,
+               0xffd9e7ffu);
+
+    // Up to seven rows plus the ones sliding in, farthest first so the
+    // selection is drawn on top. Short libraries show each track once.
+    const int reach = count >= 7 ? 4 : static_cast<int>(count / 2);
+    for (int ring = reach; ring >= 0; --ring) {
+        for (int side = 0; side < (ring == 0 ? 1 : 2); ++side) {
+            const float row_index = nearest + static_cast<float>(side == 0 ? ring : -ring);
+            const float offset = row_index - view.position;
+            if (std::fabs(offset) > 3.6f) continue;
+            if (count < 7 && std::fabs(offset) > count * 0.5f) continue;
+            const RowLayout row = carouselRow(offset, center_y);
+            if (row.alpha <= 0.0f) continue;
+            drawCarouselRow(screen, levels[CarouselScroll::wrap(row_index, count)],
+                            row, center_x);
         }
     }
+
+    // Halo around the selected cover: steady in the color of the chosen
+    // difficulty, flaring briefly when the difficulty changes. It fades
+    // while the list is between rows.
+    const float between = std::fabs(view.position - nearest);
+    const float settle = 1.0f - std::min(1.0f, between * 2.0f);
+    const RowLayout selected_row = carouselRow(nearest - view.position, center_y);
+    const RowPlacement place = placeRow(selected_row, center_x);
+    const LevelChoice& level = levels[selected];
+    if (settle > 0.0f) {
+        const float x0 = place.cover_x - 4.0f, y0 = place.cover_y - 4.0f;
+        const float x1 = place.cover_x + selected_row.cover + 4.0f;
+        const float y1 = place.cover_y + selected_row.cover + 4.0f;
+        if (screen.effectsEnabled()) {
+            const float glow = 16.0f + 26.0f * view.halo_flash;
+            const std::uint32_t color = withOpacity(
+                view.halo_color, (0.45f + 0.55f * view.halo_flash) * settle);
+            screen.glowLine(x0, y0, x1, y0, glow, color);
+            screen.glowLine(x1, y0, x1, y1, glow, color);
+            screen.glowLine(x1, y1, x0, y1, glow, color);
+            screen.glowLine(x0, y1, x0, y0, glow, color);
+        }
+        const int border = 3 + static_cast<int>(3.0f * view.halo_flash);
+        const int ix0 = static_cast<int>(x0), iy0 = static_cast<int>(y0);
+        const int ix1 = static_cast<int>(x1), iy1 = static_cast<int>(y1);
+        screen.rectangle(ix0 - border, iy0 - border, ix1 - ix0 + 2 * border, border,
+                         view.halo_color);
+        screen.rectangle(ix0 - border, iy1, ix1 - ix0 + 2 * border, border,
+                         view.halo_color);
+        screen.rectangle(ix0 - border, iy0, border, iy1 - iy0, view.halo_color);
+        screen.rectangle(ix1, iy0, border, iy1 - iy0, view.halo_color);
+        // The glow must not wash over the cover itself.
+        if (level.card.ready())
+            level.card.drawCover(screen, place.cover_x, place.cover_y,
+                                 selected_row.cover, 1.0f);
+    }
+
+    // Difficulties of the selected track under its label.
+    const int chips_y = static_cast<int>(selected_row.y + 58.0f);
+    int chip_x = static_cast<int>(place.label_x);
+    for (std::size_t index = 0; index < level.manifest.charts.size() && index < 5;
+         ++index) {
+        const std::string name = menuLabel(level.manifest.charts[index].difficulty);
+        const bool active = index == view.chart_index;
+        const std::uint32_t color = active
+            ? difficultyColor(level.manifest.charts[index].difficulty)
+            : 0xff56607au;
+        drawMenuText(screen, name.c_str(), chip_x, chips_y, 2, color);
+        if (active)
+            screen.rectangle(chip_x, chips_y + 17,
+                             static_cast<int>(name.size()) * 12 - 2, 3, color);
+        chip_x += static_cast<int>(name.size()) * 12 + 18;
+    }
+    if (view.preview_playing) {
+        // Three bars bouncing with the clock: the preview is audible.
+        const int bars_x = static_cast<int>(place.label_x + place.label_width) - 30;
+        const int bars_y = static_cast<int>(selected_row.y - 44.0f);
+        for (int bar = 0; bar < 3; ++bar) {
+            const float wave = std::sin(view.now_ms * 0.012f + bar * 1.9f);
+            const int bar_height = 6 + static_cast<int>((wave + 1.0f) * 6.0f);
+            screen.rectangle(bars_x + bar * 8, bars_y + 18 - bar_height, 5,
+                             bar_height, 0xff70d8ffu);
+        }
+    }
+
+    drawMenuText(screen, "HOLD T  UP DOWN  SCROLL     LEFT RIGHT  DIFFICULTY",
+                 width / 2 - 300, height - 56, 2, 0xff9cb3d3u);
+    drawMenuText(screen, "MOVE BUTTON  RANDOM     START  PLAY     SELECT  SWAP HANDS",
+                 width / 2 - 336, height - 30, 2, 0xff9cb3d3u);
 }
 
 void drawMovePointer(Framebuffer& screen,

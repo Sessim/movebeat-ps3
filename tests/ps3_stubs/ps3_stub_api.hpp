@@ -170,6 +170,7 @@ vorbis_info* ov_info(OggVorbis_File*, int);
 double ov_time_total(OggVorbis_File*, int);
 long ov_read(OggVorbis_File*, char*, int, int, int, int, int*);
 int ov_clear(OggVorbis_File*);
+int ov_time_seek(OggVorbis_File*, double);
 
 s32 rsxInit(gcmContextData**, u32, u32, const void*);
 void* rsxMemalign(std::size_t, std::size_t);

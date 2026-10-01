@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "framebuffer.hpp"
@@ -18,9 +19,20 @@ void drawStartupFailure(Framebuffer& screen, GemRuntime::InitStage stage,
                         int error);
 void drawConnection(Framebuffer& screen, int index,
                     bool connected, bool tracked, u32 color);
+// What the library screen shows besides the tracks themselves.
+struct LibraryView {
+    float position;               // continuous carousel position
+    std::size_t chart_index;      // selected difficulty of the selection
+    std::uint32_t halo_color;     // difficulty color around the cover
+    float halo_flash;             // 1 right after a difficulty change, then 0
+    bool preview_playing;
+    unsigned int now_ms;
+};
+
+// Seven-row vertical carousel with the selection in the middle.
 void drawLevelLibrary(Framebuffer& screen,
                       const std::vector<LevelChoice>& levels,
-                      std::size_t selected, std::size_t chart_index);
+                      const LibraryView& view);
 void drawMovePointer(Framebuffer& screen, const ScreenPointer& pointer,
                      u32 color);
 void drawResults(Framebuffer& screen, const movebeat::ScoreState& score,

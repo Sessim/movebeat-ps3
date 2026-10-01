@@ -31,6 +31,7 @@ add_library(movebeat_ps3_syntax OBJECT
     ps3/app.cpp
     ps3/draw_batch.cpp
     ps3/rsx_batch_renderer.cpp
+    ps3/sound_effects.cpp
     ps3/demo_options.cpp
     ps3/level_library.cpp
     ps3/playfield_draw.cpp
@@ -81,6 +82,13 @@ add_executable(movebeat_draw_batch_tests
 )
 target_include_directories(movebeat_draw_batch_tests PRIVATE ps3 core/include)
 add_test(NAME movebeat_draw_batch_tests COMMAND movebeat_draw_batch_tests)
+
+add_executable(movebeat_menu_tests
+    tests/menu_tests.cpp
+    ps3/sound_effects.cpp
+)
+target_include_directories(movebeat_menu_tests PRIVATE ps3)
+add_test(NAME movebeat_menu_tests COMMAND movebeat_menu_tests)
 
 add_executable(movebeat_run_diagnostics_tests
     tests/run_diagnostics_tests.cpp

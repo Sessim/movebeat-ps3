@@ -346,8 +346,10 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
             rsxLoadTexture(context_, texture_unit_, &texture);
             rsxTextureControl(context_, texture_unit_, GCM_TRUE, 0 << 8,
                               12 << 8, GCM_TEXTURE_MAX_ANISO_1);
-            rsxTextureFilter(context_, texture_unit_, 0, GCM_TEXTURE_NEAREST,
-                             GCM_TEXTURE_NEAREST,
+            // Linear: scaled library covers stay smooth, and a 1:1 draw
+            // samples texel centers, so it is unchanged.
+            rsxTextureFilter(context_, texture_unit_, 0, GCM_TEXTURE_LINEAR,
+                             GCM_TEXTURE_LINEAR,
                              GCM_TEXTURE_CONVOLUTION_QUINCUNX);
             rsxTextureWrapMode(context_, texture_unit_,
                                GCM_TEXTURE_CLAMP_TO_EDGE,

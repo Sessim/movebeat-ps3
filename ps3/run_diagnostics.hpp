@@ -41,6 +41,14 @@ struct RunStatus {
     unsigned int menu_step_avg_us;
     unsigned int menu_step_max_us;
     unsigned int menu_idle_max_us;
+    // Library interaction counters (carousel rows passed, flicks, swipes,
+    // randomizer spins, song previews) and sound effects played.
+    unsigned int menu_ticks;
+    unsigned int menu_flicks;
+    unsigned int menu_difficulty_changes;
+    unsigned int menu_randomizer_spins;
+    unsigned int menu_preview_starts;
+    unsigned int sound_effects;
     unsigned int error_stage;
     unsigned int error_code;
     int level_count;

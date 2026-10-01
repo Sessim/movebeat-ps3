@@ -47,6 +47,14 @@ public:
     // the same key, so the RSX path uploads the texture only once.
     void image(int x, int y, int width, int height,
                const std::uint32_t* argb, unsigned int cache_key);
+    // Draws a source rectangle of an image scaled into a destination
+    // rectangle. The RSX filters linearly and blends `alpha`; the software
+    // path scales by nearest texel and skips images below alpha 0.35.
+    void imageRegion(float x, float y, float width, float height,
+                     const std::uint32_t* argb, int texture_width,
+                     int texture_height, float source_x0, float source_y0,
+                     float source_x1, float source_y1, unsigned int cache_key,
+                     float alpha);
     // Direction glyphs and bombs obey the 3D note depth buffer when active.
     // They lie on the note's front plane at world depth plane_z, whose
     // depth is evaluated per pixel (the plane is tilted to the camera).

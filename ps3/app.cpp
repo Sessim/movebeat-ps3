@@ -101,6 +101,9 @@ App::App()
       audio_start_error_(0), level_start_us_(0), run_state_(RUN_SELECT),
       hand_slots_swapped_(false), hand_assignment_established_(false),
       calibrating_(false), left_rumble_frames_(0), right_rumble_frames_(0),
+      left_rumble_power_(0), right_rumble_power_(0), gesture_hand_(-1),
+      randomizer_spinning_(false), last_motion_ms_(0), last_tick_row_(0.0f),
+      selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0),
       paused_(false), tracking_paused_(false), tracking_recalibrating_(false),
       pause_started_us_(0), diagnostic_frame_(0),
       previous_diagnostic_phase_(""), first_frame_saved_(false),
@@ -260,6 +263,10 @@ bool App::selectInitialLevel(int& exit_code) {
         -(kProjectionEyeHeight + kProjectionCameraHeight) / kProjectionDepth;
     reloadSelectedChart();
     chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
+    carousel_.reset(static_cast<int>(selected_level_index_));
+    last_tick_row_ = carousel_.nearestRow();
+    selection_changed_ms_ = nowMilliseconds();
+    random_.seed(static_cast<std::uint32_t>(nowMicroseconds()));
     return true;
 }
 
@@ -296,7 +303,7 @@ void App::shutdown() {
     storeFrameTiming(true);
     ++diagnostic_.heartbeat;
     writeRunStatus(kRunStatusPath, diagnostic_);
-    audio_.shutdown();
+    audio_.close();
     gem_.shutdown();
     screen_.shutdown();
     sysUtilUnregisterCallback(SYSUTIL_EVENT_SLOT0);
@@ -313,6 +320,7 @@ void App::runFrame() {
     handleLibraryNavigation(input);
     handleLibrarySettings(input);
     handleBackButtons(input);
+    updateLibraryMotion(input);
     if (run_state_ == RUN_SELECT && !level_choices_.empty()) {
         // One card read per frame at most keeps the window around the
         // selection filled while scrolling without a long frame.
@@ -379,16 +387,38 @@ void App::readMenuTestInput(FrameInput& input) {
     const unsigned int hold_end = single_end + 240u;
     const unsigned int pause_end = hold_end + 10u;
     const unsigned int difficulty_end = pause_end + 12u * 8u;
+    // Then the Move gestures: a 30 cm upward flick with T held (1.5 m/s),
+    // time to coast, settle and start the preview, a 36 cm sideways stroke
+    // (two difficulty steps), and the Move button randomizer.
+    const unsigned int flick_end = difficulty_end + 12u;
+    const unsigned int coast_end = flick_end + 150u;
+    const unsigned int swipe_end = coast_end + 20u;
+    const unsigned int swipe_rest = swipe_end + 30u;
+    const unsigned int random_end = swipe_rest + 2u;
+    const unsigned int final_end = random_end + 150u;
     unsigned short buttons = 0;
+    float hand_x = 0.0f;
+    float hand_y = 0.0f;
     if (frame < single_end) {
         if (frame % 8u < 2u) buttons = GEM_BUTTON_CROSS;
     } else if (frame < hold_end) {
         buttons = GEM_BUTTON_CROSS;
     } else if (frame >= pause_end && frame < difficulty_end) {
         if ((frame - pause_end) % 8u < 2u) buttons = GEM_BUTTON_CIRCLE;
-    } else if (frame >= difficulty_end) {
+    } else if (frame >= difficulty_end && frame < flick_end) {
+        input.moves.right_trigger = 255;
+        hand_y = (frame - difficulty_end) * 0.025f;
+    } else if (frame >= coast_end && frame < swipe_end) {
+        input.moves.right_trigger = 255;
+        hand_x = (frame - coast_end) * 0.018f;
+    } else if (frame >= swipe_rest && frame < random_end) {
+        buttons = GEM_BUTTON_MOVE;
+    } else if (frame >= final_end) {
         menu_test_done_ = true;
     }
+    input.moves.right = movebeat::SaberPose(
+        movebeat::Vec3(hand_x, hand_y, 0.0f),
+        movebeat::Vec3(hand_x, hand_y + 1.0f, 0.0f), true);
     input.moves.right_buttons = buttons;
 }
 
@@ -453,37 +483,9 @@ void App::readInput(FrameInput& input) {
     input.buttons = menu_buttons_.update(
         moves, demo_mode_ ? 3u : gem_.lastButtonReadyMask());
     const MenuButtonSample& buttons = input.buttons;
-    LibraryPointerTarget move_targets[2] = {
-        LIBRARY_POINTER_NONE,
-        LIBRARY_POINTER_NONE
-    };
-    if (run_state_ == RUN_SELECT && !calibrating_ && !paused_) {
-        for (unsigned int slot = 0; slot < 2; ++slot) {
-            input.move_pointers[slot] = moveImageScreenPoint(
-                moves.image[slot], screen_.width(), screen_.height());
-            if (input.move_pointers[slot].valid)
-                move_targets[slot] = hitTestLibraryPointer(
-                    input.move_pointers[slot].x, input.move_pointers[slot].y,
-                    screen_.width(), screen_.height(), level_choices_.size());
-        }
-    }
-    const unsigned short left_t_press = static_cast<unsigned short>(
-        buttons.left_pressed & GEM_BUTTON_T);
-    const unsigned short right_t_press = static_cast<unsigned short>(
-        buttons.right_pressed & GEM_BUTTON_T);
-    const unsigned int pointer_t_presses =
-        (left_t_press ? 1u : 0u) + (right_t_press ? 1u : 0u);
-    LibraryPointerTarget activated_pointer = LIBRARY_POINTER_NONE;
-    if (pointer_t_presses == 1u) {
-        activated_pointer = left_t_press ? move_targets[0] : move_targets[1];
-    }
-    unsigned short pointer_navigation = 0;
-    if (activated_pointer == LIBRARY_POINTER_PREVIOUS)
-        pointer_navigation = kButtonTriangle;
-    else if (activated_pointer == LIBRARY_POINTER_NEXT)
-        pointer_navigation = kButtonCross;
-    else if (activated_pointer == LIBRARY_POINTER_CURRENT)
-        input.pointer_start = true;
+    // Library selection uses T-held gestures (updateLibraryMotion); the
+    // sphere-position pointer of the old three-card list is gone.
+    const unsigned short pointer_navigation = 0;
     unsigned short repeated_navigation = 0;
     if (run_state_ == RUN_SELECT && !calibrating_ && !paused_) {
         repeated_navigation = menu_navigation_repeat_.update(
@@ -558,12 +560,13 @@ void App::handleLibraryNavigation(const FrameInput& input) {
     if (run_state_ != RUN_SELECT || calibrating_ || input.cancel_calibration ||
         input.hand_toggle || !input.level_pressed || level_choices_.size() <= 1)
         return;
-    std::size_t candidate = selected_level_index_;
-    if (input.level_pressed & kButtonCross) {
-        candidate = (candidate + 1) % level_choices_.size();
-    } else if (input.level_pressed & kButtonTriangle) {
-        candidate = candidate == 0 ? level_choices_.size() - 1 : candidate - 1;
-    }
+    // The carousel animates the step; updateLibraryMotion selects the
+    // track it lands on.
+    if (input.level_pressed & kButtonCross) carousel_.step(1);
+    else if (input.level_pressed & kButtonTriangle) carousel_.step(-1);
+}
+
+void App::selectLevel(std::size_t candidate) {
     // Selection only: the chart is parsed when the level starts
     // (ensureSelectedChart), so scrolling never waits for a chart.
     selected_level_index_ = candidate;
@@ -620,17 +623,151 @@ void App::handleLibrarySettings(const FrameInput& input) {
         saveSettings();
         printf("Timing offset: %+d ms\n", settings_.timing_offset_ms);
     } else if (imported_level_ && !selected_level_.charts.empty()) {
-        if (input.selection_pressed & kButtonCircle) {
-            selected_chart_index_ =
-                (selected_chart_index_ + 1) % selected_level_.charts.size();
-        } else if (input.selection_pressed & kButtonSquare) {
-            selected_chart_index_ = selected_chart_index_ == 0
-                ? selected_level_.charts.size() - 1 : selected_chart_index_ - 1;
+        changeDifficulty((input.selection_pressed & kButtonCircle) ? 1 : -1,
+                         true, 1);
+    }
+}
+
+void App::changeDifficulty(int step, bool wrap, int hand) {
+    const std::size_t count = selected_level_.charts.size();
+    if (!imported_level_ || count == 0 || step == 0) return;
+    std::size_t index = selected_chart_index_;
+    if (wrap) {
+        index = step > 0 ? (index + 1) % count : (index == 0 ? count - 1 : index - 1);
+    } else if (step > 0 && index + 1 < count) {
+        ++index;
+    } else if (step < 0 && index > 0) {
+        --index;
+    }
+    const float pan = hand == 0 ? -0.4f : (hand == 1 ? 0.4f : 0.0f);
+    if (index == selected_chart_index_) {
+        // Already the easiest or hardest: a dull tick, no halo flare.
+        audio_.playEffect(SFX_TICK, 0.25f, pan);
+        return;
+    }
+    selected_chart_index_ = index;
+    selected_chart_loaded_ = false;
+    halo_flash_ms_ = nowMilliseconds();
+    if (!halo_flash_ms_) halo_flash_ms_ = 1;
+    audio_.playEffect(SFX_DIFFICULTY, 0.7f, pan);
+    pulseRumble(hand < 0 ? 1 : hand, 3, 140);
+    ++diagnostic_.menu_difficulty_changes;
+    printf("Selected chart: %s/%s\n",
+           selected_level_.charts[selected_chart_index_].characteristic.c_str(),
+           selected_level_.charts[selected_chart_index_].difficulty.c_str());
+}
+
+void App::pulseRumble(int hand, int frames, int power) {
+    if (hand < 0 || hand > 1) return;
+    int& slot_frames = hand == 0 ? left_rumble_frames_ : right_rumble_frames_;
+    int& slot_power = hand == 0 ? left_rumble_power_ : right_rumble_power_;
+    // A stronger pulse takes over; a weaker one never cuts a strong one short.
+    if (slot_frames <= 0 || power >= slot_power) slot_power = power;
+    if (frames > slot_frames) slot_frames = frames;
+}
+
+void App::applyRumble() {
+    if (!demo_mode_) {
+        gem_.setRumble(physicalSlotForHand(0u, hand_slots_swapped_),
+                       static_cast<u8>(left_rumble_frames_ > 0 ? left_rumble_power_ : 0));
+        gem_.setRumble(physicalSlotForHand(1u, hand_slots_swapped_),
+                       static_cast<u8>(right_rumble_frames_ > 0 ? right_rumble_power_ : 0));
+    }
+    if (left_rumble_frames_ > 0 && --left_rumble_frames_ == 0) left_rumble_power_ = 0;
+    if (right_rumble_frames_ > 0 && --right_rumble_frames_ == 0) right_rumble_power_ = 0;
+}
+
+void App::stopPreview(unsigned int fade_ms) {
+    if (preview_active_) audio_.fadeOut(fade_ms);
+    preview_active_ = false;
+}
+
+void App::updateLibraryMotion(const FrameInput& input) {
+    const unsigned int now_ms = nowMilliseconds();
+    const float seconds = last_motion_ms_
+        ? (now_ms - last_motion_ms_) / 1000.0f : 0.0f;
+    last_motion_ms_ = now_ms;
+    const std::size_t count = level_choices_.size();
+    if (run_state_ != RUN_SELECT || count == 0) {
+        gesture_.cancel();
+        gesture_hand_ = -1;
+        return;
+    }
+    const MenuButtonSample& buttons = input.buttons;
+    if (!calibrating_ && !paused_) {
+        // Gestures belong to the Move whose T is held alone; holding both T
+        // is the blade-length chord, not a gesture.
+        const bool left_t = buttons.left_trigger >= 128u;
+        const bool right_t = buttons.right_trigger >= 128u;
+        if (gesture_hand_ < 0 && left_t != right_t) gesture_hand_ = right_t ? 1 : 0;
+        const bool held = gesture_hand_ >= 0 && !(left_t && right_t) &&
+                          (gesture_hand_ == 1 ? right_t : left_t);
+        const movebeat::SaberPose& pose =
+            gesture_hand_ == 0 ? input.moves.left : input.moves.right;
+        const MenuGestureEvents events = gesture_.update(
+            held, pose.tracked, pose.handle.x, pose.handle.y, now_ms);
+        if (events.drag_started) {
+            carousel_.beginDrag();
+            randomizer_spinning_ = false;
         }
-        selected_chart_loaded_ = false;
-        printf("Selected chart: %s/%s\n",
-               selected_level_.charts[selected_chart_index_].characteristic.c_str(),
-               selected_level_.charts[selected_chart_index_].difficulty.c_str());
+        if (events.drag_rows != 0.0f) carousel_.drag(events.drag_rows);
+        if (events.released) {
+            carousel_.release(events.flick_rows_per_second);
+            if (std::fabs(events.flick_rows_per_second) > CarouselScroll::settleSpeed())
+                ++diagnostic_.menu_flicks;
+        }
+        if (events.difficulty_step)
+            changeDifficulty(events.difficulty_step, false, gesture_hand_);
+        if (!held) gesture_hand_ = -1;
+        // Move button: spin to a random other track, one extra lap for show.
+        if ((buttons.pressed & GEM_BUTTON_MOVE) && count > 1 && !carousel_.dragging()) {
+            const std::size_t pick = random_.pickOther(selected_level_index_, count);
+            const std::size_t ahead = (pick + count - selected_level_index_) % count;
+            carousel_.step(static_cast<int>(ahead + (count <= 40 ? count : 0)));
+            randomizer_spinning_ = true;
+            ++diagnostic_.menu_randomizer_spins;
+            printf("Randomizer: spinning to %u\n", static_cast<unsigned int>(pick));
+        }
+    } else if (gesture_hand_ >= 0) {
+        gesture_.cancel();
+        gesture_hand_ = -1;
+        carousel_.release(0.0f);
+    }
+    carousel_.update(seconds);
+
+    // A click and a tap in the hand for every row that passes the center.
+    const float row = carousel_.nearestRow();
+    if (row != last_tick_row_) {
+        const int hand = gesture_hand_ >= 0 ? gesture_hand_ : 1;
+        audio_.playEffect(SFX_TICK, randomizer_spinning_ ? 0.35f : 0.5f,
+                          hand == 0 ? -0.3f : 0.3f);
+        pulseRumble(hand, 1, randomizer_spinning_ ? 50 : 80);
+        last_tick_row_ = row;
+        ++diagnostic_.menu_ticks;
+    }
+    const std::size_t selected = carousel_.selected(count);
+    if (selected != selected_level_index_) {
+        stopPreview(120);
+        selectLevel(selected);
+        selection_changed_ms_ = now_ms;
+    }
+    if (randomizer_spinning_ && carousel_.resting()) {
+        randomizer_spinning_ = false;
+        audio_.playEffect(SFX_LAND, 0.7f, 0.0f);
+        pulseRumble(0, 6, 180);
+        pulseRumble(1, 6, 180);
+    }
+    // Preview the song once the list has rested on it for a moment.
+    if (!preview_active_ && !calibrating_ && !paused_ && imported_level_ &&
+        carousel_.resting() &&
+        static_cast<int>(now_ms - selection_changed_ms_) >= 650) {
+        if (audio_.startPreview(audio_path_, 0.35f, 60000u, 450u)) {
+            preview_active_ = true;
+            ++diagnostic_.menu_preview_starts;
+        } else {
+            // Do not retry every frame for a track that cannot play.
+            selection_changed_ms_ = now_ms + 60000u;
+        }
     }
 }
 
@@ -644,6 +781,7 @@ void App::handleBackButtons(const FrameInput& input) {
         run_state_ = RUN_SELECT;
         game_.reset();
         cut_feedback_.clear();
+        selection_changed_ms_ = nowMilliseconds();
         printf("Returned to level selection\n");
     }
 }
@@ -755,6 +893,9 @@ void App::handleStart(const FrameInput& input) {
                !input.cancel_calibration && !input.hand_toggle) {
         // Parse the chart now; the one-second calibration hides the cost.
         if (!ensureSelectedChart()) return;
+        // Calibration is the first second of the level: let the preview go.
+        stopPreview(250);
+        audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
         pose_calibration_.reset();
         calibrating_ = true;
         printf("Hold both Move steady in a comfortable forward pose for one second\n");
@@ -805,21 +946,26 @@ void App::updateGameplay(FrameInput& input) {
         game_.update(input.level_time_ms, moves.left, moves.right);
         const movebeat::FrameEvents& events = game_.events();
         cut_feedback_.add(events, input.level_time_ms);
-        if (events.left_hit) left_rumble_frames_ = 2;
-        if (events.right_hit) right_rumble_frames_ = 2;
-        if (events.miss) {
-            left_rumble_frames_ = events.bomb_hit ? 5 : 3;
-            right_rumble_frames_ = events.bomb_hit ? 5 : 3;
+        // A cut is felt in the cutting hand and heard on its side.
+        if (events.left_hit) {
+            pulseRumble(0, 3, 160);
+            audio_.playEffect(SFX_CUT, 0.8f, -0.45f);
+        }
+        if (events.right_hit) {
+            pulseRumble(1, 3, 160);
+            audio_.playEffect(SFX_CUT, 0.8f, 0.45f);
+        }
+        if (events.bomb_hit) {
+            pulseRumble(0, 6, 230);
+            pulseRumble(1, 6, 230);
+            audio_.playEffect(SFX_BOMB, 0.9f, 0.0f);
+        } else if (events.miss) {
+            pulseRumble(0, 3, 70);
+            pulseRumble(1, 3, 70);
+            audio_.playEffect(SFX_MISS, 0.5f, 0.0f);
         }
     }
-    if (!demo_mode_) {
-        gem_.setRumble(physicalSlotForHand(0u, hand_slots_swapped_),
-                       left_rumble_frames_ > 0 ? 90 : 0);
-        gem_.setRumble(physicalSlotForHand(1u, hand_slots_swapped_),
-                       right_rumble_frames_ > 0 ? 90 : 0);
-    }
-    if (left_rumble_frames_ > 0) --left_rumble_frames_;
-    if (right_rumble_frames_ > 0) --right_rumble_frames_;
+    applyRumble();
     const bool audio_tail_finished = !audio_clock_ || audio_.finished() ||
                                      game_.score().failed;
     if (run_state_ == RUN_PLAY && !paused_ &&
@@ -981,14 +1127,19 @@ void App::renderFrame(const FrameInput& input,
     if (run_state_ == RUN_RESULTS) {
         drawResults(screen_, game_.score(), best_score_);
     } else if (run_state_ == RUN_SELECT) {
-        drawLevelLibrary(screen_, level_choices_, selected_level_index_,
-                         selected_chart_index_);
-        const unsigned int left_slot =
-            physicalSlotForHand(0u, hand_slots_swapped_);
-        drawMovePointer(screen_, input.move_pointers[0],
-            left_slot == 0u ? 0xff40b8ffu : 0xffff4058u);
-        drawMovePointer(screen_, input.move_pointers[1],
-            left_slot == 1u ? 0xff40b8ffu : 0xffff4058u);
+        LibraryView view;
+        view.position = carousel_.position();
+        view.chart_index = selected_chart_index_;
+        view.halo_color = selected_chart_index_ < selected_level_.charts.size()
+            ? difficultyColor(selected_level_.charts[selected_chart_index_].difficulty)
+            : difficultyColor("Easy");
+        const unsigned int now_ms = nowMilliseconds();
+        const unsigned int since_change = now_ms - halo_flash_ms_;
+        view.halo_flash = halo_flash_ms_ && since_change < 400u
+            ? 1.0f - since_change / 400.0f : 0.0f;
+        view.preview_playing = preview_active_ && audio_.musicActive();
+        view.now_ms = now_ms;
+        drawLevelLibrary(screen_, level_choices_, view);
     } else if (run_state_ == RUN_AUDIO_ERROR) {
         drawAudioError(screen_, audio_start_error_);
     } else {
@@ -1146,6 +1297,7 @@ void App::publishDiagnostics(const FrameInput& input) {
     diagnostic_.hits = game_.score().hits;
     diagnostic_.misses = game_.score().misses;
     diagnostic_.demo_cycles = demo_cycles_;
+    diagnostic_.sound_effects = audio_.effectsPlayed();
     writeRunStatus(kRunStatusPath, diagnostic_);
     previous_diagnostic_phase_ = diagnostic_phase;
 }

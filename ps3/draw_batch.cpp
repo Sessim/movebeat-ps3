@@ -317,33 +317,65 @@ void DrawBatch::solidTriangle(const ProjectedSolidVertex& a,
 
 void DrawBatch::image(int x, int y, int width, int height,
                       const std::uint32_t* argb, unsigned int cache_key) {
-    if (!argb || width <= 0 || height <= 0) return;
-    if (textures_.size() >= texture_capacity_) {
-        ++dropped_;
-        return;
+    imageRegion(static_cast<float>(x), static_cast<float>(y),
+                static_cast<float>(width), static_cast<float>(height),
+                argb, width, height, 0.0f, 0.0f, static_cast<float>(width),
+                static_cast<float>(height), cache_key, 1.0f);
+}
+
+void DrawBatch::imageRegion(float x, float y, float width, float height,
+                            const std::uint32_t* argb, int texture_width,
+                            int texture_height, float source_x0,
+                            float source_y0, float source_x1, float source_y1,
+                            unsigned int cache_key, float alpha) {
+    if (!argb || !(width > 0.0f) || !(height > 0.0f) ||
+        texture_width <= 0 || texture_height <= 0 || !(alpha > 0.0f)) return;
+    // One texture entry per image per frame: several regions of the same
+    // cached image share it, so a card's cover and text use one slot.
+    int texture_index = -1;
+    if (cache_key) {
+        for (std::size_t index = 0; index < textures_.size(); ++index)
+            if (textures_[index].cache_key == cache_key &&
+                textures_[index].pixels == argb)
+                texture_index = static_cast<int>(index);
     }
-    // No copy: the caller keeps the pixels alive until the frame is drawn.
-    BatchTexture texture;
-    texture.width = width;
-    texture.height = height;
-    texture.pixels = argb;
-    texture.cache_key = cache_key;
-    const int texture_index = static_cast<int>(textures_.size());
-    textures_.push_back(texture);
-    const float left = static_cast<float>(x);
-    const float top = static_cast<float>(y);
-    const float right = static_cast<float>(x + width);
-    const float bottom = static_cast<float>(y + height);
+    if (texture_index < 0) {
+        if (textures_.size() >= texture_capacity_) {
+            ++dropped_;
+            return;
+        }
+        // No copy: the caller keeps the pixels alive until the frame is drawn.
+        BatchTexture texture;
+        texture.width = texture_width;
+        texture.height = texture_height;
+        texture.pixels = argb;
+        texture.cache_key = cache_key;
+        texture_index = static_cast<int>(textures_.size());
+        textures_.push_back(texture);
+    }
+    const float u0 = source_x0 / texture_width;
+    const float v0 = source_y0 / texture_height;
+    const float u1 = source_x1 / texture_width;
+    const float v1 = source_y1 / texture_height;
+    const float left = x;
+    const float top = y;
+    const float right = x + width;
+    const float bottom = y + height;
     const float z[3] = {0.0f, 0.0f, 0.0f};
     const float x0[3] = {left, right, right};
     const float y0[3] = {top, top, bottom};
-    const float uv0[3][2] = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}};
+    const float uv0[3][2] = {{u0, v0}, {u1, v0}, {u1, v1}};
     const float x1[3] = {left, right, left};
     const float y1[3] = {top, bottom, bottom};
-    const float uv1[3][2] = {{0.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
-    // Texture color is multiplied by the vertex color, so use opaque white.
-    pushTriangle(BATCH_TEXTURED, texture_index, x0, y0, z, 0xffffffffu, uv0);
-    pushTriangle(BATCH_TEXTURED, texture_index, x1, y1, z, 0xffffffffu, uv1);
+    const float uv1[3][2] = {{u0, v0}, {u1, v1}, {u0, v1}};
+    // The texture is multiplied by the vertex color: white, with `alpha`.
+    if (alpha > 1.0f) alpha = 1.0f;
+    const std::uint32_t tint = (static_cast<std::uint32_t>(alpha * 255.0f + 0.5f) << 24) |
+                               0x00ffffffu;
+    const std::uint32_t colors[3] = {tint, tint, tint};
+    const BatchBlend blend = alpha < 1.0f ? BLEND_ALPHA : BLEND_OPAQUE;
+    pushColoredTriangle(BATCH_TEXTURED, blend, texture_index, x0, y0, z, colors, uv0);
+    pushColoredTriangle(BATCH_TEXTURED, blend, texture_index, x1, y1, z, colors, uv1);
 }
 
 } // namespace ps3

@@ -118,6 +118,14 @@ public:
     // BatchTexture for the lifetime and cache_key rules.
     void image(int x, int y, int width, int height,
                const std::uint32_t* argb, unsigned int cache_key);
+    // Draws the source rectangle (texels) of a texture_width x
+    // texture_height image into a destination rectangle (pixel edges),
+    // scaled with linear filtering and with an opacity.
+    void imageRegion(float x, float y, float width, float height,
+                     const std::uint32_t* argb, int texture_width,
+                     int texture_height, float source_x0, float source_y0,
+                     float source_x1, float source_y1, unsigned int cache_key,
+                     float alpha);
 
     // Effects. Coordinates are pixel edges (a pixel center is at +0.5) and
     // every vertex has its own 0xAARRGGBB color, interpolated by the RSX.
