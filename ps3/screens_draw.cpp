@@ -226,8 +226,8 @@ void drawLevelLibrary(Framebuffer& screen,
 
     drawMenuText(screen, "HOLD T  UP DOWN  SCROLL     LEFT RIGHT  DIFFICULTY",
                  width / 2 - 300, height - 56, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "MOVE BUTTON  RANDOM     START  PLAY     SELECT  SWAP HANDS",
-                 width / 2 - 336, height - 30, 2, 0xff9cb3d3u);
+    drawMenuText(screen, "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE    SELECT  HANDS",
+                 width / 2 - 432, height - 30, 2, 0xff9cb3d3u);
 }
 
 void drawMovePointer(Framebuffer& screen,

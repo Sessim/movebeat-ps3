@@ -22,7 +22,8 @@ RunStatus::RunStatus()
       batch_dropped_primitives(0), library_scan_ms(0), menu_steps(0),
       menu_step_avg_us(0), menu_step_max_us(0), menu_idle_max_us(0),
       menu_ticks(0), menu_flicks(0), menu_difficulty_changes(0),
-      menu_randomizer_spins(0), menu_preview_starts(0), sound_effects(0),
+      menu_randomizer_spins(0), menu_preview_starts(0), menu_chord_starts(0),
+      pose_calibrated(0), sound_effects(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
@@ -70,6 +71,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "menu_step_max_us=%u\nmenu_idle_max_us=%u\n"
             "menu_ticks=%u\nmenu_flicks=%u\nmenu_difficulty_changes=%u\n"
             "menu_randomizer_spins=%u\nmenu_preview_starts=%u\n"
+            "menu_chord_starts=%u\npose_calibrated=%d\n"
             "sound_effects=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
@@ -114,6 +116,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.menu_step_max_us, status.menu_idle_max_us,
             status.menu_ticks, status.menu_flicks, status.menu_difficulty_changes,
             status.menu_randomizer_spins, status.menu_preview_starts,
+            status.menu_chord_starts, status.pose_calibrated,
             status.sound_effects,
             status.error_stage, status.error_code,
             status.level_count, status.library_cards_loaded,

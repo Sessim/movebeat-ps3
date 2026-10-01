@@ -138,6 +138,9 @@ void testMenuButtonEdges() {
     sample = edges.update(frame, 3u);
     expect(sample.pressed == 0,
            "reacquiring buttons still held across a camera gap is not a new press");
+    expect((sample.left_held & movebeat::ps3::GEM_BUTTON_CROSS) != 0 &&
+           (sample.right_held & movebeat::ps3::GEM_BUTTON_CROSS) != 0,
+           "held buttons are reported per Move");
     for (int i = 0; i < 4; ++i) sample = edges.update(frame, 0u);
     expect(sample.held == 0 && sample.left_trigger == 0,
            "a prolonged button-sample outage releases stale modifiers safely");
@@ -279,6 +282,55 @@ void testScriptedDemoCuts() {
            "scripted cuts flow through the normal scoring path");
 }
 
+void testMoveButtonChord() {
+    using movebeat::ps3::MoveButtonChord;
+    using movebeat::ps3::MoveChordEvents;
+    {
+        // Same frame: a chord, and neither release is a tap.
+        MoveButtonChord chord;
+        expect(chord.update(true, true, 1000u).chord, "simultaneous Move presses are a chord");
+        MoveChordEvents events = chord.update(false, true, 1100u);
+        expect(!events.chord && events.tap_slot < 0, "a chord release is not a tap");
+        events = chord.update(false, false, 1150u);
+        expect(events.tap_slot < 0, "the second chord release is not a tap");
+    }
+    {
+        // Presses 250 ms apart still form a chord; no tap fires first.
+        MoveButtonChord chord;
+        MoveChordEvents events = chord.update(true, false, 1000u);
+        expect(!events.chord && events.tap_slot < 0, "a lone press waits for its release");
+        events = chord.update(true, true, 1250u);
+        expect(events.chord, "presses within the window form a chord");
+        expect(!chord.update(true, true, 1300u).chord, "a held chord fires once");
+    }
+    {
+        // A lone tap is reported on release, for its slot.
+        MoveButtonChord chord;
+        chord.update(false, true, 1000u);
+        MoveChordEvents events = chord.update(false, false, 1120u);
+        expect(!events.chord && events.tap_slot == 1, "a lone short press is a tap of its slot");
+    }
+    {
+        // Too far apart: neither a chord nor taps.
+        MoveButtonChord chord;
+        chord.update(true, false, 1000u);
+        MoveChordEvents events = chord.update(true, true, 1500u);
+        expect(!events.chord, "presses 500 ms apart are not a chord");
+        events = chord.update(false, true, 1600u);
+        expect(events.tap_slot < 0, "an overlapped press is not a tap");
+        events = chord.update(false, false, 1650u);
+        expect(events.tap_slot < 0, "the late overlapped press is not a tap either");
+    }
+    {
+        // A long hold is not a tap; a tap after a chord works again.
+        MoveButtonChord chord;
+        chord.update(true, false, 1000u);
+        expect(chord.update(false, false, 2000u).tap_slot < 0, "a long hold is not a tap");
+        chord.update(true, false, 3000u);
+        expect(chord.update(false, false, 3100u).tap_slot == 0, "a later tap still counts");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -286,6 +338,7 @@ int main() {
     testRejectedAndUntrackedSamples();
     testInertialButtonsWithoutCameraPose();
     testMenuButtonEdges();
+    testMoveButtonChord();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();

@@ -364,7 +364,11 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                 impl_->calibration_requested[index] = true;
             else
                 recovery_error = calibration_error;
-        } else if ((pressed & GEM_BUTTON_MOVE) != 0) {
+        } else if ((pressed & GEM_BUTTON_MOVE) != 0 &&
+                   !(index == 0 ? frame.left.tracked : frame.right.tracked)) {
+            // Move restarts the sphere calibration only for a controller the
+            // camera cannot track; a tracked Move uses the button in the menu
+            // (randomizer, two-Move start).
             const int calibration_error = gemCalibrate(index);
             if (calibration_error == 0)
                 impl_->calibration_requested[index] = true;

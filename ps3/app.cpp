@@ -91,7 +91,7 @@ App::FrameInput::FrameInput()
       level_pressed(0), blade_modifier(false), timing_modifier(false),
       start_pressed(false), both_moves_tracked(false), hand_toggle(false),
       cancel_calibration(false), calibrated_start(false),
-      raw_level_time_ms(0), level_time_ms(0) {}
+      move_chord(false), move_tap_slot(-1), raw_level_time_ms(0), level_time_ms(0) {}
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
@@ -100,7 +100,7 @@ App::App()
       chart_duration_ms_(0), audio_clock_(false),
       audio_start_error_(0), level_start_us_(0), run_state_(RUN_SELECT),
       hand_slots_swapped_(false), hand_assignment_established_(false),
-      calibrating_(false), left_rumble_frames_(0), right_rumble_frames_(0),
+      calibrating_(false), pose_calibrated_(false), left_rumble_frames_(0), right_rumble_frames_(0),
       left_rumble_power_(0), right_rumble_power_(0), gesture_hand_(-1),
       randomizer_spinning_(false), last_motion_ms_(0), last_tick_row_(0.0f),
       selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0),
@@ -420,8 +420,23 @@ void App::readMenuTestInput(FrameInput& input) {
     // right after the sideways stroke while the halo flares.
     if (frame == coast_end - 5u) menu_capture_path_ = kDemoFramePath;
     if (frame == swipe_end + 2u) menu_capture_path_ = kDemoTimedFramePath;
+    // Last, both Move buttons with the controllers held crossed over: GEM
+    // slot 0 on the player's right. Nothing is calibrated yet, so the chord
+    // calibrates (one still second) and must make slot 1 the left hand.
+    const unsigned int chord_end = final_end + 6u;
+    const unsigned int chord_timeout = chord_end + 600u;
     if (frame >= final_end) {
-        menu_test_done_ = true;
+        input.moves.left = movebeat::SaberPose(
+            movebeat::Vec3(0.3f, -0.3f, 0.0f), movebeat::Vec3(0.3f, 0.7f, 0.0f), true);
+        input.moves.right = movebeat::SaberPose(
+            movebeat::Vec3(-0.3f, -0.3f, 0.0f), movebeat::Vec3(-0.3f, 0.7f, 0.0f), true);
+        if (frame < chord_end) {
+            input.moves.left_buttons = GEM_BUTTON_MOVE;
+            input.moves.right_buttons = GEM_BUTTON_MOVE;
+        }
+        if (frame == chord_end + 20u) menu_capture_path_ = kDemoScoredFramePath;
+        if (run_state_ == RUN_PLAY || frame >= chord_timeout) menu_test_done_ = true;
+        return;
     }
     input.moves.right = movebeat::SaberPose(
         movebeat::Vec3(hand_x, hand_y, 0.0f),
@@ -430,7 +445,8 @@ void App::readMenuTestInput(FrameInput& input) {
 }
 
 void App::recordMenuTest(const FrameInput& input) {
-    if (menu_test_done_) return;
+    // The chord start (chart parse, calibration, level) is not menu cost.
+    if (menu_test_done_ || diagnostic_.menu_chord_starts) return;
     if (input.level_pressed || input.selection_pressed) {
         ++diagnostic_.menu_steps;
         menu_step_total_us_ += last_frame_active_us_;
@@ -515,6 +531,13 @@ void App::readInput(FrameInput& input) {
     input.start_pressed = (buttons.pressed & kButtonStart) != 0 ||
                           input.pointer_start;
     input.both_moves_tracked = moves.left.tracked && moves.right.tracked;
+    const MoveChordEvents chord = move_chord_.update(
+        (buttons.left_held & GEM_BUTTON_MOVE) != 0,
+        (buttons.right_held & GEM_BUTTON_MOVE) != 0, nowMilliseconds());
+    input.move_chord = chord.chord;
+    input.move_tap_slot = chord.tap_slot;
+    // A reconnected Move may be held differently: measure the origin again.
+    if (!moves.left_connected || !moves.right_connected) pose_calibrated_ = false;
 }
 
 void App::saveSettings() {
@@ -730,8 +753,9 @@ void App::updateLibraryMotion(const FrameInput& input) {
         if (events.difficulty_step)
             changeDifficulty(events.difficulty_step, false, gesture_hand_);
         if (!held) gesture_hand_ = -1;
-        // Move button: spin to a random other track, one extra lap for show.
-        if ((buttons.pressed & GEM_BUTTON_MOVE) && count > 1 && !carousel_.dragging()) {
+        // A Move button tap: spin to a random other track, one extra lap
+        // for show. (Both Move buttons together start the level.)
+        if (input.move_tap_slot >= 0 && count > 1 && !carousel_.dragging()) {
             const std::size_t pick = random_.pickOther(selected_level_index_, count);
             const std::size_t ahead = (pick + count - selected_level_index_) % count;
             carousel_.step(static_cast<int>(ahead + (count <= 40 ? count : 0)));
@@ -838,6 +862,7 @@ void App::updateTrackingPause(FrameInput& input) {
     } else if (tracking_calibration_.sample(nowMilliseconds(),
                                             moves.left, moves.right)) {
         play_origin_ = tracking_calibration_.origin();
+        pose_calibrated_ = true;
         assignHands(moves);
         tracking_recalibrating_ = false;
         tracking_paused_ = false;
@@ -864,6 +889,7 @@ void App::updateCalibration(FrameInput& input) {
             pose_calibration_.reset();
         if (input.calibrated_start) {
             play_origin_ = pose_calibration_.origin();
+            pose_calibrated_ = true;
             assignHands(moves);
             calibrating_ = false;
             printf("Starting pose assigned GEM slot %u to left hand\n",
@@ -914,20 +940,56 @@ void App::handleStart(const FrameInput& input) {
                (input.start_pressed && run_state_ == RUN_RESULTS && !paused_ &&
                 input.moves.left.tracked && input.moves.right.tracked)) {
         if ((run_state_ == RUN_SELECT || run_state_ == RUN_RESULTS) &&
-            ensureSelectedChart()) {
-            run_state_ = RUN_PLAY;
-            tracking_paused_ = false;
-            tracking_recalibrating_ = false;
-            tracking_gate_.reset();
-            game_.reset();
-            cut_feedback_.clear();
-            best_score_ = movebeat::HighScore();
-            level_start_us_ = nowMicroseconds();
-            audio_clock_ = false;
-            if (imported_level_) startLevelAudio("Audio start failed", true);
-            if (run_state_ == RUN_PLAY) printf("Level started\n");
-        }
+            ensureSelectedChart())
+            beginLevel();
+    } else {
+        handleMoveChord(input);
     }
+}
+
+void App::handleMoveChord(const FrameInput& input) {
+    if (!input.move_chord || paused_ || calibrating_ ||
+        input.cancel_calibration || input.hand_toggle ||
+        (run_state_ != RUN_SELECT && run_state_ != RUN_RESULTS))
+        return;
+    const bool ready = handsSeparatedForCalibration(input.moves.left,
+                                                    input.moves.right);
+    // The results screen replays with the measured origin; it needs both
+    // spheres in view to tell the hands apart.
+    if (run_state_ == RUN_RESULTS && !(ready && pose_calibrated_)) return;
+    if (!ensureSelectedChart()) return;
+    ++diagnostic_.menu_chord_starts;
+    pulseRumble(0, 5, 200);
+    pulseRumble(1, 5, 200);
+    stopPreview(250);
+    audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
+    if (ready && pose_calibrated_) {
+        // The hands are wherever the two controllers are right now.
+        assignHands(input.moves);
+        printf("Move chord: GEM slot %u is the left hand\n",
+               physicalSlotForHand(0u, hand_slots_swapped_));
+        beginLevel();
+        return;
+    }
+    // First start of the session (or the hands overlap): the one-second
+    // calibration measures the origin and then assigns the hands.
+    pose_calibration_.reset();
+    calibrating_ = true;
+    printf("Move chord: calibrating before the first level\n");
+}
+
+void App::beginLevel() {
+    run_state_ = RUN_PLAY;
+    tracking_paused_ = false;
+    tracking_recalibrating_ = false;
+    tracking_gate_.reset();
+    game_.reset();
+    cut_feedback_.clear();
+    best_score_ = movebeat::HighScore();
+    level_start_us_ = nowMicroseconds();
+    audio_clock_ = false;
+    if (imported_level_) startLevelAudio("Audio start failed", true);
+    if (run_state_ == RUN_PLAY) printf("Level started\n");
 }
 
 void App::updateGameplay(FrameInput& input) {
@@ -1180,7 +1242,7 @@ void App::saveDiagnosticFrames(const FrameInput& input) {
             printf("Menu test frame saved: %s\n", menu_capture_path_);
         menu_capture_path_ = 0;
     }
-    if (!demo_mode_ || run_state_ != RUN_PLAY) return;
+    if (!demo_mode_ || demo_options_.menu_test || run_state_ != RUN_PLAY) return;
     if (!demo_frame_saved_) {
         bool visible_upper_note = false;
         bool visible_lower_note = false;
@@ -1275,6 +1337,7 @@ void App::publishDiagnostics(const FrameInput& input) {
     diagnostic_.left_tracked = moves.left.tracked ? 1 : 0;
     diagnostic_.right_tracked = moves.right.tracked ? 1 : 0;
     diagnostic_.hand_slots_swapped = hand_slots_swapped_ ? 1 : 0;
+    diagnostic_.pose_calibrated = pose_calibrated_ ? 1 : 0;
     diagnostic_.hand_assignment_established =
         hand_assignment_established_ ? 1 : 0;
     diagnostic_.invert_hands_setting = settings_.invert_hands ? 1 : 0;

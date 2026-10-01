@@ -222,8 +222,9 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
 2. Stand where both illuminated spheres are visible.
 3. Keep each sphere steady and visible while the application automatically
    requests `gemCalibrate` for uncalibrated controllers. The Move button
-   manually restarts calibration after a controller is producing readable
-   samples.
+   manually restarts the sphere calibration of a controller that is
+   producing readable samples but is not tracked; on a tracked controller it
+   is a menu button.
 4. If notes appear consistently early or late, hold either T trigger and press
    Circle/Square to change the timing offset by +10/-10 ms (range -500 to
    +500 ms). A positive offset advances the chart relative to the audio. The
@@ -255,7 +256,13 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
    diagnostic status, `button_ready_mask` shows which slots supplied an actual
    GEM or inertial button sample in the latest frame (bit 0 left, bit 1 right).
 9. Face the camera and hold the Move controllers comfortably in front of you,
-   separated left/right by at least 15 cm, with both blades pointing forward. Press Start and
+   separated left/right by at least 15 cm, with both blades pointing forward.
+   Press both Move buttons together (within 300 ms): the controller that is
+   further left becomes the left hand and the level starts at once if this
+   session already has a play origin; otherwise (first start, or after a
+   controller reconnected) the chord begins the calibration below, which
+   then starts the level. A single Move button tap spins the randomizer
+   instead, on release. Or press Start and
    remain still while the green calibration bar fills for one second. If a
    sphere is lost, the screen says `TRACK BOTH SPHERES` and resets progress;
    if the handles overlap horizontally, it says `SEPARATE MOVE HANDS` and

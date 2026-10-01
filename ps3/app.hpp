@@ -61,6 +61,9 @@ private:
         bool hand_toggle;
         bool cancel_calibration;
         bool calibrated_start;
+        // Both Move buttons together; a lone Move tap (physical slot or -1).
+        bool move_chord;
+        int move_tap_slot;
         unsigned int raw_level_time_ms;
         unsigned int level_time_ms;
 
@@ -108,6 +111,10 @@ private:
     void updateCalibration(FrameInput& input);
     void assignHands(const MoveFrame& moves);
     void handleStart(const FrameInput& input);
+    // Both Move buttons: assigns the hands from where the controllers are
+    // and starts, calibrating first if this session has no play origin.
+    void handleMoveChord(const FrameInput& input);
+    void beginLevel();
     bool startLevelAudio(const char* failure_message, bool clear_error_on_success);
 
     // Play scene.
@@ -160,7 +167,10 @@ private:
     bool hand_assignment_established_;
     movebeat::PoseCalibration pose_calibration_;
     bool calibrating_;
+    // A play origin was measured this session (calibration or recovery).
+    bool pose_calibrated_;
     MenuButtonEdges menu_buttons_;
+    MoveButtonChord move_chord_;
     MenuNavigationRepeat menu_navigation_repeat_;
     int left_rumble_frames_;
     int right_rumble_frames_;

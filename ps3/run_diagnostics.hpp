@@ -48,6 +48,9 @@ struct RunStatus {
     unsigned int menu_difficulty_changes;
     unsigned int menu_randomizer_spins;
     unsigned int menu_preview_starts;
+    // Levels started with both Move buttons; a play origin is measured.
+    unsigned int menu_chord_starts;
+    int pose_calibrated;
     unsigned int sound_effects;
     unsigned int error_stage;
     unsigned int error_code;

@@ -12,12 +12,14 @@ struct MenuButtonSample {
     unsigned short pressed;
     unsigned short left_pressed;
     unsigned short right_pressed;
+    unsigned short left_held;
+    unsigned short right_held;
     unsigned short left_trigger;
     unsigned short right_trigger;
 
     MenuButtonSample()
         : held(0), pressed(0), left_pressed(0), right_pressed(0),
-          left_trigger(0), right_trigger(0) {}
+          left_held(0), right_held(0), left_trigger(0), right_trigger(0) {}
 };
 
 // A missing camera frame is not a button release. Accept GEM or inertial
@@ -68,8 +70,13 @@ public:
             // so reacquiring an already-held button does not create an edge.
             if (stale_[i] <= 3) {
                 sample.held |= previous_[i];
-                if (i == 0) sample.left_trigger = trigger_[i];
-                else sample.right_trigger = trigger_[i];
+                if (i == 0) {
+                    sample.left_held = previous_[i];
+                    sample.left_trigger = trigger_[i];
+                } else {
+                    sample.right_held = previous_[i];
+                    sample.right_trigger = trigger_[i];
+                }
             }
         }
         return sample;
@@ -115,6 +122,65 @@ public:
 private:
     unsigned short active_;
     unsigned int next_ms_;
+};
+
+// The Move buttons of both controllers pressed together (within
+// windowMs of each other) form the start chord. A Move button pressed alone
+// is a tap, reported on release so a chord never begins with a tap; a hold
+// longer than tapMs, or one that overlapped the other Move button, is
+// neither. Slots are physical: the chord does not need to know the hands.
+struct MoveChordEvents {
+    bool chord;
+    int tap_slot;
+
+    MoveChordEvents() : chord(false), tap_slot(-1) {}
+};
+
+class MoveButtonChord {
+public:
+    static unsigned int windowMs() { return 300u; }
+    static unsigned int tapMs() { return 800u; }
+
+    MoveButtonChord() {
+        for (unsigned int i = 0; i < 2; ++i) {
+            held_[i] = used_[i] = false;
+            press_ms_[i] = 0;
+        }
+    }
+
+    MoveChordEvents update(bool slot0_held, bool slot1_held, unsigned int now_ms) {
+        MoveChordEvents events;
+        const bool held[2] = {slot0_held, slot1_held};
+        bool pressed = false;
+        for (unsigned int i = 0; i < 2; ++i) {
+            if (!held[i] || held_[i]) continue;
+            press_ms_[i] = now_ms;
+            used_[i] = false;
+            pressed = true;
+        }
+        if (pressed && held[0] && held[1]) {
+            // Both down: a chord when the presses were close together and
+            // neither was claimed yet; otherwise both are spent.
+            const unsigned int gap = press_ms_[0] > press_ms_[1]
+                ? press_ms_[0] - press_ms_[1] : press_ms_[1] - press_ms_[0];
+            if (!used_[0] && !used_[1] && gap <= windowMs()) events.chord = true;
+            used_[0] = used_[1] = true;
+        }
+        for (unsigned int i = 0; i < 2; ++i) {
+            if (held[i] || !held_[i]) continue;
+            if (!used_[i] && now_ms - press_ms_[i] <= tapMs())
+                events.tap_slot = static_cast<int>(i);
+            used_[i] = true;
+        }
+        held_[0] = held[0];
+        held_[1] = held[1];
+        return events;
+    }
+
+private:
+    bool held_[2];
+    bool used_[2];
+    unsigned int press_ms_[2];
 };
 
 } // namespace ps3

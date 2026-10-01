@@ -21,6 +21,9 @@ int g_next_hue_error = 0;
 unsigned int g_state_result = GEM_STATUS_HUE_NOT_SET;
 unsigned int g_ready_mask = 3;
 unsigned int g_camera_read_count = 1;
+unsigned int g_calibrate_count = 0;
+unsigned short g_state_buttons = 0;
+bool g_state_tracked = false;
 
 void fail(const char* message) {
     std::fprintf(stderr, "GemRuntime test failed: %s\n", message);
@@ -38,6 +41,9 @@ void resetFakes() {
     g_state_result = GEM_STATUS_HUE_NOT_SET;
     g_ready_mask = 3;
     g_camera_read_count = 1;
+    g_calibrate_count = 0;
+    g_state_buttons = 0;
+    g_state_tracked = false;
 }
 
 } // namespace
@@ -48,7 +54,30 @@ void* memalign(std::size_t, std::size_t size) {
 }
 #endif
 
-s32 gemGetState(u32, u32, system_time_t, gemState*) { return g_state_result; }
+void setVector(vec_float4& vector, float x, float y, float z) {
+    union VectorAccess {
+        vec_float4 vector;
+        float values[4];
+    } access;
+    access.values[0] = x;
+    access.values[1] = y;
+    access.values[2] = z;
+    access.values[3] = 1.0f;
+    vector = access.vector;
+}
+
+s32 gemGetState(u32, u32, system_time_t, gemState* state) {
+    if (g_state_result == GEM_STATUS_OK) {
+        std::memset(state, 0, sizeof(*state));
+        state->paddata.buttons = g_state_buttons;
+        if (g_state_tracked) {
+            state->tracking = GEM_TRACKING_POSITION_TRACKED | GEM_TRACKING_VISIBLE;
+            setVector(state->handle_pos, 0.0f, -100.0f, 0.0f);
+            setVector(state->pos, 0.0f, 0.0f, 0.0f);
+        }
+    }
+    return g_state_result;
+}
 s32 gemGetImageState(u32, gemImageState*) { return -1; }
 s32 gemGetInertialState(u32, u32, system_time_t, gemInertialState*) { return -1; }
 s32 gemGetInfo(gemInfo* info) {
@@ -77,7 +106,7 @@ s32 gemTrackHues(const u32* requested, u32* assigned) {
     std::memcpy(assigned, requested, sizeof(g_last_requested_hues));
     return 0;
 }
-s32 gemCalibrate(u32) { return 0; }
+s32 gemCalibrate(u32) { ++g_calibrate_count; return 0; }
 s32 gemSetRumble(u32, u8) { return 0; }
 
 s32 cameraInit() { return 0; }
@@ -177,6 +206,26 @@ void runGemRuntimeHueTests() {
             g_last_requested_hues[1] == GEM_HUE_LEFT_HAND,
             "reconnection should preserve the calibrated red/right and blue/left mapping");
     require(runtime.handHueAssignmentApplied(), "reconnection retry should reconfirm the physical LED mapping");
+
+    // The Move button is a menu button on a tracked controller; it restarts
+    // the sphere calibration only for a controller the camera cannot track.
+    g_state_result = GEM_STATUS_OK;
+    g_state_tracked = true;
+    g_state_buttons = 0;
+    require(runtime.update(frame, 0.6f), "tracked fake Move should update");
+    require(frame.left.tracked && frame.right.tracked, "fake Move should be tracked");
+    const unsigned int calibrations = g_calibrate_count;
+    g_state_buttons = GEM_BUTTON_MOVE;
+    require(runtime.update(frame, 0.6f), "Move press frame should update");
+    require(g_calibrate_count == calibrations,
+            "a tracked Move button press must not restart sphere calibration");
+    g_state_buttons = 0;
+    g_state_tracked = false;
+    require(runtime.update(frame, 0.6f), "untracked fake Move should update");
+    g_state_buttons = GEM_BUTTON_MOVE;
+    require(runtime.update(frame, 0.6f), "untracked Move press frame should update");
+    require(g_calibrate_count == calibrations + 2u,
+            "an untracked Move button press should restart sphere calibration");
 
     runtime.shutdown();
     std::puts("All GemRuntime physical LED hue tests passed.");

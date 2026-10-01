@@ -95,7 +95,7 @@ try {
     }
 }
 
-foreach ($name in @('demo_frame.ppm', 'demo_timed_frame.ppm')) {
+foreach ($name in @('demo_frame.ppm', 'demo_timed_frame.ppm', 'demo_scored_frame.ppm')) {
     $frame = Join-Path $usrdir $name
     if ((Test-Path -LiteralPath $frame) -and
         (Get-Item -LiteralPath $frame).LastWriteTimeUtc -gt $baseline) {
@@ -122,6 +122,9 @@ $report = [pscustomobject]@{
     menu_difficulty_changes = [int]$status['menu_difficulty_changes']
     menu_randomizer_spins = [int]$status['menu_randomizer_spins']
     menu_preview_starts = [int]$status['menu_preview_starts']
+    menu_chord_starts = [int]$status['menu_chord_starts']
+    pose_calibrated = [int]$status['pose_calibrated']
+    hand_slots_swapped = [int]$status['hand_slots_swapped']
     sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii
