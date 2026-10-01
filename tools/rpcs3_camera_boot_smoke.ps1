@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'run_status_reader.ps1')
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $app = (Resolve-Path -LiteralPath (Join-Path $project 'out/rpcs3-19675/app')).Path
 $usrdir = Join-Path $app 'dev_hdd0/game/MOVEBEAT1/USRDIR'
@@ -45,7 +46,7 @@ try {
         if (Test-Path -LiteralPath $status -PathType Leaf) {
             $statusItem = Get-Item -LiteralPath $status
             if ($statusItem.LastWriteTime -ge $launched) {
-                $lines = Get-Content -LiteralPath $status
+                $lines = Read-SharedLines -Path $status
                 if ($lines -contains 'state=fatal' -or
                     $lines -contains 'state=running') { break }
             }

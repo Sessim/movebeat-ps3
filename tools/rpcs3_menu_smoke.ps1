@@ -15,6 +15,7 @@ param(
 # Runs the game's scripted library navigation (demo_mode.ini menu_test=1)
 # and reports the startup scan time and the cost of each navigation step.
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'run_status_reader.ps1')
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $app = if ([IO.Path]::IsPathRooted($AppPath)) {
     (Resolve-Path -LiteralPath $AppPath).Path
@@ -63,7 +64,7 @@ try {
         try {
             if ((Test-Path -LiteralPath $statusPath -PathType Leaf) -and
                 (Get-Item -LiteralPath $statusPath -ErrorAction Stop).LastWriteTimeUtc -gt $baseline) {
-                $lines = Get-Content -LiteralPath $statusPath -ErrorAction Stop
+                $lines = Read-SharedLines -Path $statusPath
             }
         } catch [System.IO.IOException] {
         } catch [System.Management.Automation.ItemNotFoundException] {

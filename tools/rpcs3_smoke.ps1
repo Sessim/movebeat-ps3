@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'run_status_reader.ps1')
 $LevelIds = @($LevelIds | ForEach-Object { $_ -split ',' } |
     ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($LevelIds.Count -eq 0) { throw 'At least one level ID is required.' }
@@ -107,7 +108,7 @@ foreach ($case in $cases) {
 function Read-RunStatus([string]$path) {
     $values = @{}
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $values }
-    try { $lines = Get-Content -LiteralPath $path } catch { return $values }
+    try { $lines = Read-SharedLines -Path $path } catch { return $values }
     foreach ($line in $lines) {
         $separator = $line.IndexOf('=')
         if ($separator -gt 0) {

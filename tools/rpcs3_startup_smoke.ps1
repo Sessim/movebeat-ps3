@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'run_status_reader.ps1')
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $app = if ([IO.Path]::IsPathRooted($AppPath)) {
     (Resolve-Path -LiteralPath $AppPath).Path
@@ -65,7 +66,7 @@ try {
                 # remove/rename gap. Treat that as a poll miss, not a test error.
                 $statusItem = Get-Item -LiteralPath $statusPath -ErrorAction Stop
                 if ($statusItem.LastWriteTimeUtc -gt $baseline) {
-                    $statusLines = Get-Content -LiteralPath $statusPath -ErrorAction Stop
+                    $statusLines = Read-SharedLines -Path $statusPath
                 }
             } catch [System.IO.IOException] {
                 Start-Sleep -Milliseconds 50
