@@ -10,6 +10,7 @@
 
 #include "draw_batch.hpp"
 #include "note_cube.hpp"
+#include "saber_trail.hpp"
 #include "software_note_renderer.hpp"
 
 using movebeat::Vec3;
@@ -85,6 +86,29 @@ void replay(const DrawBatch& batch, Image& image) {
                         static_cast<std::size_t>(y) * image.width + x;
                     const float z = w0 * pz[0] + w1 * pz[1] + w2 * pz[2];
                     std::uint32_t out = color;
+                    if (run.blend != BLEND_OPAQUE) {
+                        // Interpolated vertex color, then the RSX blend
+                        // equation against what is already in the image.
+                        float src[4];
+                        for (int channel = 0; channel < 4; ++channel)
+                            src[channel] =
+                                w0 * vertices[first].color[channel] +
+                                w1 * vertices[first + 1].color[channel] +
+                                w2 * vertices[first + 2].color[channel];
+                        const std::uint32_t dst = image.pixels[index];
+                        out = 0xff000000u;
+                        for (int channel = 0; channel < 3; ++channel) {
+                            const int shift = 16 - channel * 8;
+                            const float d = ((dst >> shift) & 255u) / 255.0f;
+                            float value = run.blend == BLEND_ADD
+                                ? d + src[channel] * src[3]
+                                : src[channel] * src[3] + d * (1.0f - src[3]);
+                            if (value > 1.0f) value = 1.0f;
+                            if (value < 0.0f) value = 0.0f;
+                            out |= static_cast<std::uint32_t>(
+                                value * 255.0f + 0.5f) << shift;
+                        }
+                    }
                     if (run.mode == BATCH_NOTE_SOLID) {
                         if (!(z < image.depth[index])) continue;
                         image.depth[index] = z;
@@ -405,6 +429,171 @@ void testRunsAndCapacity() {
     check(invalid.vertices().empty(), "glyphs behind the camera are skipped");
 }
 
+std::uint32_t channel(std::uint32_t color, int shift) {
+    return (color >> shift) & 255u;
+}
+
+void testBlendRunsAndBudget() {
+    DrawBatch batch = makeBatch(64, 64);
+    batch.rectangle(0, 0, 4, 4, 0xffffffffu);
+    batch.glowLine(10.0f, 10.0f, 50.0f, 10.0f, 6.0f, 0x80ffffffu);
+    check(batch.runs().size() == 2 && batch.runs()[1].blend == BLEND_ADD,
+          "glow starts an additive run after opaque geometry");
+    check(batch.runs()[1].vertex_count == 12,
+          "glow line costs four triangles");
+    const float x[4] = {0.0f, 8.0f, 8.0f, 0.0f};
+    const float y[4] = {0.0f, 0.0f, 8.0f, 8.0f};
+    const std::uint32_t colors[4] = {
+        0x40ff0000u, 0x40ff0000u, 0x40ff0000u, 0x40ff0000u
+    };
+    batch.blendQuad(x, y, colors, BLEND_ALPHA);
+    check(batch.runs().size() == 3 && batch.runs()[2].blend == BLEND_ALPHA &&
+          batch.runs()[2].vertex_count == 6,
+          "alpha quad is its own two-triangle run");
+    batch.glowDisc(30.0f, 30.0f, 8.0f, 0xffffffffu, 12);
+    check(batch.runs().back().vertex_count == 36,
+          "glow disc costs one triangle per segment");
+    batch.glowDisc(30.0f, 30.0f, 8.0f, 0xffffffffu, 500);
+    check(batch.runs().back().vertex_count == 36 + 96,
+          "glow disc segments are capped at 32");
+    // A heavy effects frame: two full trails, four glowing walls with two
+    // fills, eight cut flashes, floor and saber glow. It must stay a small
+    // fraction of the vertex budget.
+    DrawBatch frame = makeBatch(1280, 720);
+    for (int quad = 0; quad < 2 * 11; ++quad) frame.blendQuad(x, y, colors, BLEND_ADD);
+    for (int wall = 0; wall < 4; ++wall) {
+        frame.blendQuad(x, y, colors, BLEND_ALPHA);
+        frame.blendQuad(x, y, colors, BLEND_ALPHA);
+        for (int edge = 0; edge < 4; ++edge)
+            frame.glowLine(0.0f, 0.0f, 50.0f, 50.0f, 9.0f, 0x80ffffffu);
+    }
+    for (int burst = 0; burst < 8; ++burst)
+        frame.glowDisc(100.0f, 100.0f, 30.0f, 0x80ffffffu, 20);
+    frame.blendQuad(x, y, colors, BLEND_ALPHA);
+    for (int line = 0; line < 5; ++line)
+        frame.glowLine(0.0f, 0.0f, 50.0f, 50.0f, 20.0f, 0x80ffffffu);
+    char message[96];
+    std::snprintf(message, sizeof(message),
+                  "heavy effects frame stays small (%u vertices)",
+                  static_cast<unsigned int>(frame.vertices().size()));
+    check(frame.vertices().size() < 1200, message);
+}
+
+void testGlowFallsOffAcrossTheLine() {
+    DrawBatch batch = makeBatch(64, 64);
+    batch.glowLine(8.0f, 32.0f, 56.0f, 32.0f, 10.0f, 0xc0ffffffu);
+    Image image(64, 64);
+    replay(batch, image);
+    const std::uint32_t center = channel(image.pixels[31 * 64 + 32], 16);
+    const std::uint32_t mid = channel(image.pixels[26 * 64 + 32], 16);
+    const std::uint32_t mid_other = channel(image.pixels[36 * 64 + 32], 16);
+    const std::uint32_t outside = channel(image.pixels[20 * 64 + 32], 16);
+    char message[96];
+    std::snprintf(message, sizeof(message),
+                  "glow fades from center %u to %u/%u to %u",
+                  center, mid, mid_other, outside);
+    check(center > 150 && mid > 40 && mid < center && outside == 0, message);
+    check(mid > mid_other ? mid - mid_other <= 30 : mid_other - mid <= 30,
+          "glow is symmetric across the line");
+}
+
+void testBlendEquations() {
+    // 50% blue over red mixes; additive red over red saturates.
+    DrawBatch batch = makeBatch(16, 16);
+    batch.rectangle(0, 0, 16, 16, 0xff800000u);
+    const float x[4] = {0.0f, 8.0f, 8.0f, 0.0f};
+    const float y[4] = {0.0f, 0.0f, 16.0f, 16.0f};
+    const std::uint32_t blue[4] = {
+        0x800000ffu, 0x800000ffu, 0x800000ffu, 0x800000ffu
+    };
+    batch.blendQuad(x, y, blue, BLEND_ALPHA);
+    const float x2[4] = {8.0f, 16.0f, 16.0f, 8.0f};
+    const std::uint32_t red[4] = {
+        0xffff0000u, 0xffff0000u, 0xffff0000u, 0xffff0000u
+    };
+    batch.blendQuad(x2, y, red, BLEND_ADD);
+    Image image(16, 16);
+    replay(batch, image);
+    const std::uint32_t mixed = image.pixels[8 * 16 + 4];
+    const std::uint32_t added = image.pixels[8 * 16 + 12];
+    check(channel(mixed, 16) > 50 && channel(mixed, 16) < 80 &&
+          channel(mixed, 0) > 115 && channel(mixed, 0) < 140,
+          "alpha blending mixes source and destination");
+    check(channel(added, 16) == 255 && channel(added, 0) == 0,
+          "additive blending saturates instead of wrapping");
+}
+
+void testGlowDiscFadesOutward() {
+    DrawBatch batch = makeBatch(64, 64);
+    batch.glowDisc(32.0f, 32.0f, 20.0f, 0xffffffffu, 20);
+    Image image(64, 64);
+    replay(batch, image);
+    const std::uint32_t c0 = channel(image.pixels[32 * 64 + 32], 8);
+    const std::uint32_t c1 = channel(image.pixels[32 * 64 + 40], 8);
+    const std::uint32_t c2 = channel(image.pixels[32 * 64 + 48], 8);
+    const std::uint32_t c3 = channel(image.pixels[32 * 64 + 60], 8);
+    check(c0 > c1 && c1 > c2 && c3 == 0, "glow disc fades radially");
+}
+
+movebeat::SaberPose pose(float x, bool tracked) {
+    return movebeat::SaberPose(Vec3(x, -0.5f, 0.0f), Vec3(x, 0.5f, 0.0f),
+                               tracked);
+}
+
+void testSaberTrail() {
+    SaberTrail trail;
+    trail.add(pose(0.0f, true), 1000);
+    check(trail.size() == 1, "first pose starts the trail");
+    const TrailSample& first = trail.sample(0);
+    check(std::fabs(first.base.y - (-0.5f + SaberTrail::baseFraction())) < 1e-5f &&
+          first.tip.y == 0.5f, "trail spans the outer part of the blade");
+    trail.add(pose(0.1f, false), 1016);
+    check(trail.size() == 0, "losing tracking erases the trail");
+
+    for (unsigned int step = 0; step < 20; ++step)
+        trail.add(pose(step * 0.01f, true), 2000 + step);
+    check(trail.size() == SaberTrail::kCapacity, "capacity bounds the trail");
+    check(trail.sample(0).tip.x > trail.sample(1).tip.x,
+          "newest sample comes first");
+
+    check(SaberTrail::fade(trail.sample(0), trail.sample(0).time_ms) == 1.0f,
+          "fresh sample is fully bright");
+    TrailSample old_sample = trail.sample(0);
+    check(SaberTrail::fade(old_sample, old_sample.time_ms +
+                           SaberTrail::kLifetimeMs) == 0.0f,
+          "sample fades out at the end of its lifetime");
+    check(SaberTrail::fade(old_sample, old_sample.time_ms - 5u) == 1.0f,
+          "a clock step backwards does not overflow the age");
+
+    // A fast but human swing keeps the trail; a teleport restarts it.
+    SaberTrail swing;
+    swing.add(pose(0.0f, true), 0);
+    swing.add(pose(0.2f, true), 16);   // 12.5 m/s
+    check(swing.size() == 2, "a fast real swing keeps its trail");
+    swing.add(pose(1.2f, true), 32);   // 62 m/s jump
+    check(swing.size() == 1 && swing.sample(0).tip.x == 1.2f,
+          "a tracking jump restarts the trail instead of streaking");
+    swing.add(pose(1.25f, true), 32);  // same timestamp, small move
+    check(swing.size() == 2, "duplicate timestamps do not break the trail");
+
+    // The visible span is set by time, not by frame rate.
+    SaberTrail at60;
+    SaberTrail at30;
+    for (unsigned int ms = 0; ms <= 600; ms += 16) at60.add(pose(0.0f, true), ms);
+    for (unsigned int ms = 0; ms <= 600; ms += 33) at30.add(pose(0.0f, true), ms);
+    const unsigned int span60 = at60.sample(0).time_ms -
+                                at60.sample(at60.size() - 1u).time_ms;
+    const unsigned int span30 = at30.sample(0).time_ms -
+                                at30.sample(at30.size() - 1u).time_ms;
+    char message[96];
+    std::snprintf(message, sizeof(message),
+                  "trail span is frame-rate independent (%u vs %u ms)",
+                  span60, span30);
+    check(span60 <= SaberTrail::kLifetimeMs &&
+          span30 <= SaberTrail::kLifetimeMs &&
+          span60 + 33u >= span30 && span30 + 33u >= span60, message);
+}
+
 } // namespace
 
 // Also linked into the PPU test package (see game_tests.cpp), so the batch
@@ -419,6 +608,11 @@ int runDrawBatchTests() {
     testGlyphHiddenBehindNearerCube();
     testImageIsOneToOne();
     testRunsAndCapacity();
+    testBlendRunsAndBudget();
+    testGlowFallsOffAcrossTheLine();
+    testBlendEquations();
+    testGlowDiscFadesOutward();
+    testSaberTrail();
     if (failures) {
         std::printf("%d draw batch check(s) failed\n", failures);
         return failures;

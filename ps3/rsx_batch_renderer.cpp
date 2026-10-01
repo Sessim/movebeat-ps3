@@ -231,6 +231,7 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
 
     bool texture_program_loaded = false;
     bool color_program_loaded = false;
+    BatchBlend current_blend = BLEND_OPAQUE;
     const std::vector<BatchRun>& runs = batch.runs();
     for (std::size_t index = 0; index < runs.size(); ++index) {
         const BatchRun& run = runs[index];
@@ -238,6 +239,21 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
         std::size_t count = run.vertex_count;
         if (run.first_vertex + count > vertex_count)
             count = vertex_count - run.first_vertex;
+        if (run.blend != current_blend) {
+            if (run.blend == BLEND_OPAQUE) {
+                rsxSetBlendEnable(context_, GCM_FALSE);
+            } else {
+                // Destination alpha is unused (X8R8G8B8), so only the color
+                // factors matter.
+                const u16 destination = run.blend == BLEND_ADD
+                    ? GCM_ONE : GCM_ONE_MINUS_SRC_ALPHA;
+                rsxSetBlendFunc(context_, GCM_SRC_ALPHA, destination,
+                                GCM_SRC_ALPHA, destination);
+                rsxSetBlendEquation(context_, GCM_FUNC_ADD, GCM_FUNC_ADD);
+                rsxSetBlendEnable(context_, GCM_TRUE);
+            }
+            current_blend = run.blend;
+        }
         switch (run.mode) {
             case BATCH_NOTE_SOLID:
                 rsxSetDepthTestEnable(context_, GCM_TRUE);

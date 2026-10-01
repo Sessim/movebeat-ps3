@@ -154,7 +154,9 @@ python tools/analyze_gem_capture.py path\to\gem_capture.csv
 1. Сыграйте плотную карту (например, Expert) и заберите `run_status.ini`.
 2. Положите в `USRDIR` файл `renderer.ini` с одной строкой
    `renderer=software`, перезапустите игру и повторите ту же карту.
-3. Удалите `renderer.ini`, чтобы вернуть RSX.
+3. Замените строку на `effects=off`, повторите карту: это RSX без свечения,
+   шлейфов и полупрозрачных стен. Разница с первым прогоном — цена эффектов.
+4. Удалите `renderer.ini`, чтобы вернуть RSX с эффектами.
 
 Сравните `frame_active_avg_us`, `frame_active_max_us` и
 `frame_active_over_60hz` двух прогонов, а также сфотографируйте экран в обоих

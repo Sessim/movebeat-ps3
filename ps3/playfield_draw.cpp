@@ -38,6 +38,53 @@ void drawObstacleFace(Framebuffer& screen,
     screen.line(top_left.x, top_left.y, bottom_left.x, bottom_left.y, color, 4);
 }
 
+// Effect sizes are tuned at 720p and scale with the output height.
+float effectScale(const Framebuffer& screen) {
+    return screen.height() / 720.0f;
+}
+
+u32 withAlpha(u32 color, float alpha) {
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return (static_cast<u32>(alpha * 255.0f + 0.5f) << 24) |
+           (color & 0x00ffffffu);
+}
+
+void projectFloat(const movebeat::Vec3& point, const Framebuffer& screen,
+                  float& x, float& y) {
+    const ScreenPoint projected = projectTrackPoint(point, screen);
+    x = projected.x + 0.5f;
+    y = projected.y + 0.5f;
+}
+
+// Translucent fill of one wall face; edges are drawn separately.
+void fillObstacleFace(Framebuffer& screen, const movebeat::Vec3& minimum,
+                      const movebeat::Vec3& maximum, float z, u32 color) {
+    float x[4];
+    float y[4];
+    projectFloat(movebeat::Vec3(minimum.x, maximum.y, z), screen, x[0], y[0]);
+    projectFloat(movebeat::Vec3(maximum.x, maximum.y, z), screen, x[1], y[1]);
+    projectFloat(movebeat::Vec3(maximum.x, minimum.y, z), screen, x[2], y[2]);
+    projectFloat(movebeat::Vec3(minimum.x, minimum.y, z), screen, x[3], y[3]);
+    const u32 colors[4] = {color, color, color, color};
+    screen.blendQuad(x, y, colors, false);
+}
+
+void glowObstacleFace(Framebuffer& screen, const movebeat::Vec3& minimum,
+                      const movebeat::Vec3& maximum, float z, u32 color) {
+    float x[4];
+    float y[4];
+    projectFloat(movebeat::Vec3(minimum.x, maximum.y, z), screen, x[0], y[0]);
+    projectFloat(movebeat::Vec3(maximum.x, maximum.y, z), screen, x[1], y[1]);
+    projectFloat(movebeat::Vec3(maximum.x, minimum.y, z), screen, x[2], y[2]);
+    projectFloat(movebeat::Vec3(minimum.x, minimum.y, z), screen, x[3], y[3]);
+    const float width = 9.0f * effectScale(screen);
+    for (int edge = 0; edge < 4; ++edge) {
+        const int next = (edge + 1) % 4;
+        screen.glowLine(x[edge], y[edge], x[next], y[next], width, color);
+    }
+}
+
 u32 shadeNote(u32 color, int numerator, int denominator) {
     const unsigned int red = std::min(255u, ((color >> 16) & 255u) * numerator / denominator);
     const unsigned int green = std::min(255u, ((color >> 8) & 255u) * numerator / denominator);
@@ -74,6 +121,28 @@ void drawNoteCube(Framebuffer& screen,
 }
 
 } // namespace
+
+void drawFloor(Framebuffer& screen, float far_z) {
+    if (!screen.effectsEnabled()) return;
+    const float ground_y = -0.825f;
+    const float outer_x = 1.1f;
+    float x[4];
+    float y[4];
+    projectFloat(movebeat::Vec3(-outer_x, ground_y, far_z), screen, x[0], y[0]);
+    projectFloat(movebeat::Vec3(outer_x, ground_y, far_z), screen, x[1], y[1]);
+    projectFloat(movebeat::Vec3(outer_x, ground_y, 0.0f), screen, x[2], y[2]);
+    projectFloat(movebeat::Vec3(-outer_x, ground_y, 0.0f), screen, x[3], y[3]);
+    // A faint blue floor that fades into the distance: one translucent quad.
+    const u32 near = 0x5c182850u;
+    const u32 far = 0x00182850u;
+    const u32 colors[4] = {far, far, near, near};
+    screen.blendQuad(x, y, colors, false);
+    // Glowing side rails and strike line, the track's only light sources.
+    const float width = 7.0f * effectScale(screen);
+    screen.glowLine(x[0], y[0], x[3], y[3], width, 0x50406cd0u);
+    screen.glowLine(x[1], y[1], x[2], y[2], width, 0x50406cd0u);
+    screen.glowLine(x[3], y[3], x[2], y[2], width, 0x38506cc0u);
+}
 
 void drawGrid(Framebuffer& screen, float far_z) {
     const u32 grid = 0xff20283cu;
@@ -129,6 +198,13 @@ void drawObstacles(Framebuffer& screen, const movebeat::Game& game,
         if (minimum.z < 0.0f) minimum.z = 0.0f;
         if (maximum.z > far_z) maximum.z = far_z;
         const u32 color = minimum.z <= 0.01f ? 0xffff5088u : 0xffa040d0u;
+        // Two translucent layers at most per wall keep fill cost bounded
+        // even when a wall covers much of the screen near the player.
+        fillObstacleFace(screen, minimum, maximum, maximum.z, 0x24a040d0u);
+        fillObstacleFace(screen, minimum, maximum, minimum.z,
+                         withAlpha(color, 0.22f));
+        glowObstacleFace(screen, minimum, maximum, minimum.z,
+                         withAlpha(color, 0.45f));
         drawObstacleFace(screen, minimum, maximum, minimum.z, color);
         drawObstacleFace(screen, minimum, maximum, maximum.z, 0xff603080u);
         const ScreenPoint near_bottom_left = projectTrackPoint(
@@ -189,9 +265,47 @@ void drawSaber(Framebuffer& screen, const movebeat::SaberPose& saber,
     if (!saber.tracked) return;
     const ScreenPoint handle = projectTrackPoint(saber.handle, screen);
     const ScreenPoint tip = projectTrackPoint(saber.tip, screen);
-    screen.line(handle.x, handle.y, tip.x, tip.y, glow, 15);
-    screen.line(handle.x, handle.y, tip.x, tip.y, core, 5);
+    if (screen.effectsEnabled()) {
+        // Additive halo instead of the opaque dark band, then a colored
+        // blade with a white-hot center.
+        const float scale = effectScale(screen);
+        screen.glowLine(handle.x + 0.5f, handle.y + 0.5f,
+                        tip.x + 0.5f, tip.y + 0.5f, 20.0f * scale,
+                        withAlpha(core, 0.55f));
+        screen.line(handle.x, handle.y, tip.x, tip.y, core, 5);
+        screen.line(handle.x, handle.y, tip.x, tip.y, 0xfff2f8ffu, 1);
+    } else {
+        screen.line(handle.x, handle.y, tip.x, tip.y, glow, 15);
+        screen.line(handle.x, handle.y, tip.x, tip.y, core, 5);
+    }
     screen.circle(handle.x, handle.y, 11, 0xffe8e8f0u);
+}
+
+void drawSaberTrail(Framebuffer& screen, const SaberTrail& trail,
+                    unsigned int now_ms, u32 color) {
+    if (!screen.effectsEnabled() || trail.size() < 2u) return;
+    // Swept quads between consecutive blade positions: bright at the tip,
+    // transparent toward the blade middle, fading with age. At most
+    // kCapacity - 1 quads per saber.
+    for (unsigned int index = 0; index + 1u < trail.size(); ++index) {
+        const TrailSample& newer = trail.sample(index);
+        const TrailSample& older = trail.sample(index + 1u);
+        const float newer_fade = SaberTrail::fade(newer, now_ms);
+        const float older_fade = SaberTrail::fade(older, now_ms);
+        if (newer_fade <= 0.0f) break;
+        float x[4];
+        float y[4];
+        projectFloat(newer.base, screen, x[0], y[0]);
+        projectFloat(newer.tip, screen, x[1], y[1]);
+        projectFloat(older.tip, screen, x[2], y[2]);
+        projectFloat(older.base, screen, x[3], y[3]);
+        const u32 clear = color & 0x00ffffffu;
+        const u32 colors[4] = {
+            clear, withAlpha(color, 0.6f * newer_fade),
+            withAlpha(color, 0.6f * older_fade), clear
+        };
+        screen.blendQuad(x, y, colors, true);
+    }
 }
 
 void drawNotes(Framebuffer& screen, const movebeat::Game& game,
@@ -313,6 +427,18 @@ void drawCutFeedback(Framebuffer& screen,
             ? 0xff70d8ffu : 0xffff6878u;
         const u32 color = shadeNote(base, 10 - static_cast<int>(age * 7u /
             CutFeedback::DURATION_MS), 10);
+        if (screen.effectsEnabled()) {
+            // A soft additive flash that grows and fades with the burst.
+            float center_x = 0.0f, center_y = 0.0f, edge_x = 0.0f, edge_y = 0.0f;
+            projectFloat(movebeat::Vec3(burst.position.x, burst.position.y, z),
+                         screen, center_x, center_y);
+            projectFloat(movebeat::Vec3(burst.position.x + outer * 1.4f,
+                                        burst.position.y, z),
+                         screen, edge_x, edge_y);
+            const float radius = std::fabs(edge_x - center_x) + 4.0f;
+            screen.glowDisc(center_x, center_y, radius,
+                            withAlpha(base, 0.7f * (1.0f - progress)));
+        }
         for (int ray = 0; ray < 8; ++ray) {
             const float dx = rays[ray][0] * 0.65f;
             const float dy = static_cast<float>(rays[ray][1]);

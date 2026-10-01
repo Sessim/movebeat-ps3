@@ -78,7 +78,8 @@ Framebuffer::Framebuffer()
     : context_(0), host_memory_(0), current_(0), width_(0), height_(0),
       pitch_(0), clear_color_(0xff050510u), initialized_(false), flip_submitted_(false),
       software_depth_(0), note_depth_active_(false), last_solid_note_count_(0),
-      rsx_(false), frame_submitted_(false), last_batch_vertices_(0),
+      rsx_(false), effects_(true), frame_submitted_(false),
+      last_batch_vertices_(0),
       last_batch_dropped_(0) {
     memset(buffers_, 0, sizeof(buffers_));
 }
@@ -390,6 +391,29 @@ void Framebuffer::image(int x, int y, int width, int height,
                   0xff000000u | (red << 16) | (green << 8) | blue);
         }
     }
+}
+
+void Framebuffer::blendQuad(const float (&x)[4], const float (&y)[4],
+                            const u32 (&colors)[4], bool additive) {
+    if (!initialized_ || !effectsEnabled()) return;
+    const std::uint32_t batch_colors[4] = {
+        colors[0], colors[1], colors[2], colors[3]
+    };
+    batch_.blendQuad(x, y, batch_colors, additive ? BLEND_ADD : BLEND_ALPHA);
+}
+
+void Framebuffer::glowLine(float x0, float y0, float x1, float y1,
+                           float half_width, u32 color) {
+    if (!initialized_ || !effectsEnabled()) return;
+    batch_.glowLine(x0, y0, x1, y1, half_width, color);
+}
+
+void Framebuffer::glowDisc(float center_x, float center_y, float radius,
+                           u32 color) {
+    if (!initialized_ || !effectsEnabled()) return;
+    // Enough segments to look round at the sizes used, but no more.
+    const int segments = radius < 24.0f ? 12 : 20;
+    batch_.glowDisc(center_x, center_y, radius, color, segments);
 }
 
 void Framebuffer::noteLine(int x0, int y0, int x1, int y1, u32 color,

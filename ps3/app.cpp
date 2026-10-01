@@ -103,6 +103,7 @@ App::App()
       pause_started_us_(0), diagnostic_frame_(0),
       previous_diagnostic_phase_(""), first_frame_saved_(false),
       demo_frame_saved_(false), demo_scored_frame_saved_(false),
+      demo_timed_frame_saved_(false),
       demo_cycles_(0), demo_loss_started_us_(0), demo_loss_finished_(false) {}
 
 int App::run() {
@@ -138,9 +139,10 @@ bool App::initializeSystems(int& exit_code) {
         exit_code = 1;
         return false;
     }
-    const bool software_requested = softwareRendererRequested();
-    if (!screen_.initialize(software_requested ? RENDERER_FORCE_SOFTWARE
-                                               : RENDERER_PREFER_RSX)) {
+    const RenderOptions render_options = readRenderOptions();
+    screen_.setEffectsEnabled(render_options.effects);
+    if (!screen_.initialize(render_options.software ? RENDERER_FORCE_SOFTWARE
+                                                    : RENDERER_PREFER_RSX)) {
         printf("RSX framebuffer initialization failed\n");
         diagnostic_.state = "fatal";
         diagnostic_.phase = "framebuffer";
@@ -152,6 +154,7 @@ bool App::initializeSystems(int& exit_code) {
     }
     printf("MoveBeat PS3 0.1 (%s renderer)\n", screen_.rendererName());
     diagnostic_.renderer = screen_.rendererName();
+    diagnostic_.effects_enabled = screen_.effectsEnabled() ? 1 : 0;
     diagnostic_.phase = "framebuffer_ready";
     writeRunStatus(kRunStatusPath, diagnostic_);
 
@@ -726,6 +729,15 @@ void App::updateGameplay(FrameInput& input) {
             : 0u);
     input.level_time_ms = adjustedTime(input.raw_level_time_ms,
                                        settings_.timing_offset_ms);
+    // Trails follow wall-clock time so they also fade while audio is paused.
+    if (run_state_ == RUN_PLAY && !paused_ && screen_.effectsEnabled()) {
+        const unsigned int now_ms = nowMilliseconds();
+        saber_trails_[0].add(moves.left, now_ms);
+        saber_trails_[1].add(moves.right, now_ms);
+    } else {
+        saber_trails_[0].clear();
+        saber_trails_[1].clear();
+    }
     if (run_state_ == RUN_PLAY && !paused_) {
         game_.update(input.level_time_ms, moves.left, moves.right);
         const movebeat::FrameEvents& events = game_.events();
@@ -810,6 +822,7 @@ void App::finishLevel() {
 void App::renderPlayfield(const FrameInput& input) {
     const unsigned int level_time_ms = input.level_time_ms;
     const unsigned long long frame_scene_start_us = nowMicroseconds();
+    drawFloor(screen_, game_.noteSpawnDepth());
     drawGrid(screen_, game_.noteSpawnDepth());
     drawObstacles(screen_, game_, level_time_ms);
     drawArcs(screen_, game_, level_time_ms);
@@ -841,6 +854,9 @@ void App::renderPlayfield(const FrameInput& input) {
                      screen_.height() - 54, 2, 0xffffad8bu);
     }
     drawCutFeedback(screen_, cut_feedback_, level_time_ms);
+    const unsigned int trail_now_ms = nowMilliseconds();
+    drawSaberTrail(screen_, saber_trails_[0], trail_now_ms, 0xff70d8ffu);
+    drawSaberTrail(screen_, saber_trails_[1], trail_now_ms, 0xffff6878u);
     drawSaber(screen_, input.moves.left, 0xff70d8ffu, 0xff174870u);
     drawSaber(screen_, input.moves.right, 0xffff6878u, 0xff701727u);
 }
@@ -953,6 +969,13 @@ void App::saveDiagnosticFrames(const FrameInput& input) {
             if (demo_frame_saved_)
                 printf("Emulator perspective frame saved: %s\n", kDemoFramePath);
         }
+    }
+    if (demo_options_.capture_at_ms && !demo_timed_frame_saved_ &&
+        input.raw_level_time_ms >= demo_options_.capture_at_ms) {
+        demo_timed_frame_saved_ = screen_.savePpm(kDemoTimedFramePath);
+        if (demo_timed_frame_saved_)
+            printf("Timed demo frame saved at %u ms: %s\n",
+                   input.raw_level_time_ms, kDemoTimedFramePath);
     }
     if (!demo_scored_frame_saved_ && game_.score().hits >= 3u) {
         demo_scored_frame_saved_ = screen_.savePpm(kDemoScoredFramePath);

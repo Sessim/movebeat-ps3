@@ -15,6 +15,7 @@
 #include "menu_pointer.hpp"
 #include "move_input.hpp"
 #include "run_diagnostics.hpp"
+#include "saber_trail.hpp"
 #include "tracking_pause.hpp"
 #include "movebeat/calibration.hpp"
 #include "movebeat/game.hpp"
@@ -128,6 +129,7 @@ private:
     movebeat::Game game_;
     unsigned int chart_duration_ms_;
     CutFeedback cut_feedback_;
+    SaberTrail saber_trails_[2];
     AudioPlayer audio_;
     bool audio_clock_;
     int audio_start_error_;
@@ -166,6 +168,7 @@ private:
     bool first_frame_saved_;
     bool demo_frame_saved_;
     bool demo_scored_frame_saved_;
+    bool demo_timed_frame_saved_;
     unsigned int demo_cycles_;
     unsigned long long demo_loss_started_us_;
     bool demo_loss_finished_;

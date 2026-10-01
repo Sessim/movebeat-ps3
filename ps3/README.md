@@ -50,6 +50,16 @@ rasterizer uses, and depth is the software inverse depth mapped linearly to
 [0, 1], so both paths occlude alike. `tests/draw_batch_tests.cpp` replays the
 batch pixel by pixel and compares it with the software primitives.
 
+Effects are geometry, not post-processing, because the RSX is fill-rate
+bound at 720p: an additive floor glow and rails, translucent wall faces with
+glowing near edges, saber halos with a white core, swing trails and soft cut
+flashes. Runs carry a blend mode (opaque, alpha, additive) and vertices carry
+their own colors. A heavy effects frame adds under 1200 vertices and at most
+two translucent layers per wall. Saber trails (`saber_trail.hpp`) last 120 ms
+regardless of frame rate, hold at most 12 samples and restart on tracking
+loss or on tip jumps faster than 18 m/s. Effects exist only on the RSX path;
+`effects=off` in `USRDIR/renderer.ini` disables them for A/B checks.
+
 If the RSX resources cannot be created the app falls back to the PPU
 software rasterizer. The fallback can also be forced for A/B checks by
 writing `renderer=software` to `USRDIR/renderer.ini`. `run_status.ini`

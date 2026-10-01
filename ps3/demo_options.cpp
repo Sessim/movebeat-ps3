@@ -45,27 +45,37 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.level_id = line + 9;
         else if (strncmp(line, "chart_index=", 12) == 0)
             parseDemoChartIndex(line + 12, options.chart_index);
+        else if (strncmp(line, "capture_at_ms=", 14) == 0) {
+            unsigned int parsed = 0;
+            bool valid = line[14] != '\0';
+            for (const char* digit = line + 14; *digit && valid; ++digit) {
+                valid = *digit >= '0' && *digit <= '9' && parsed <= 600000u;
+                if (valid) parsed = parsed * 10u + static_cast<unsigned int>(*digit - '0');
+            }
+            if (valid && parsed <= 600000u) options.capture_at_ms = parsed;
+        }
     }
     fclose(file);
     return options;
 }
 
-bool softwareRendererRequested() {
+RenderOptions readRenderOptions() {
+    RenderOptions options;
     FILE* file = 0;
 #if defined(_MSC_VER)
     fopen_s(&file, kRendererPath, "rb");
 #else
     file = fopen(kRendererPath, "rb");
 #endif
-    if (!file) return false;
-    bool requested = false;
+    if (!file) return options;
     char line[64] = {};
     while (fgets(line, sizeof(line), file)) {
         line[strcspn(line, "\r\n")] = '\0';
-        if (strcmp(line, "renderer=software") == 0) requested = true;
+        if (strcmp(line, "renderer=software") == 0) options.software = true;
+        else if (strcmp(line, "effects=off") == 0) options.effects = false;
     }
     fclose(file);
-    return requested;
+    return options;
 }
 
 } // namespace ps3

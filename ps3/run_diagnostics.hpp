@@ -32,6 +32,7 @@ struct RunStatus {
     unsigned int software_note_max_cubes;
     // "rsx" when the RSX draws the frame, "software" for the PPU rasterizer.
     const char* renderer;
+    int effects_enabled;
     unsigned int batch_max_vertices;
     unsigned int batch_dropped_primitives;
     unsigned int error_stage;

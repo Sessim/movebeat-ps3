@@ -32,12 +32,24 @@ enum BatchMode {
     BATCH_TEXTURED
 };
 
+// Color blending. Effects use translucent geometry instead of extra
+// full-screen passes: the RSX is fill-rate bound at 720p, so each effect
+// stays a few triangles and at most a couple of overlapping layers.
+enum BatchBlend {
+    BLEND_OPAQUE,
+    // src * a + dst * (1 - a): translucent walls and floor.
+    BLEND_ALPHA,
+    // src * a + dst: glow, trails and flashes brighten what is behind them.
+    BLEND_ADD
+};
+
 // Consecutive vertices drawn with the same pipeline state.
 struct BatchRun {
     BatchMode mode;
     std::size_t first_vertex;
     std::size_t vertex_count;
     int texture;
+    BatchBlend blend;
 };
 
 // CPU copy of an image uploaded for a BATCH_TEXTURED run, in the same
@@ -94,6 +106,21 @@ public:
     void image(int x, int y, int width, int height,
                const unsigned short* rgb565);
 
+    // Effects. Coordinates are pixel edges (a pixel center is at +0.5) and
+    // every vertex has its own 0xAARRGGBB color, interpolated by the RSX.
+    void blendTriangle(const float (&x)[3], const float (&y)[3],
+                       const std::uint32_t (&colors)[3], BatchBlend blend);
+    // Corners in order; drawn as triangles (0, 1, 2) and (0, 2, 3).
+    void blendQuad(const float (&x)[4], const float (&y)[4],
+                   const std::uint32_t (&colors)[4], BatchBlend blend);
+    // Additive band: full color on the segment, fading to zero half_width
+    // away from it. Four triangles.
+    void glowLine(float x0, float y0, float x1, float y1, float half_width,
+                  std::uint32_t color);
+    // Additive radial fade from color at the center to zero at radius.
+    void glowDisc(float center_x, float center_y, float radius,
+                  std::uint32_t color, int segments);
+
     // Functor form of solidTriangle for forEachNoteCubeTriangle.
     void operator()(const ProjectedSolidVertex& a,
                     const ProjectedSolidVertex& b,
@@ -116,6 +143,11 @@ private:
                       const float (&x)[3], const float (&y)[3],
                       const float (&depth)[3], std::uint32_t color,
                       const float (*texcoord)[2]);
+    bool pushColoredTriangle(BatchMode mode, BatchBlend blend, int texture,
+                             const float (&x)[3], const float (&y)[3],
+                             const float (&depth)[3],
+                             const std::uint32_t (&colors)[3],
+                             const float (*texcoord)[2]);
     void pushQuad(BatchMode mode, float left, float top, float right,
                   float bottom, float depth, std::uint32_t color);
     void pushLine(BatchMode mode, int x0, int y0, int x1, int y1,

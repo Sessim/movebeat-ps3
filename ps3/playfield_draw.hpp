@@ -2,12 +2,16 @@
 
 #include "cut_feedback.hpp"
 #include "framebuffer.hpp"
+#include "saber_trail.hpp"
 #include "movebeat/game.hpp"
 
 namespace movebeat {
 namespace ps3 {
 
-// Gameplay scene layers, drawn back to front by the caller.
+// Gameplay scene layers, drawn back to front by the caller. Effects (floor,
+// translucent walls, glow, trails, flashes) appear only when
+// screen.effectsEnabled(); otherwise the scene looks as before.
+void drawFloor(Framebuffer& screen, float far_z);
 void drawGrid(Framebuffer& screen, float far_z);
 void drawObstacles(Framebuffer& screen, const movebeat::Game& game,
                    unsigned int now_ms);
@@ -21,6 +25,8 @@ void drawCutFeedback(Framebuffer& screen, const CutFeedback& feedback,
                      unsigned int now_ms);
 void drawSaber(Framebuffer& screen, const movebeat::SaberPose& saber,
                u32 core, u32 glow);
+void drawSaberTrail(Framebuffer& screen, const SaberTrail& trail,
+                    unsigned int now_ms, u32 color);
 void drawHud(Framebuffer& screen, const movebeat::ScoreState& score,
              unsigned int elapsed_ms, unsigned int duration_ms);
 

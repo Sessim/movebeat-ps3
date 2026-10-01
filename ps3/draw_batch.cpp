@@ -42,40 +42,118 @@ bool DrawBatch::pushTriangle(BatchMode mode, int texture,
                              const float (&x)[3], const float (&y)[3],
                              const float (&depth)[3], std::uint32_t color,
                              const float (*texcoord)[2]) {
+    const std::uint32_t colors[3] = {color, color, color};
+    return pushColoredTriangle(mode, BLEND_OPAQUE, texture, x, y, depth,
+                               colors, texcoord);
+}
+
+bool DrawBatch::pushColoredTriangle(BatchMode mode, BatchBlend blend,
+                                    int texture, const float (&x)[3],
+                                    const float (&y)[3],
+                                    const float (&depth)[3],
+                                    const std::uint32_t (&colors)[3],
+                                    const float (*texcoord)[2]) {
     if (width_ <= 0 || height_ <= 0) return false;
     if (vertices_.size() + 3u > vertex_capacity_) {
         ++dropped_;
         return false;
     }
     if (runs_.empty() || runs_.back().mode != mode ||
-        runs_.back().texture != texture) {
+        runs_.back().texture != texture || runs_.back().blend != blend) {
         BatchRun run;
         run.mode = mode;
         run.first_vertex = vertices_.size();
         run.vertex_count = 0;
         run.texture = texture;
+        run.blend = blend;
         runs_.push_back(run);
     }
-    const float red = ((color >> 16) & 255u) / 255.0f;
-    const float green = ((color >> 8) & 255u) / 255.0f;
-    const float blue = (color & 255u) / 255.0f;
-    const float alpha = ((color >> 24) & 255u) / 255.0f;
     for (int corner = 0; corner < 3; ++corner) {
+        const std::uint32_t color = colors[corner];
         BatchVertex vertex;
         vertex.position[0] = x[corner] * 2.0f / width_ - 1.0f;
         vertex.position[1] = 1.0f - y[corner] * 2.0f / height_;
         vertex.position[2] = depth[corner] * 2.0f - 1.0f;
         vertex.position[3] = 1.0f;
-        vertex.color[0] = red;
-        vertex.color[1] = green;
-        vertex.color[2] = blue;
-        vertex.color[3] = alpha;
+        vertex.color[0] = ((color >> 16) & 255u) / 255.0f;
+        vertex.color[1] = ((color >> 8) & 255u) / 255.0f;
+        vertex.color[2] = (color & 255u) / 255.0f;
+        vertex.color[3] = ((color >> 24) & 255u) / 255.0f;
         vertex.texcoord[0] = texcoord ? texcoord[corner][0] : 0.0f;
         vertex.texcoord[1] = texcoord ? texcoord[corner][1] : 0.0f;
         vertices_.push_back(vertex);
     }
     runs_.back().vertex_count += 3;
     return true;
+}
+
+void DrawBatch::blendTriangle(const float (&x)[3], const float (&y)[3],
+                              const std::uint32_t (&colors)[3],
+                              BatchBlend blend) {
+    const float z[3] = {0.0f, 0.0f, 0.0f};
+    pushColoredTriangle(BATCH_FLAT, blend, -1, x, y, z, colors, 0);
+}
+
+void DrawBatch::blendQuad(const float (&x)[4], const float (&y)[4],
+                          const std::uint32_t (&colors)[4], BatchBlend blend) {
+    const float ax[3] = {x[0], x[1], x[2]};
+    const float ay[3] = {y[0], y[1], y[2]};
+    const std::uint32_t ac[3] = {colors[0], colors[1], colors[2]};
+    const float bx[3] = {x[0], x[2], x[3]};
+    const float by[3] = {y[0], y[2], y[3]};
+    const std::uint32_t bc[3] = {colors[0], colors[2], colors[3]};
+    blendTriangle(ax, ay, ac, blend);
+    blendTriangle(bx, by, bc, blend);
+}
+
+void DrawBatch::glowLine(float x0, float y0, float x1, float y1,
+                         float half_width, std::uint32_t color) {
+    if (!(half_width > 0.0f)) return;
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length > 0.001f) {
+        dx /= length;
+        dy /= length;
+    } else {
+        dx = 1.0f;
+        dy = 0.0f;
+    }
+    // Extend the ends a little so the glow wraps around the blade tips.
+    const float extend = half_width * 0.5f;
+    const float sx = x0 - dx * extend;
+    const float sy = y0 - dy * extend;
+    const float ex = x1 + dx * extend;
+    const float ey = y1 + dy * extend;
+    const float nx = -dy * half_width;
+    const float ny = dx * half_width;
+    const std::uint32_t clear = color & 0x00ffffffu;
+    // Bright along the center line, fading to nothing at both edges.
+    const float side_ax[4] = {sx, ex, ex + nx, sx + nx};
+    const float side_ay[4] = {sy, ey, ey + ny, sy + ny};
+    const float side_bx[4] = {sx, ex, ex - nx, sx - nx};
+    const float side_by[4] = {sy, ey, ey - ny, sy - ny};
+    const std::uint32_t colors[4] = {color, color, clear, clear};
+    blendQuad(side_ax, side_ay, colors, BLEND_ADD);
+    blendQuad(side_bx, side_by, colors, BLEND_ADD);
+}
+
+void DrawBatch::glowDisc(float center_x, float center_y, float radius,
+                         std::uint32_t color, int segments) {
+    if (!(radius > 0.0f)) return;
+    if (segments < 6) segments = 6;
+    if (segments > 32) segments = 32;
+    const std::uint32_t clear = color & 0x00ffffffu;
+    const std::uint32_t colors[3] = {color, clear, clear};
+    for (int segment = 0; segment < segments; ++segment) {
+        const float a0 = 2.0f * kPi * segment / segments;
+        const float a1 = 2.0f * kPi * (segment + 1) / segments;
+        const float x[3] = {center_x, center_x + radius * std::cos(a0),
+                            center_x + radius * std::cos(a1)};
+        const float y[3] = {center_y, center_y + radius * std::sin(a0),
+                            center_y + radius * std::sin(a1)};
+        blendTriangle(x, y, colors, BLEND_ADD);
+    }
 }
 
 void DrawBatch::pushQuad(BatchMode mode, float left, float top, float right,

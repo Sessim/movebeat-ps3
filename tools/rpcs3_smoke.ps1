@@ -5,6 +5,7 @@ param(
     [ValidateRange(5, 600)][int]$DurationSeconds = 35,
     [ValidateRange(30, 600)][int]$StartupTimeoutSeconds = 120,
     [switch]$TrackingRecovery,
+    [ValidateRange(0, 600000)][int]$CaptureAtMs = 0,
     [string]$AppPath = '',
     [switch]$UseInstalledEboot
 )
@@ -235,6 +236,10 @@ try {
         Write-Output "$id chart $chartIndex first note: $($case.first_note_ms) ms; gameplay window: ${caseDurationSeconds}s"
         $demoLines = @('enabled=1', "level_id=$id", "chart_index=$chartIndex")
         if ($TrackingRecovery) { $demoLines += 'tracking_loss_test=1' }
+        # Optional extra frame at a chosen song time, e.g. when a wall passes.
+        $timed = Join-Path $usrdir 'demo_timed_frame.ppm'
+        if (Test-Path -LiteralPath $timed) { Remove-Item -LiteralPath $timed }
+        if ($CaptureAtMs -gt 0) { $demoLines += "capture_at_ms=$CaptureAtMs" }
         Set-Content -LiteralPath $demo -Encoding Ascii -Value $demoLines
         $baseline = if (Test-Path -LiteralPath $status) {
             (Get-Item -LiteralPath $status).LastWriteTimeUtc
@@ -371,6 +376,14 @@ try {
                 if (-not $perspectiveBmpCaptured) {
                     Write-Warning "Could not convert perspective frame to BMP: $perspectivePpm"
                 }
+            }
+        }
+        if ($CaptureAtMs -gt 0 -and (Test-Path -LiteralPath $timed -PathType Leaf)) {
+            $timedPpm = Join-Path $levelReportDir 'demo_timed_frame.ppm'
+            Copy-Item -LiteralPath $timed -Destination $timedPpm
+            if ($pythonCommand) {
+                & $pythonCommand.Source $ppmConverter $timedPpm `
+                    (Join-Path $levelReportDir 'demo_timed_frame.bmp')
             }
         }
         if ($scoredCaptured) {

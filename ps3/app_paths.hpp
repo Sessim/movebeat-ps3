@@ -20,6 +20,8 @@ const char kDemoModePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/demo_mode.ini";
 const char kDemoFramePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/demo_frame.ppm";
+const char kDemoTimedFramePath[] =
+    "/dev_hdd0/game/MOVEBEAT1/USRDIR/demo_timed_frame.ppm";
 const char kDemoScoredFramePath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/demo_scored_frame.ppm";
 

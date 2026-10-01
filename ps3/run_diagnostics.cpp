@@ -18,7 +18,8 @@ RunStatus::RunStatus()
       gpu_note_draw_calls(0), gpu_note_max_cubes(0),
       gpu_note_fallback_frames(0),
       software_note_draw_calls(0), software_note_max_cubes(0),
-      renderer("none"), batch_max_vertices(0), batch_dropped_primitives(0),
+      renderer("none"), effects_enabled(0), batch_max_vertices(0),
+      batch_dropped_primitives(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
@@ -60,7 +61,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "gpu_note_draw_calls=%u\ngpu_note_max_cubes=%u\n"
             "gpu_note_fallback_frames=%u\n"
             "software_note_draw_calls=%u\nsoftware_note_max_cubes=%u\n"
-            "renderer=%s\nbatch_max_vertices=%u\n"
+            "renderer=%s\neffects_enabled=%d\nbatch_max_vertices=%u\n"
             "batch_dropped_primitives=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
@@ -99,7 +100,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.gpu_note_draw_calls,
             status.gpu_note_max_cubes, status.gpu_note_fallback_frames,
             status.software_note_draw_calls, status.software_note_max_cubes,
-            status.renderer, status.batch_max_vertices,
+            status.renderer, status.effects_enabled, status.batch_max_vertices,
             status.batch_dropped_primitives,
             status.error_stage, status.error_code,
             status.level_count, status.library_cards_loaded,

@@ -55,6 +55,17 @@ public:
     bool drawSolidNotes(const movebeat::Game& game, unsigned int now_ms);
     unsigned int lastSolidNoteCount() const { return last_solid_note_count_; }
 
+    // Translucent and additive effects. They exist only on the RSX path:
+    // blending on the PPU would read video memory back, which is far too
+    // slow, so the software fallback and "effects=off" skip these calls.
+    bool effectsEnabled() const { return rsx_ && effects_; }
+    void setEffectsEnabled(bool enabled) { effects_ = enabled; }
+    void blendQuad(const float (&x)[4], const float (&y)[4],
+                   const u32 (&colors)[4], bool additive);
+    void glowLine(float x0, float y0, float x1, float y1, float half_width,
+                  u32 color);
+    void glowDisc(float center_x, float center_y, float radius, u32 color);
+
     bool usingRsx() const { return rsx_; }
     const char* rendererName() const { return rsx_ ? "rsx" : "software"; }
     // Vertices and dropped primitives of the last submitted RSX frame.
@@ -92,6 +103,7 @@ private:
     bool note_depth_active_;
     unsigned int last_solid_note_count_;
     bool rsx_;
+    bool effects_;
     bool frame_submitted_;
     DrawBatch batch_;
     RsxBatchRenderer gpu_;
