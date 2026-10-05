@@ -164,6 +164,7 @@ private:
     bool demo_mode_;
 
     std::vector<LevelChoice> level_choices_;
+    bool draw_background_;
     std::vector<PlaylistChoice> playlists_;
     std::size_t shelf_;
     // Library indices of the shown shelf, in carousel order, and the

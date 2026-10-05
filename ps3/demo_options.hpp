@@ -38,10 +38,15 @@ EmulatorDemoOptions readEmulatorDemoOptions();
 struct RenderOptions {
     bool software;
     bool effects;
-    // "hand_colors=on": paint the spheres blue (left) and red (right).
+    // Spheres in the hand colors, blue left and red right, once the hands
+    // are known ("hand_colors=off" leaves the hues to libgem).
     bool hand_colors;
+    // "background=off": no sky, frames or beat pulse behind the playfield,
+    // to check whether the screen's light disturbs sphere tracking.
+    bool background;
 
-    RenderOptions() : software(false), effects(true), hand_colors(false) {}
+    RenderOptions() : software(false), effects(true), hand_colors(true),
+                      background(true) {}
 };
 
 RenderOptions readRenderOptions();

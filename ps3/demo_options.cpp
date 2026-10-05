@@ -81,6 +81,8 @@ RenderOptions readRenderOptions() {
         if (strcmp(line, "renderer=software") == 0) options.software = true;
         else if (strcmp(line, "effects=off") == 0) options.effects = false;
         else if (strcmp(line, "hand_colors=on") == 0) options.hand_colors = true;
+        else if (strcmp(line, "hand_colors=off") == 0) options.hand_colors = false;
+        else if (strcmp(line, "background=off") == 0) options.background = false;
     }
     fclose(file);
     return options;

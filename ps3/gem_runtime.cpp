@@ -373,20 +373,24 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
             (!impl_->calibration_requested[index] ||
              calibration_finished_without_success)) {
             const int calibration_error = gemCalibrate(index);
-            if (calibration_error == 0)
+            if (calibration_error == 0) {
                 impl_->calibration_requested[index] = true;
-            else
+                impl_->hues_requested = false;
+            } else {
                 recovery_error = calibration_error;
+            }
         } else if ((pressed & GEM_BUTTON_MOVE) != 0 &&
                    !(index == 0 ? frame.left.tracked : frame.right.tracked)) {
             // Move restarts the sphere calibration only for a controller the
             // camera cannot track; a tracked Move uses the button in the menu
             // (randomizer, two-Move start).
             const int calibration_error = gemCalibrate(index);
-            if (calibration_error == 0)
+            if (calibration_error == 0) {
                 impl_->calibration_requested[index] = true;
-            else
+                impl_->hues_requested = false;
+            } else {
                 recovery_error = calibration_error;
+            }
         }
         impl_->previous_results[index] = results[index];
         impl_->last_results[index] = results[index];
@@ -523,6 +527,9 @@ bool GemRuntime::calibrateSlot(unsigned int slot) {
         return false;
     if (gemCalibrate(slot) != 0) return false;
     impl_->calibration_requested[slot] = true;
+    // A recalibrated sphere loses its hue: ask again as soon as libgem
+    // reports it (in the hand color once the hands are known).
+    impl_->hues_requested = false;
     return true;
 }
 

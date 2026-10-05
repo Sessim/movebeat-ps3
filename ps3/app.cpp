@@ -89,7 +89,7 @@ App::FrameInput::FrameInput()
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
-      shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
+      draw_background_(true), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
       imported_level_(false), selected_level_index_(0),
       selected_chart_index_(0), selected_chart_loaded_(false),
       chart_duration_ms_(0), audio_clock_(false),
@@ -142,6 +142,7 @@ bool App::initializeSystems(int& exit_code) {
         return false;
     }
     const RenderOptions render_options = readRenderOptions();
+    draw_background_ = render_options.background;
     screen_.setEffectsEnabled(render_options.effects);
     if (!screen_.initialize(render_options.software ? RENDERER_FORCE_SOFTWARE
                                                     : RENDERER_PREFER_RSX)) {
@@ -1095,6 +1096,11 @@ void App::updateCalibration(FrameInput& input) {
         }
         input.calibrated_start = body_calibration_.sample(
             nowMilliseconds(), moves.left, moves.right);
+        // The hands are known after the sideways pose: color the spheres
+        // now, so the last pose already checks tracking in those colors.
+        if (before == movebeat::BodyCalibration::STEP_SIDES &&
+            body_calibration_.step() == movebeat::BodyCalibration::STEP_DOWN)
+            setHandAssignment(body_calibration_.slotsSwapped());
         if (body_calibration_.step() != before) {
             // Each pose held: a tap in both hands.
             pulseRumble(0, 4, 160);
@@ -1410,7 +1416,7 @@ void App::renderPlayfield(const FrameInput& input) {
     const float bpm = imported_level_ && selected_level_.bpm > 0.0f
         ? selected_level_.bpm : 120.0f;
     // A failed level keeps the red clear color as its warning.
-    if (!game_.score().failed)
+    if (!game_.score().failed && draw_background_)
         drawBackground(screen_, game_.noteSpawnDepth(), level_time_ms,
                        beatPulse(level_time_ms, bpm));
     drawFloor(screen_, game_.noteSpawnDepth());
