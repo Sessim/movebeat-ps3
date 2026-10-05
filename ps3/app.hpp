@@ -123,6 +123,8 @@ private:
 
     // Calibration and tracking recovery.
     void updateTrackingPause(FrameInput& input);
+    // Leaves a level for the library (Triangle while tracking is lost).
+    void quitLevel();
     void updateCalibration(FrameInput& input);
     void assignHands(const MoveFrame& moves);
     void handleStart(const FrameInput& input);

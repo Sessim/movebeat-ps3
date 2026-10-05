@@ -57,6 +57,19 @@ struct RunStatus {
     unsigned int playlist_songs_played;
     unsigned int playlist_total_score;
     int playlist_complete;
+    // libgem per physical slot: latest gemGetState result (0 ok, 2/8 not
+    // calibrated, 3 calibrating, 4 computing colors, 5 hue not set, 6 no
+    // video, -1 not read) and tracking flags (1 position, 2 visible), live
+    // and at the last tracking pause; levels left from that pause.
+    int gem_slot0_result;
+    int gem_slot1_result;
+    unsigned int gem_slot0_flags;
+    unsigned int gem_slot1_flags;
+    int tracking_pause_slot0_result;
+    int tracking_pause_slot1_result;
+    unsigned int tracking_pause_slot0_flags;
+    unsigned int tracking_pause_slot1_flags;
+    unsigned int tracking_quit_count;
     unsigned int sound_effects;
     unsigned int error_stage;
     unsigned int error_code;

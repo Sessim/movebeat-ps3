@@ -964,9 +964,9 @@ int main() {
            !tracking_gate.observe(1100u, false) &&
            !tracking_gate.observe(1200u, true) &&
            !tracking_gate.observe(1300u, false) &&
-           !tracking_gate.observe(1549u, false) &&
-           tracking_gate.observe(1550u, false) &&
-           !tracking_gate.observe(1600u, false),
+           !tracking_gate.observe(2299u, false) &&
+           tracking_gate.observe(2300u, false) &&
+           !tracking_gate.observe(2400u, false),
            "tracking loss pauses only after a sustained gap, once");
     tracking_gate.reset();
     expect(!tracking_gate.observe(2000u, true) &&

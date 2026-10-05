@@ -429,6 +429,9 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
                   "PRESS START"), x + 25, y + 50, 2, 0xff9cb3d3u);
     drawMenuText(screen, "HANDS APART - BUTTONS UP - SABERS FORWARD",
                  x + 25, y + 77, 2, 0xff9cb3d3u);
+    // A sphere the camera lost for good: its Move button recalibrates it.
+    drawMenuText(screen, "MOVE BUTTON  RESET SPHERE      TRI  QUIT",
+                 x + 25, y + 140, 2, 0xff9cb3d3u);
     screen.rectangle(x + 25, y + 108, width - 50, 14, 0xff303b56u);
     if (recalibrating && hands_separated) {
         const unsigned int elapsed = std::min(1000u, progress_ms);

@@ -45,6 +45,11 @@ public:
     void shutdown();
     bool update(MoveFrame& frame, float blade_length_m, bool read_image = false);
     void setHandSlotsSwapped(bool slots_swapped);
+    // Paint the spheres in the hand colors (blue left, red right) once the
+    // hands are known. Off by default: libgem then keeps choosing hues the
+    // camera can tell apart from the room, and a fixed hue that blends in
+    // (red against skin or warm lamps) loses tracking.
+    void setHandHuesEnabled(bool enabled);
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;
@@ -61,6 +66,10 @@ public:
     bool hueAssignmentPending() const;
     unsigned int hueForPhysicalSlot(unsigned int slot) const;
     int lastHueError() const;
+    // gemGetState result (GEM_STATUS_*, -1 when not read) and gemState
+    // tracking flags of a physical slot in the latest update.
+    int lastResult(unsigned int slot) const;
+    unsigned int lastTrackingFlags(unsigned int slot) const;
 
 private:
     struct Impl;

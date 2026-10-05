@@ -6,7 +6,9 @@ namespace ps3 {
 
 class TrackingPauseGate {
 public:
-    enum { LOSS_THRESHOLD_MS = 250 };
+    // Arms and the body hide a sphere for a moment all the time while
+    // playing; only a loss this long pauses the level.
+    enum { LOSS_THRESHOLD_MS = 1000 };
 
     TrackingPauseGate() : losing_(false), active_(false), lost_since_ms_(0) {}
 

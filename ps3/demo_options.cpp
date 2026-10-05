@@ -80,6 +80,7 @@ RenderOptions readRenderOptions() {
         line[strcspn(line, "\r\n")] = '\0';
         if (strcmp(line, "renderer=software") == 0) options.software = true;
         else if (strcmp(line, "effects=off") == 0) options.effects = false;
+        else if (strcmp(line, "hand_colors=on") == 0) options.hand_colors = true;
     }
     fclose(file);
     return options;

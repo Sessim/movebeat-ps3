@@ -160,7 +160,32 @@ s32 sysModuleUnload(s32) { return 0; }
 
 void runGemRuntimeHueTests() {
     resetFakes();
+    {
+        // Default: the hands never repaint the spheres; libgem keeps
+        // choosing hues, and an unanswered request is repeated.
+        GemRuntime automatic;
+        require(automatic.initialize(), "fake libgem should initialize");
+        MoveFrame frame;
+        require(automatic.update(frame, 0.6f) && g_hue_call_count == 1,
+                "the first frame asks libgem for automatic hues");
+        automatic.setHandSlotsSwapped(true);
+        require(!automatic.hueAssignmentPending(),
+                "assigning hands does not repaint the spheres by default");
+        for (int i = 0; i < 100; ++i) automatic.update(frame, 0.6f);
+        require(g_hue_call_count == 1, "a pending hue request is not spammed");
+        for (int i = 0; i < 30; ++i) automatic.update(frame, 0.6f);
+        require(g_hue_call_count == 2 &&
+                g_last_requested_hues[0] == GEM_HUE_DONT_CARE &&
+                g_last_requested_hues[1] == GEM_HUE_DONT_CARE,
+                "a hue still not set after two seconds is requested again, automatically");
+        require(automatic.lastResult(0) == GEM_STATUS_HUE_NOT_SET &&
+                automatic.lastTrackingFlags(0) == 0u,
+                "the latest libgem result per slot is reported");
+        automatic.shutdown();
+    }
+    resetFakes();
     GemRuntime runtime;
+    runtime.setHandHuesEnabled(true);
     require(runtime.initialize(), "fake PS Eye/libgem initialization should succeed");
     MoveFrame frame;
 

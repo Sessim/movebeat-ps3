@@ -17,6 +17,8 @@ namespace ps3 {
 namespace {
 
 const unsigned int kCaptureFrames = 60u * 30u;
+// About two seconds at 60 Hz before an unanswered hue request is repeated.
+const unsigned int kHueRetryFrames = 120u;
 
 float vectorComponent(const vec_float4& value, unsigned int index) {
     union VectorAccess {
@@ -52,6 +54,11 @@ struct GemRuntime::Impl {
     bool hand_slots_swapped;
     bool hue_assignment_dirty;
     bool hue_values_known;
+    bool hand_hues_enabled;
+    // Frames a hue request has gone unanswered (still HUE_NOT_SET).
+    unsigned int hue_wait_frames;
+    int last_results[2];
+    unsigned int last_tracking[2];
     u32 assigned_hues[4];
     int last_hue_error;
     bool calibration_requested[2];
@@ -80,6 +87,7 @@ struct GemRuntime::Impl {
           spurs_initialized(false), gem_initialized(false), hues_requested(false),
           hand_assignment_known(false), hand_slots_swapped(false),
           hue_assignment_dirty(false), hue_values_known(false),
+          hand_hues_enabled(false), hue_wait_frames(0),
           last_hue_error(0),
           connection_mask(0), last_error(0),
           last_stage(GemRuntime::INIT_NONE),
@@ -95,6 +103,8 @@ struct GemRuntime::Impl {
         rumble[0] = rumble[1] = 0;
         memset(assigned_hues, 0, sizeof(assigned_hues));
         calibration_requested[0] = calibration_requested[1] = false;
+        last_results[0] = last_results[1] = -1;
+        last_tracking[0] = last_tracking[1] = 0;
     }
 };
 
@@ -230,6 +240,9 @@ void GemRuntime::shutdown() {
     impl_->previous_buttons[0] = impl_->previous_buttons[1] = 0;
     impl_->previous_results[0] = impl_->previous_results[1] = -1;
     impl_->rumble[0] = impl_->rumble[1] = 0;
+    impl_->hue_wait_frames = 0;
+    impl_->last_results[0] = impl_->last_results[1] = -1;
+    impl_->last_tracking[0] = impl_->last_tracking[1] = 0;
 }
 
 bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
@@ -255,7 +268,7 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     }
     if (connection_mask != impl_->connection_mask) {
         impl_->hues_requested = false;
-        if (impl_->hand_assignment_known) {
+        if (impl_->hand_assignment_known && impl_->hand_hues_enabled) {
             impl_->hue_assignment_dirty = true;
             impl_->hue_values_known = false;
             impl_->last_hue_error = 0;
@@ -376,6 +389,8 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                 recovery_error = calibration_error;
         }
         impl_->previous_results[index] = results[index];
+        impl_->last_results[index] = results[index];
+        impl_->last_tracking[index] = results[index] == 0 ? states[index].tracking : 0u;
     }
 
     if (impl_->capture_file) {
@@ -435,7 +450,7 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     }
     if (!impl_->hue_assignment_dirty && needs_hues &&
         !impl_->hues_requested) {
-        if (impl_->hand_assignment_known) {
+        if (impl_->hand_assignment_known && impl_->hand_hues_enabled) {
             const u32 requested_hues[4] = {
                 gemHueForPhysicalSlot(0, impl_->hand_slots_swapped),
                 gemHueForPhysicalSlot(1, impl_->hand_slots_swapped),
@@ -474,6 +489,16 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     // A later HUE_NOT_SET result should be able to start a fresh request after
     // a controller has been fully usable or after the connection count changes.
     if (all_ready) impl_->hues_requested = false;
+    // libgem may answer a request and still report HUE_NOT_SET; never wait
+    // for "all ready" forever (it cannot come without a hue): ask again.
+    if (needs_hues && impl_->hues_requested) {
+        if (++impl_->hue_wait_frames >= kHueRetryFrames) {
+            impl_->hues_requested = false;
+            impl_->hue_wait_frames = 0;
+        }
+    } else {
+        impl_->hue_wait_frames = 0;
+    }
 
     impl_->last_error = recovery_error;
     return true;
@@ -485,10 +510,23 @@ void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
         impl_->hand_slots_swapped != slots_swapped) {
         impl_->hand_assignment_known = true;
         impl_->hand_slots_swapped = slots_swapped;
+        if (!impl_->hand_hues_enabled) return;
         impl_->hue_assignment_dirty = true;
         impl_->hue_values_known = false;
         impl_->last_hue_error = 0;
     }
+}
+
+void GemRuntime::setHandHuesEnabled(bool enabled) {
+    if (impl_) impl_->hand_hues_enabled = enabled;
+}
+
+int GemRuntime::lastResult(unsigned int slot) const {
+    return impl_ && slot < 2 ? impl_->last_results[slot] : -1;
+}
+
+unsigned int GemRuntime::lastTrackingFlags(unsigned int slot) const {
+    return impl_ && slot < 2 ? impl_->last_tracking[slot] : 0u;
 }
 
 bool GemRuntime::startCapture(const char* path) {

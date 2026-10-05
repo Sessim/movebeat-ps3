@@ -24,7 +24,11 @@ RunStatus::RunStatus()
       menu_ticks(0), menu_flicks(0), menu_difficulty_changes(0),
       menu_randomizer_spins(0), menu_preview_starts(0), menu_chord_starts(0),
       pose_calibrated(0), playlist_count(0), shelf(0), playlist_songs_played(0),
-      playlist_total_score(0), playlist_complete(0), sound_effects(0),
+      playlist_total_score(0), playlist_complete(0),
+      gem_slot0_result(-1), gem_slot1_result(-1), gem_slot0_flags(0),
+      gem_slot1_flags(0), tracking_pause_slot0_result(-1),
+      tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
+      tracking_pause_slot1_flags(0), tracking_quit_count(0), sound_effects(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
@@ -75,6 +79,11 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "menu_chord_starts=%u\npose_calibrated=%d\n"
             "playlist_count=%u\nshelf=%u\nplaylist_songs_played=%u\n"
             "playlist_total_score=%u\nplaylist_complete=%d\n"
+            "gem_slot0_result=%d\ngem_slot1_result=%d\n"
+            "gem_slot0_flags=%u\ngem_slot1_flags=%u\n"
+            "tracking_pause_slot0_result=%d\ntracking_pause_slot1_result=%d\n"
+            "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
+            "tracking_quit_count=%u\n"
             "sound_effects=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
@@ -122,6 +131,11 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.menu_chord_starts, status.pose_calibrated,
             status.playlist_count, status.shelf, status.playlist_songs_played,
             status.playlist_total_score, status.playlist_complete,
+            status.gem_slot0_result, status.gem_slot1_result,
+            status.gem_slot0_flags, status.gem_slot1_flags,
+            status.tracking_pause_slot0_result, status.tracking_pause_slot1_result,
+            status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
+            status.tracking_quit_count,
             status.sound_effects,
             status.error_stage, status.error_code,
             status.level_count, status.library_cards_loaded,

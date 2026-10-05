@@ -170,6 +170,7 @@ bool App::initializeSystems(int& exit_code) {
     demo_mode_ = demo_options_.enabled;
     diagnostic_.phase = "gem_initializing";
     writeRunStatus(kRunStatusPath, diagnostic_);
+    gem_.setHandHuesEnabled(render_options.hand_colors);
     if (!demo_mode_ && !gem_.initialize()) {
         const GemRuntime::InitStage stage = gem_.lastStage();
         const int error = gem_.lastError();
@@ -538,16 +539,16 @@ void App::readDemoInput(FrameInput& input) {
     if (!demo_loss_started_us_) return;
     const unsigned int loss_elapsed_ms = static_cast<unsigned int>(
         (nowMicroseconds() - demo_loss_started_us_) / 1000ull);
-    if (loss_elapsed_ms < 450u) {
+    if (loss_elapsed_ms < 1250u) {
         input.moves.left.tracked = false;
-    } else if (tracking_paused_ || loss_elapsed_ms < 1800u) {
+    } else if (tracking_paused_ || loss_elapsed_ms < 2600u) {
         input.moves.left = movebeat::SaberPose(
             movebeat::Vec3(-0.35f, -0.7f, -0.3f),
             movebeat::Vec3(-0.35f, 0.0f, 0.0f), true);
         input.moves.right = movebeat::SaberPose(
             movebeat::Vec3(0.35f, -0.7f, -0.3f),
             movebeat::Vec3(0.35f, 0.0f, 0.0f), true);
-        if (loss_elapsed_ms >= 500u && loss_elapsed_ms < 600u)
+        if (loss_elapsed_ms >= 1300u && loss_elapsed_ms < 1400u)
             input.moves.left_buttons = kButtonStart;
     } else if (diagnostic_.tracking_recovery_count > 0u) {
         demo_loss_finished_ = true;
@@ -961,6 +962,11 @@ void App::updateTrackingPause(FrameInput& input) {
         game_.invalidateInput();
         synchronizePause();
         ++diagnostic_.tracking_pause_count;
+        // What libgem said when the level paused, for hardware reports.
+        diagnostic_.tracking_pause_slot0_result = gem_.lastResult(0);
+        diagnostic_.tracking_pause_slot1_result = gem_.lastResult(1);
+        diagnostic_.tracking_pause_slot0_flags = gem_.lastTrackingFlags(0);
+        diagnostic_.tracking_pause_slot1_flags = gem_.lastTrackingFlags(1);
         diagnostic_.tracking_pause_audio_ms = audio_clock_ ? audio_.timeMs() : 0u;
         diagnostic_.tracking_pause_score = game_.score().score;
         diagnostic_.tracking_pause_hits = game_.score().hits;
@@ -968,6 +974,10 @@ void App::updateTrackingPause(FrameInput& input) {
         printf("Tracking lost; audio and chart paused\n");
     }
     if (run_state_ != RUN_PLAY || !tracking_paused_) return;
+    if ((input.level_pressed & kButtonTriangle) && !g_pause_requested) {
+        quitLevel();
+        return;
+    }
     if (!input.both_moves_tracked || g_pause_requested) {
         tracking_calibration_.reset();
         tracking_recalibrating_ = false;
@@ -999,6 +1009,28 @@ void App::updateTrackingPause(FrameInput& input) {
         ++diagnostic_.tracking_recovery_count;
         printf("Tracking recovered; level resumed\n");
     }
+}
+
+void App::quitLevel() {
+    audio_.shutdown();
+    audio_clock_ = false;
+    tracking_paused_ = false;
+    tracking_recalibrating_ = false;
+    tracking_calibration_.reset();
+    tracking_gate_.reset();
+    synchronizePause();
+    run_state_ = RUN_SELECT;
+    if (playlist_run_.active()) printf("Playlist run stopped\n");
+    playlist_run_.stop();
+    next_song_remaining_ms_ = 0;
+    game_.reset();
+    cut_feedback_.clear();
+    left_rumble_frames_ = right_rumble_frames_ = 0;
+    carousel_.reset(static_cast<int>(shelf_pos_));
+    last_tick_row_ = carousel_.nearestRow();
+    selection_changed_ms_ = nowMilliseconds();
+    ++diagnostic_.tracking_quit_count;
+    printf("Level left while tracking was lost\n");
 }
 
 void App::updateCalibration(FrameInput& input) {
@@ -1563,6 +1595,10 @@ void App::publishDiagnostics(const FrameInput& input) {
     diagnostic_.right_tracked = moves.right.tracked ? 1 : 0;
     diagnostic_.hand_slots_swapped = hand_slots_swapped_ ? 1 : 0;
     diagnostic_.pose_calibrated = pose_calibrated_ ? 1 : 0;
+    diagnostic_.gem_slot0_result = gem_.lastResult(0);
+    diagnostic_.gem_slot1_result = gem_.lastResult(1);
+    diagnostic_.gem_slot0_flags = gem_.lastTrackingFlags(0);
+    diagnostic_.gem_slot1_flags = gem_.lastTrackingFlags(1);
     diagnostic_.hand_assignment_established =
         hand_assignment_established_ ? 1 : 0;
     diagnostic_.invert_hands_setting = settings_.invert_hands ? 1 : 0;

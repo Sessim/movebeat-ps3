@@ -38,8 +38,10 @@ EmulatorDemoOptions readEmulatorDemoOptions();
 struct RenderOptions {
     bool software;
     bool effects;
+    // "hand_colors=on": paint the spheres blue (left) and red (right).
+    bool hand_colors;
 
-    RenderOptions() : software(false), effects(true) {}
+    RenderOptions() : software(false), effects(true), hand_colors(false) {}
 };
 
 RenderOptions readRenderOptions();
