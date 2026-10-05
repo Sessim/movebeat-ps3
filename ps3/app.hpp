@@ -59,6 +59,10 @@ private:
         bool timing_modifier;
         bool start_pressed;
         bool both_moves_tracked;
+        // Both spheres seen by the camera (not just held by the sensors).
+        bool both_moves_optical;
+        // The camera's poses only: what calibration may measure.
+        MoveFrame optical;
         bool hand_toggle;
         bool cancel_calibration;
         bool calibrated_start;
@@ -125,6 +129,7 @@ private:
     void updateTrackingPause(FrameInput& input);
     // Leaves a level for the library (Triangle while tracking is lost).
     void quitLevel();
+    void resumeAfterTrackingLoss();
     void updateCalibration(FrameInput& input);
     void assignHands(const MoveFrame& moves);
     void setHandAssignment(bool slots_swapped);
@@ -231,6 +236,8 @@ private:
     bool tracking_paused_;
     bool tracking_recalibrating_;
     TrackingPauseGate tracking_gate_;
+    // Since when both spheres are back in view during a tracking pause.
+    unsigned int resume_since_ms_;
     movebeat::PoseCalibration tracking_calibration_;
     unsigned long long pause_started_us_;
 

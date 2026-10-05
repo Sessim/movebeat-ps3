@@ -83,7 +83,8 @@ App::FrameInput::FrameInput()
     : gem_update_ok(false), pointer_start(false),
       calibration_hands_separated(false), selection_pressed(0),
       level_pressed(0), blade_modifier(false), timing_modifier(false),
-      start_pressed(false), both_moves_tracked(false), hand_toggle(false),
+      start_pressed(false), both_moves_tracked(false), both_moves_optical(false),
+      hand_toggle(false),
       cancel_calibration(false), calibrated_start(false),
       move_chord(false), move_tap_slot(-1), raw_level_time_ms(0), level_time_ms(0) {}
 
@@ -100,6 +101,7 @@ App::App()
       randomizer_spinning_(false), last_motion_ms_(0), last_tick_row_(0.0f),
       selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0),
       paused_(false), tracking_paused_(false), tracking_recalibrating_(false),
+      resume_since_ms_(0),
       pause_started_us_(0), diagnostic_frame_(0),
       previous_diagnostic_phase_(""), first_frame_saved_(false),
       demo_frame_saved_(false), demo_scored_frame_saved_(false),
@@ -560,9 +562,14 @@ void App::readInput(FrameInput& input) {
     } else {
         input.gem_update_ok = gem_.update(
             input.moves, static_cast<float>(settings_.blade_length_cm) * 0.01f,
-            run_state_ == RUN_SELECT && !calibrating_ && !paused_);
+            run_state_ == RUN_SELECT && !calibrating_ && !paused_,
+            nowMilliseconds());
     }
     const MoveFrame& moves = input.moves;
+    input.optical = moves;
+    if (moves.held[0] || moves.partial[0]) input.optical.left.tracked = false;
+    if (moves.held[1] || moves.partial[1]) input.optical.right.tracked = false;
+    input.both_moves_optical = input.optical.left.tracked && input.optical.right.tracked;
     input.buttons = menu_buttons_.update(
         moves, demo_mode_ ? 3u : gem_.lastButtonReadyMask());
     const MenuButtonSample& buttons = input.buttons;
@@ -577,7 +584,7 @@ void App::readInput(FrameInput& input) {
         menu_navigation_repeat_.reset();
     }
     input.calibration_hands_separated =
-        handsSeparatedForCalibration(moves.left, moves.right);
+        handsSeparatedForCalibration(input.optical.left, input.optical.right);
     input.selection_pressed = static_cast<unsigned short>(
         buttons.pressed & (kButtonCircle | kButtonSquare));
     input.level_pressed = static_cast<unsigned short>(
@@ -994,12 +1001,12 @@ void App::scriptCalibrationPose(FrameInput& input, bool crossed) const {
 }
 
 void App::updateTrackingPause(FrameInput& input) {
-    const MoveFrame& moves = input.moves;
     if (run_state_ == RUN_PLAY &&
         (!demo_mode_ || demo_options_.tracking_loss_test) && !paused_ &&
         tracking_gate_.observe(nowMilliseconds(), input.both_moves_tracked)) {
         tracking_paused_ = true;
         tracking_recalibrating_ = false;
+        resume_since_ms_ = 0;
         tracking_calibration_.reset();
         game_.invalidateInput();
         synchronizePause();
@@ -1020,10 +1027,22 @@ void App::updateTrackingPause(FrameInput& input) {
         quitLevel();
         return;
     }
-    if (!input.both_moves_tracked || g_pause_requested) {
+    if (!input.both_moves_optical || g_pause_requested) {
         tracking_calibration_.reset();
         tracking_recalibrating_ = false;
+        resume_since_ms_ = 0;
         return;
+    }
+    // Both spheres back in view for half a second: play on where the
+    // player is; Start instead re-centers the play space first.
+    const unsigned int now_ms = nowMilliseconds();
+    if (!tracking_recalibrating_) {
+        if (!resume_since_ms_) resume_since_ms_ = now_ms ? now_ms : 1u;
+        if (now_ms - resume_since_ms_ >= 500u) {
+            resumeAfterTrackingLoss();
+            printf("Tracking back; level resumed\n");
+            return;
+        }
     }
     if (input.start_pressed && !tracking_recalibrating_) {
         tracking_calibration_.reset();
@@ -1034,24 +1053,28 @@ void App::updateTrackingPause(FrameInput& input) {
     if (!input.calibration_hands_separated) {
         tracking_calibration_.reset();
     } else if (tracking_calibration_.sample(nowMilliseconds(),
-                                            moves.left, moves.right)) {
+                                            input.optical.left, input.optical.right)) {
         body_frame_.recenter(tracking_calibration_.origin(),
                              tracking_calibration_.handleOrigin());
         pose_calibrated_ = true;
-        assignHands(moves);
-        tracking_recalibrating_ = false;
-        tracking_paused_ = false;
-        tracking_gate_.reset();
-        game_.invalidateInput();
-        diagnostic_.tracking_resume_audio_ms =
-            audio_clock_ ? audio_.timeMs() : 0u;
-        diagnostic_.tracking_resume_score = game_.score().score;
-        diagnostic_.tracking_resume_hits = game_.score().hits;
-        diagnostic_.tracking_resume_misses = game_.score().misses;
-        synchronizePause();
-        ++diagnostic_.tracking_recovery_count;
+        assignHands(input.optical);
+        resumeAfterTrackingLoss();
         printf("Tracking recovered; level resumed\n");
     }
+}
+
+void App::resumeAfterTrackingLoss() {
+    tracking_recalibrating_ = false;
+    tracking_paused_ = false;
+    resume_since_ms_ = 0;
+    tracking_gate_.reset();
+    game_.invalidateInput();
+    diagnostic_.tracking_resume_audio_ms = audio_clock_ ? audio_.timeMs() : 0u;
+    diagnostic_.tracking_resume_score = game_.score().score;
+    diagnostic_.tracking_resume_hits = game_.score().hits;
+    diagnostic_.tracking_resume_misses = game_.score().misses;
+    synchronizePause();
+    ++diagnostic_.tracking_recovery_count;
 }
 
 void App::quitLevel() {
@@ -1077,7 +1100,6 @@ void App::quitLevel() {
 }
 
 void App::updateCalibration(FrameInput& input) {
-    const MoveFrame& moves = input.moves;
     if (calibrating_ && !paused_) {
         const movebeat::BodyCalibration::Step before = body_calibration_.step();
         // The Move button of each controller says "I am in the pose". In
@@ -1095,7 +1117,7 @@ void App::updateCalibration(FrameInput& input) {
                         2, 120);
         }
         input.calibrated_start = body_calibration_.sample(
-            nowMilliseconds(), moves.left, moves.right);
+            nowMilliseconds(), input.optical.left, input.optical.right);
         // The hands are known after the sideways pose: color the spheres
         // now, so the last pose already checks tracking in those colors.
         if (before == movebeat::BodyCalibration::STEP_SIDES &&
@@ -1463,10 +1485,14 @@ void App::renderOverlays(const FrameInput& input) {
     drawConnection(screen_, 0, moves.left_connected, moves.left.tracked, 0xff40b8ffu);
     drawConnection(screen_, 1, moves.right_connected, moves.right.tracked, 0xffff4058u);
     if (run_state_ == RUN_PLAY && tracking_paused_) {
-        drawTrackingPauseOverlay(screen_, input.both_moves_tracked,
+        drawTrackingPauseOverlay(screen_, input.both_moves_optical,
                                  tracking_recalibrating_,
                                  input.calibration_hands_separated,
-                                 tracking_calibration_.progressMs());
+                                 tracking_recalibrating_
+                                     ? tracking_calibration_.progressMs()
+                                     : (resume_since_ms_
+                                            ? (nowMilliseconds() - resume_since_ms_) * 2u
+                                            : 0u));
     }
     if (calibrating_) {
         CalibrationView view;
@@ -1677,6 +1703,13 @@ void App::publishDiagnostics(const FrameInput& input) {
     diagnostic_.right_tracked = moves.right.tracked ? 1 : 0;
     diagnostic_.hand_slots_swapped = hand_slots_swapped_ ? 1 : 0;
     diagnostic_.pose_calibrated = pose_calibrated_ ? 1 : 0;
+    diagnostic_.imu_held_frames = gem_.imuHeldFrames();
+    diagnostic_.imu_slot0_variant = gem_.imuVariant(0);
+    diagnostic_.imu_slot1_variant = gem_.imuVariant(1);
+    diagnostic_.imu_slot0_error_deg = static_cast<int>(gem_.imuErrorDegrees(0) + 0.5f);
+    diagnostic_.imu_slot1_error_deg = static_cast<int>(gem_.imuErrorDegrees(1) + 0.5f);
+    diagnostic_.imu_slot0_scored = gem_.imuScored(0);
+    diagnostic_.imu_slot1_scored = gem_.imuScored(1);
     diagnostic_.gem_slot0_result = gem_.lastResult(0);
     diagnostic_.gem_slot1_result = gem_.lastResult(1);
     diagnostic_.gem_slot0_flags = gem_.lastTrackingFlags(0);

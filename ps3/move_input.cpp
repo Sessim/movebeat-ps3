@@ -26,9 +26,11 @@ Vec3 gemPointToGame(const vec_float4 value) {
 }
 
 SaberPose toSaberPose(const gemState& state, float blade_length_m) {
+    // Either flag will do for play. On hardware libgem often reports a
+    // sphere it sees without a position fix (VISIBLE alone), e.g. pointed
+    // straight at the lens; its position still follows the image.
     const bool optical_tracking =
-        (state.tracking & GEM_TRACKING_POSITION_TRACKED) != 0 &&
-        (state.tracking & GEM_TRACKING_VISIBLE) != 0;
+        (state.tracking & (GEM_TRACKING_POSITION_TRACKED | GEM_TRACKING_VISIBLE)) != 0;
     const Vec3 handle = gemPointToGame(state.handle_pos);
     const Vec3 sphere = gemPointToGame(state.pos);
     const bool finite = std::isfinite(handle.x) && std::isfinite(handle.y) &&
@@ -55,8 +57,11 @@ void applyGemSample(unsigned int index, const gemState& state, int result,
     SaberPose pose;
     unsigned short buttons = 0;
     unsigned short trigger = 0;
+    bool partial = false;
     if (result == 0) {
         pose = toSaberPose(state, blade_length_m);
+        const unsigned int full = GEM_TRACKING_POSITION_TRACKED | GEM_TRACKING_VISIBLE;
+        partial = pose.tracked && (state.tracking & full) != full;
         buttons = state.paddata.buttons;
         trigger = state.paddata.ANA_T;
     }
@@ -70,6 +75,7 @@ void applyGemSample(unsigned int index, const gemState& state, int result,
         frame.right_buttons = buttons;
         frame.right_trigger = trigger;
     }
+    if (index < 2) frame.partial[index] = partial;
 }
 
 void applyInertialSample(unsigned int index, const gemInertialState& state,

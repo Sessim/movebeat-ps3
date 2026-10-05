@@ -418,22 +418,24 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
     const int x = (screen.width() - width) / 2;
     const int y = screen.height() / 3;
     screen.rectangle(x - 12, y - 20, width + 24, 194, 0xff111b30u);
+    // Both spheres back in view: the level resumes by itself (the bar),
+    // or Start re-centers the play space first.
     const char* message = !both_moves_tracked ? "TRACKING LOST" :
-        (!recalibrating ? "START RECALIBRATE" :
+        (!recalibrating ? "RESUMING" :
          (!hands_separated ? "SEPARATE MOVE HANDS" :
           "HOLD BOTH MOVE STILL"));
     drawMenuText(screen, message, x + 25, y, 3,
                  both_moves_tracked ? 0xffd9e7ffu : 0xffffad8bu);
-    drawMenuText(screen, !both_moves_tracked ? "SHOW BOTH MOVE" :
+    drawMenuText(screen, !both_moves_tracked ? "SHOW BOTH MOVE TO THE CAMERA" :
                  (recalibrating ? "RETURN TO START POSE" :
-                  "PRESS START"), x + 25, y + 50, 2, 0xff9cb3d3u);
+                  "START  RECENTER"), x + 25, y + 50, 2, 0xff9cb3d3u);
     drawMenuText(screen, "HANDS APART - BUTTONS UP - SABERS FORWARD",
                  x + 25, y + 77, 2, 0xff9cb3d3u);
     // A sphere the camera lost for good: its Move button recalibrates it.
     drawMenuText(screen, "MOVE BUTTON  RESET SPHERE      TRI  QUIT",
                  x + 25, y + 140, 2, 0xff9cb3d3u);
     screen.rectangle(x + 25, y + 108, width - 50, 14, 0xff303b56u);
-    if (recalibrating && hands_separated) {
+    if (both_moves_tracked && (!recalibrating || hands_separated)) {
         const unsigned int elapsed = std::min(1000u, progress_ms);
         screen.rectangle(x + 25, y + 108,
                          (width - 50) * elapsed / 1000, 14,

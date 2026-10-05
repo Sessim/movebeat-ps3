@@ -1,5 +1,7 @@
 #include "gem_runtime.hpp"
 
+#include "imu_pose.hpp"
+
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
@@ -59,6 +61,9 @@ struct GemRuntime::Impl {
     unsigned int hue_wait_frames;
     int last_results[2];
     unsigned int last_tracking[2];
+    ImuSaberTracker imu[2];
+    unsigned int imu_held_frames;
+    unsigned int update_count;
     u32 assigned_hues[4];
     int last_hue_error;
     bool calibration_requested[2];
@@ -87,7 +92,8 @@ struct GemRuntime::Impl {
           spurs_initialized(false), gem_initialized(false), hues_requested(false),
           hand_assignment_known(false), hand_slots_swapped(false),
           hue_assignment_dirty(false), hue_values_known(false),
-          hand_hues_enabled(false), hue_wait_frames(0),
+          hand_hues_enabled(false), hue_wait_frames(0), imu_held_frames(0),
+          update_count(0),
           last_hue_error(0),
           connection_mask(0), last_error(0),
           last_stage(GemRuntime::INIT_NONE),
@@ -241,13 +247,17 @@ void GemRuntime::shutdown() {
     impl_->previous_results[0] = impl_->previous_results[1] = -1;
     impl_->rumble[0] = impl_->rumble[1] = 0;
     impl_->hue_wait_frames = 0;
+    impl_->imu[0].reset();
+    impl_->imu[1].reset();
     impl_->last_results[0] = impl_->last_results[1] = -1;
     impl_->last_tracking[0] = impl_->last_tracking[1] = 0;
 }
 
 bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
-                        bool read_image) {
+                        bool read_image, unsigned int now_ms) {
     frame = MoveFrame();
+    ++impl_->update_count;
+    if (!now_ms) now_ms = impl_->update_count * 17u;
     impl_->last_update_stage = UPDATE_NONE;
     impl_->last_camera_read_count = 0;
     impl_->last_gem_connected_count = 0;
@@ -279,6 +289,7 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                 impl_->previous_buttons[index] = 0;
                 impl_->previous_results[index] = -1;
                 impl_->rumble[index] = 0;
+                impl_->imu[index].reset();
             }
         }
         impl_->connection_mask = connection_mask;
@@ -334,6 +345,18 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
         if ((connection_mask & (1u << index)) == 0) continue;
         results[index] = gemGetState(index, STATE_CURRENT_TIME, 0, &states[index]);
         applyGemSample(index, states[index], results[index], blade_length_m, frame);
+        {
+            // The camera's pose, or the last one turned by the Move's own
+            // orientation while the camera has lost the sphere.
+            SaberPose& pose = index == 0 ? frame.left : frame.right;
+            const RawQuat quat(vectorComponent(states[index].quat, 0),
+                               vectorComponent(states[index].quat, 1),
+                               vectorComponent(states[index].quat, 2),
+                               vectorComponent(states[index].quat, 3));
+            pose = impl_->imu[index].update(now_ms, pose, results[index] == 0, quat);
+            frame.held[index] = impl_->imu[index].held();
+            if (frame.held[index]) ++impl_->imu_held_frames;
+        }
         if (results[index] == 0 && (read_image || impl_->capture_file)) {
             image_results[index] = gemGetImageState(index, &images[index]);
             const int camera_width = impl_->camera_info.width > 0
@@ -380,7 +403,8 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                 recovery_error = calibration_error;
             }
         } else if ((pressed & GEM_BUTTON_MOVE) != 0 &&
-                   !(index == 0 ? frame.left.tracked : frame.right.tracked)) {
+                   (!(index == 0 ? frame.left.tracked : frame.right.tracked) ||
+                    frame.held[index])) {
             // Move restarts the sphere calibration only for a controller the
             // camera cannot track; a tracked Move uses the button in the menu
             // (randomizer, two-Move start).
@@ -535,6 +559,23 @@ bool GemRuntime::calibrateSlot(unsigned int slot) {
 
 void GemRuntime::setHandHuesEnabled(bool enabled) {
     if (impl_) impl_->hand_hues_enabled = enabled;
+}
+
+unsigned int GemRuntime::imuHeldFrames() const {
+    return impl_ ? impl_->imu_held_frames : 0u;
+}
+
+int GemRuntime::imuVariant(unsigned int slot) const {
+    return impl_ && slot < 2 ? impl_->imu[slot].bestVariant() : 0;
+}
+
+float GemRuntime::imuErrorDegrees(unsigned int slot) const {
+    return impl_ && slot < 2
+        ? impl_->imu[slot].errorDegrees(impl_->imu[slot].bestVariant()) : 0.0f;
+}
+
+unsigned int GemRuntime::imuScored(unsigned int slot) const {
+    return impl_ && slot < 2 ? impl_->imu[slot].scoredSamples() : 0u;
 }
 
 int GemRuntime::lastResult(unsigned int slot) const {

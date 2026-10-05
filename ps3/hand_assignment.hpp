@@ -29,6 +29,8 @@ inline void swapMoveFrameHands(MoveFrame& frame) {
     std::swap(frame.image[0], frame.image[1]);
     std::swap(frame.left_buttons, frame.right_buttons);
     std::swap(frame.left_trigger, frame.right_trigger);
+    std::swap(frame.held[0], frame.held[1]);
+    std::swap(frame.partial[0], frame.partial[1]);
 }
 
 inline unsigned int physicalSlotForHand(unsigned int logical_hand,

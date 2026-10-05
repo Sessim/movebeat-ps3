@@ -75,10 +75,20 @@ struct MoveFrame {
     unsigned short right_buttons;
     unsigned short left_trigger;
     unsigned short right_trigger;
+    // The pose of this physical slot is held by the Move's own sensors
+    // (camera lost the sphere for a moment): fine to play with, not to
+    // measure positions from.
+    bool held[2];
+    // The camera sees the sphere but libgem lacks a full fix (only one of
+    // its "position tracked" and "visible" flags): playable, not measured.
+    bool partial[2];
 
     MoveFrame()
         : left(), right(), left_connected(false), right_connected(false),
-          left_buttons(0), right_buttons(0), left_trigger(0), right_trigger(0) {}
+          left_buttons(0), right_buttons(0), left_trigger(0), right_trigger(0) {
+        held[0] = held[1] = false;
+        partial[0] = partial[1] = false;
+    }
 };
 
 // Converts a libgem sample already captured for this camera frame. Keeping the

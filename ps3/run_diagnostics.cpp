@@ -28,7 +28,9 @@ RunStatus::RunStatus()
       gem_slot0_result(-1), gem_slot1_result(-1), gem_slot0_flags(0),
       gem_slot1_flags(0), tracking_pause_slot0_result(-1),
       tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
-      tracking_pause_slot1_flags(0), tracking_quit_count(0),
+      tracking_pause_slot1_flags(0), tracking_quit_count(0), imu_held_frames(0),
+      imu_slot0_variant(0), imu_slot1_variant(0), imu_slot0_error_deg(0),
+      imu_slot1_error_deg(0), imu_slot0_scored(0), imu_slot1_scored(0),
       calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
       body_span_cm(0), body_drop_cm(0),
       body_turn_deg(0), body_turn_applied(0), body_scale_pct(100), sound_effects(0),
@@ -87,6 +89,9 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "tracking_pause_slot0_result=%d\ntracking_pause_slot1_result=%d\n"
             "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
             "tracking_quit_count=%u\n"
+            "imu_held_frames=%u\nimu_slot0_variant=%d\nimu_slot1_variant=%d\n"
+            "imu_slot0_error_deg=%d\nimu_slot1_error_deg=%d\n"
+            "imu_slot0_scored=%u\nimu_slot1_scored=%u\n"
             "calibration_step=%d\nbody_up_inverted=%d\nbody_narrow_sides=%d\n"
             "body_span_cm=%d\n"
             "body_drop_cm=%d\nbody_turn_deg=%d\nbody_turn_applied=%d\n"
@@ -142,7 +147,10 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.gem_slot0_flags, status.gem_slot1_flags,
             status.tracking_pause_slot0_result, status.tracking_pause_slot1_result,
             status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
-            status.tracking_quit_count,
+            status.tracking_quit_count, status.imu_held_frames,
+            status.imu_slot0_variant, status.imu_slot1_variant,
+            status.imu_slot0_error_deg, status.imu_slot1_error_deg,
+            status.imu_slot0_scored, status.imu_slot1_scored,
             status.calibration_step, status.body_up_inverted,
             status.body_narrow_sides, status.body_span_cm,
             status.body_drop_cm, status.body_turn_deg, status.body_turn_applied,

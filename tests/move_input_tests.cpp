@@ -2,7 +2,9 @@
 #include "demo_input.hpp"
 #include "menu_buttons.hpp"
 #include "hand_assignment.hpp"
+#include "imu_pose.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -63,9 +65,20 @@ void testRejectedAndUntrackedSamples() {
 
     movebeat::ps3::MoveFrame frame;
     movebeat::ps3::applyGemSample(1, state, 0, 0.9f, frame);
-    expect(!frame.right.tracked, "position without a visible sphere is not tracked");
+    expect(frame.right.tracked && frame.partial[1],
+           "a position fix without a visible sphere plays, as a partial fix");
     expect(frame.right_buttons == 0xffff && frame.right_trigger == 255,
            "buttons remain available while optical tracking is lost");
+
+    state.tracking = GEM_TRACKING_VISIBLE;
+    movebeat::ps3::applyGemSample(1, state, 0, 0.9f, frame);
+    expect(frame.right.tracked && frame.partial[1],
+           "a visible sphere without a position fix plays, as a partial fix");
+    state.tracking = 0;
+    movebeat::ps3::applyGemSample(1, state, 0, 0.9f, frame);
+    expect(!frame.right.tracked && !frame.partial[1],
+           "neither flag is not tracked");
+    state.tracking = GEM_TRACKING_POSITION_TRACKED;
 
     movebeat::ps3::applyGemSample(1, state, 5, 0.9f, frame);
     expect(!frame.right.tracked && frame.right_buttons == 0 &&
@@ -282,6 +295,62 @@ void testScriptedDemoCuts() {
            "scripted cuts flow through the normal scoring path");
 }
 
+// A quaternion turning `degrees` about the vertical axis, stored as libgem
+// would in one of the two component orders.
+movebeat::ps3::RawQuat yawQuat(float degrees, bool w_first) {
+    const float half = degrees * 0.00872664626f;
+    const float s = std::sin(half), c = std::cos(half);
+    return w_first ? movebeat::ps3::RawQuat(c, 0.0f, s, 0.0f)
+                   : movebeat::ps3::RawQuat(0.0f, s, 0.0f, c);
+}
+
+void testImuHold() {
+    using movebeat::ps3::ImuSaberTracker;
+    using movebeat::ps3::RawQuat;
+    for (int order = 0; order < 2; ++order) {
+        const bool w_first = order == 1;
+        ImuSaberTracker tracker;
+        const movebeat::Vec3 handle(0.1f, 1.2f, 1.5f);
+        const movebeat::Vec3 forward(0.0f, 0.0f, -1.0f);
+        unsigned int time = 1000;
+        float degrees = 0.0f;
+        // The camera sees the blade swing to and fro about the vertical.
+        for (int frame = 0; frame < 120; ++frame, time += 17) {
+            degrees = 40.0f * std::sin(frame * 0.15f);
+            const RawQuat quat = yawQuat(degrees, w_first);
+            const movebeat::Vec3 direction = ImuSaberTracker::turn(
+                w_first ? 2 : 0, quat, yawQuat(0.0f, w_first), forward);
+            const movebeat::SaberPose seen(handle, handle + direction * 1.2f, true);
+            const movebeat::SaberPose out = tracker.update(time, seen, true, quat);
+            expect(out.tracked && !tracker.held(), "a camera pose passes through");
+        }
+        expect(tracker.scoredSamples() > 5 && tracker.bestVariant() == (w_first ? 2 : 0) &&
+               tracker.errorDegrees(tracker.bestVariant()) < 1.0f,
+               "the quaternion reading that matches the camera is chosen");
+        const int wrong = w_first ? 3 : 1;
+        expect(tracker.errorDegrees(wrong) > 5.0f, "the opposite reading is rejected");
+
+        // The camera loses the sphere: the hand stays, the blade turns on.
+        const RawQuat last = yawQuat(degrees, w_first);
+        const RawQuat turned = yawQuat(degrees + 30.0f, w_first);
+        movebeat::SaberPose held = tracker.update(time, movebeat::SaberPose(), true, turned);
+        expect(held.tracked && tracker.held(), "a lost sphere is held by the sensors");
+        const movebeat::Vec3 before = ImuSaberTracker::turn(
+            w_first ? 2 : 0, last, yawQuat(0.0f, w_first), forward);
+        const movebeat::Vec3 after = normalized(held.tip - held.handle);
+        const float angle = std::acos(std::max(-1.0f, std::min(1.0f, dot(before, after)))) *
+                            57.2957795f;
+        expect(near(held.handle.x, handle.x) && std::fabs(angle - 30.0f) < 1.0f &&
+               near(length(held.tip - held.handle), 1.2f),
+               "the held blade turns with the quaternion, at full length");
+        held = tracker.update(time + ImuSaberTracker::holdMs() + 1u,
+                              movebeat::SaberPose(), true, turned);
+        expect(!held.tracked && !tracker.held(), "after the hold the hand counts as lost");
+        expect(!tracker.update(time, movebeat::SaberPose(), false, turned).tracked,
+               "without a quaternion nothing is held");
+    }
+}
+
 void testMoveButtonChord() {
     using movebeat::ps3::MoveButtonChord;
     using movebeat::ps3::MoveChordEvents;
@@ -339,6 +408,7 @@ int main() {
     testInertialButtonsWithoutCameraPose();
     testMenuButtonEdges();
     testMoveButtonChord();
+    testImuHold();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();

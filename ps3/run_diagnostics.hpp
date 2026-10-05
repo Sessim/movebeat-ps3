@@ -70,6 +70,16 @@ struct RunStatus {
     unsigned int tracking_pause_slot0_flags;
     unsigned int tracking_pause_slot1_flags;
     unsigned int tracking_quit_count;
+    // Inertial hold: frames a pose was held by the Move's sensors, and per
+    // slot the quaternion reading chosen (0-3), its disagreement with the
+    // camera (degrees) and the turns it was scored on.
+    unsigned int imu_held_frames;
+    int imu_slot0_variant;
+    int imu_slot1_variant;
+    int imu_slot0_error_deg;
+    int imu_slot1_error_deg;
+    unsigned int imu_slot0_scored;
+    unsigned int imu_slot1_scored;
     // Guided calibration: current step (0 forward, 1 sides, 2 down, 3
     // done), arms-down pose seen above the forward one, and the results.
     int calibration_step;

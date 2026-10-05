@@ -43,7 +43,10 @@ public:
 
     bool initialize();
     void shutdown();
-    bool update(MoveFrame& frame, float blade_length_m, bool read_image = false);
+    // `now_ms` drives the inertial hold of a sphere the camera lost (0: one
+    // frame counts as 17 ms).
+    bool update(MoveFrame& frame, float blade_length_m, bool read_image = false,
+                unsigned int now_ms = 0);
     void setHandSlotsSwapped(bool slots_swapped);
     // Paint the spheres in the hand colors (blue left, red right) once the
     // hands are known. Off by default: libgem then keeps choosing hues the
@@ -73,6 +76,12 @@ public:
     // tracking flags of a physical slot in the latest update.
     int lastResult(unsigned int slot) const;
     unsigned int lastTrackingFlags(unsigned int slot) const;
+    // Inertial hold: frames held so far, and per slot the quaternion
+    // reading in use and its smoothed disagreement with the camera.
+    unsigned int imuHeldFrames() const;
+    int imuVariant(unsigned int slot) const;
+    float imuErrorDegrees(unsigned int slot) const;
+    unsigned int imuScored(unsigned int slot) const;
 
 private:
     struct Impl;
