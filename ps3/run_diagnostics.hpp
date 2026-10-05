@@ -90,6 +90,8 @@ struct RunStatus {
     int body_drop_cm;
     int body_turn_deg;
     int body_turn_applied;
+    // The forward pose pointed along the camera's -z: play depth flipped.
+    int body_flip_depth;
     int body_scale_pct;
     unsigned int sound_effects;
     unsigned int error_stage;

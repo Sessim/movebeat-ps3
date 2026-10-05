@@ -33,7 +33,7 @@ RunStatus::RunStatus()
       imu_slot1_error_deg(0), imu_slot0_scored(0), imu_slot1_scored(0),
       calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
       body_span_cm(0), body_drop_cm(0),
-      body_turn_deg(0), body_turn_applied(0), body_scale_pct(100), sound_effects(0),
+      body_turn_deg(0), body_turn_applied(0), body_flip_depth(0), body_scale_pct(100), sound_effects(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
@@ -95,6 +95,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "calibration_step=%d\nbody_up_inverted=%d\nbody_narrow_sides=%d\n"
             "body_span_cm=%d\n"
             "body_drop_cm=%d\nbody_turn_deg=%d\nbody_turn_applied=%d\n"
+            "body_flip_depth=%d\n"
             "body_scale_pct=%d\n"
             "sound_effects=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\n"
@@ -154,6 +155,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.calibration_step, status.body_up_inverted,
             status.body_narrow_sides, status.body_span_cm,
             status.body_drop_cm, status.body_turn_deg, status.body_turn_applied,
+            status.body_flip_depth,
             status.body_scale_pct,
             status.sound_effects,
             status.error_stage, status.error_code,

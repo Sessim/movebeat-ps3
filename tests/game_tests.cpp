@@ -221,14 +221,17 @@ void testBodyCalibration() {
     expect(good.turnApplied() && near(good.turnDegrees(), 0.0f),
            "a player facing the camera needs no turn");
 
-    // The frame: forward tips at the origin; a 1.3 m span scales hand
-    // positions by 1.6/1.3 about the forward handles, blades unchanged.
+    // The frame: the blades pointed along the camera's -z, so play depth
+    // flips (forward is +z); the hit plane is 45 cm along the blades from
+    // the handles; a 1.3 m span scales hand positions by 1.6/1.3 about the
+    // forward handles, blades unchanged.
     const movebeat::BodyFrame frame = good.frame();
+    expect(good.flipDepth() && frame.flip_depth, "a player facing the camera flips depth");
     expect(near(frame.scale, 1.6f / 1.3f), "the scale makes the span the reference span");
     const movebeat::SaberPose rest = frame.apply(forward0);
-    expect(near(rest.tip.x, 0.2f * 1.6f / 1.3f) && near(rest.tip.y, 0.0f) &&
-           near(rest.tip.z, 0.0f),
-           "the forward pose lands at the origin");
+    expect(near(rest.handle.x, 0.2f * 1.6f / 1.3f) && near(rest.handle.y, 0.0f) &&
+           near(rest.handle.z, -0.45f) && near(rest.tip.z, 0.15f),
+           "the forward pose's blades cross the hit plane 45 cm from the handles");
     const movebeat::SaberPose reach = frame.apply(
         bodyPose(0.7f, 1.3f, 2.0f, 0.7f, 1.3f, 1.4f));
     expect(near(reach.handle.x, 0.7f * 1.6f / 1.3f) &&
@@ -255,8 +258,8 @@ void testBodyCalibration() {
     const movebeat::SaberPose aligned = turned.frame().apply(
         movebeat::SaberPose(right_hand, right_hand + blade, true));
     const movebeat::Vec3 direction = normalized(aligned.tip - aligned.handle);
-    expect(near(direction.x, 0.0f) && near(direction.z, -1.0f),
-           "after the turn the player's forward is the playfield's");
+    expect(near(direction.x, 0.0f) && near(direction.z, 1.0f),
+           "after the turn the player's forward is the playfield's +z");
 
     // A wide turn (camera far off to the side) is reported, not applied.
     movebeat::BodyCalibration sideways;
@@ -271,9 +274,24 @@ void testBodyCalibration() {
     moved.recenter(movebeat::Vec3(1.0f, 1.3f, 1.4f), movebeat::Vec3(1.0f, 1.3f, 2.0f));
     const movebeat::SaberPose recentered = moved.apply(
         bodyPose(1.2f, 1.3f, 2.0f, 1.2f, 1.3f, 1.4f));
-    expect(near(recentered.tip.x, 0.2f * 1.6f / 1.3f) && near(recentered.tip.z, 0.0f) &&
-           near(moved.scale, frame.scale),
-           "recentering moves the origin and keeps the scale");
+    expect(near(recentered.tip.x, 0.2f * 1.6f / 1.3f) && near(recentered.tip.z, 0.15f) &&
+           near(recentered.handle.z, -0.45f) && near(moved.scale, frame.scale),
+           "recentering moves the origin and keeps the scale and depth");
+
+    // Blades along +z (the emulator scripts' play-space poses): no flip,
+    // and a forward pose with handles 45 cm behind the origin maps as is.
+    movebeat::BodyCalibration plain;
+    holdBodyPose(plain, time, bodyPose(0.2f, 0.0f, -0.45f, 0.2f, 0.0f, 0.15f),
+                 bodyPose(-0.2f, 0.0f, -0.45f, -0.2f, 0.0f, 0.15f));
+    holdBodyPose(plain, time, bodyPose(0.8f, 0.0f, 0.6f, 1.3f, 0.0f, 0.6f),
+                 bodyPose(-0.8f, 0.0f, 0.6f, -1.3f, 0.0f, 0.6f));
+    holdBodyPose(plain, time, bodyPose(0.25f, -0.6f, 0.6f, 0.25f, -1.2f, 0.6f),
+                 bodyPose(-0.25f, -0.6f, 0.6f, -0.25f, -1.2f, 0.6f));
+    const movebeat::SaberPose same = plain.frame().apply(
+        bodyPose(0.3f, 0.2f, -0.4f, 0.5f, 0.3f, 0.5f));
+    expect(plain.done() && !plain.flipDepth() && near(same.handle.x, 0.3f) &&
+           near(same.handle.z, -0.4f) && near(same.tip.z, 0.5f),
+           "play-space calibration poses give the identity frame");
 }
 
 void testPoseCalibration() {

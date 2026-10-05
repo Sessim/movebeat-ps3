@@ -994,9 +994,11 @@ void App::scriptCalibrationPose(FrameInput& input, bool crossed) const {
                                        movebeat::Vec3(x * 0.25f, -1.2f, 0.6f), true);
             break;
         default:
-            // Arms forward, blades at the camera; the tips meet the origin.
-            pose = movebeat::SaberPose(movebeat::Vec3(x * 0.2f, 0.0f, 0.6f),
-                                       movebeat::Vec3(x * 0.2f, 0.0f, 0.0f), true);
+            // Arms forward in play space (+z): handles 45 cm behind the
+            // origin, so the frame comes out as the identity and the
+            // scripted cuts land where they would without calibration.
+            pose = movebeat::SaberPose(movebeat::Vec3(x * 0.2f, 0.0f, -0.45f),
+                                       movebeat::Vec3(x * 0.2f, 0.0f, 0.15f), true);
             break;
         }
         if (slot == 0) input.moves.left = pose;
@@ -1145,6 +1147,7 @@ void App::updateCalibration(FrameInput& input) {
             diagnostic_.body_drop_cm = static_cast<int>(body_calibration_.drop() * 100.0f);
             diagnostic_.body_turn_deg = static_cast<int>(body_calibration_.turnDegrees());
             diagnostic_.body_turn_applied = body_calibration_.turnApplied() ? 1 : 0;
+            diagnostic_.body_flip_depth = body_calibration_.flipDepth() ? 1 : 0;
             diagnostic_.body_scale_pct = static_cast<int>(body_frame_.scale * 100.0f + 0.5f);
             printf("Calibrated: GEM slot %u left, span %d cm, scale %d%%, turn %d deg%s\n",
                    physicalSlotForHand(0u, hand_slots_swapped_),

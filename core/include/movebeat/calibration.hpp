@@ -55,34 +55,49 @@ private:
     SaberPose anchor_left_, anchor_right_;
 };
 
-// How camera-space poses become play-space poses: the play origin (tip
-// midpoint of the forward pose) goes to (0,0,0); the space turns about the
-// vertical axis so the player's forward is the playfield's; hand positions
-// scale about the forward handle midpoint so every arm span reaches the
-// same lanes. Blades keep their real length and direction.
+// How camera-space poses become play space, where +z is the player's
+// forward (toward the notes): the hit origin goes to (0,0,0); the space
+// turns about the vertical axis so the player's facing is the playfield's,
+// and its depth flips when the player faces the camera's -z (libgem on
+// hardware); hand positions scale about the forward handle midpoint so
+// every arm span reaches the same lanes. Blades keep their real length.
+//
+// The hit origin, where the notes are cut, lies hitDepth() along the
+// blades from the handles of the forward pose: mid-blade with arms
+// stretched out, nearer the tip with arms bent as in play. (At the blade
+// tips of the stretched pose only the very tips ever reached the notes.)
 struct BodyFrame {
-    Vec3 tip_origin;
+    Vec3 hit_origin;
     Vec3 handle_origin;
     float yaw_cos;
     float yaw_sin;
     float scale;
+    bool flip_depth;
 
-    BodyFrame() : yaw_cos(1.0f), yaw_sin(0.0f), scale(1.0f) {}
+    static float hitDepth() { return 0.45f; }
+
+    BodyFrame() : yaw_cos(1.0f), yaw_sin(0.0f), scale(1.0f), flip_depth(false) {}
 
     Vec3 turn(const Vec3& v) const {
         return Vec3(v.x * yaw_cos + v.z * yaw_sin, v.y,
                     -v.x * yaw_sin + v.z * yaw_cos);
     }
+    // Directions and offsets: turned, then the depth flipped if needed.
+    Vec3 orient(const Vec3& v) const {
+        const Vec3 turned = turn(v);
+        return flip_depth ? Vec3(turned.x, turned.y, -turned.z) : turned;
+    }
     SaberPose apply(const SaberPose& pose) const {
         if (!pose.tracked) return pose;
-        const Vec3 handle = turn(pose.handle - handle_origin) * scale +
-                            turn(handle_origin - tip_origin);
-        return SaberPose(handle, handle + turn(pose.tip - pose.handle), true);
+        const Vec3 handle = orient(pose.handle - handle_origin) * scale +
+                            orient(handle_origin - hit_origin);
+        return SaberPose(handle, handle + orient(pose.tip - pose.handle), true);
     }
-    // A quick one-pose recalibration moves the origin, keeping turn and scale.
+    // A quick one-pose recalibration (blades pointing forward) moves the
+    // origin, keeping turn, depth and scale.
     void recenter(const Vec3& tips, const Vec3& handles) {
-        tip_origin = tips;
         handle_origin = handles;
+        hit_origin = handles + normalized(tips - handles) * hitDepth();
     }
 };
 
@@ -127,7 +142,8 @@ public:
             hand_[slot] = HandProgress();
             result_[slot] = SaberPose();
         }
-        forward_tips_ = forward_handles_ = Vec3();
+        forward_direction_ = forward_handles_ = Vec3();
+        flip_depth_ = true;
         forward_separation_ = forward_height_ = 0.0f;
         span_ = drop_ = 0.0f;
         turn_degrees_ = 0.0f;
@@ -155,12 +171,15 @@ public:
     bool invertedUp() const { return inverted_up_; }
     bool narrowSides() const { return narrow_sides_; }
     Vec3 forwardHandles() const { return forward_handles_; }
+    // The forward pose pointed along the camera's -z (play depth flipped).
+    bool flipDepth() const { return flip_depth_; }
     bool forwardKnown() const { return step_ > STEP_FORWARD; }
 
     BodyFrame frame() const {
         BodyFrame frame;
-        frame.tip_origin = forward_tips_;
         frame.handle_origin = forward_handles_;
+        frame.hit_origin = forward_handles_ + forward_direction_ * BodyFrame::hitDepth();
+        frame.flip_depth = flip_depth_;
         if (turn_applied_) {
             const float radians = turn_degrees_ * 0.01745329251994329577f;
             frame.yaw_cos = std::cos(radians);
@@ -252,21 +271,25 @@ private:
         const SaberPose& a = result_[0];
         const SaberPose& b = result_[1];
         if (step_ == STEP_FORWARD) {
-            forward_tips_ = (a.tip + b.tip) * 0.5f;
             forward_handles_ = (a.handle + b.handle) * 0.5f;
             forward_height_ = forward_handles_.y;
             forward_separation_ = std::fabs(a.handle.x - b.handle.x);
-            // The player faces where the blades point; the camera looks
-            // along +z, so a player facing it points along -z.
-            const Vec3 direction = normalized(a.tip - a.handle) +
-                                   normalized(b.tip - b.handle);
+            // The player faces where the blades point. A player facing the
+            // camera points along its -z (libgem on hardware): play depth
+            // flips then. Only a clear +z keeps it (the emulator scripts).
+            const Vec3 direction = normalized(normalized(a.tip - a.handle) +
+                                              normalized(b.tip - b.handle));
+            forward_direction_ = direction;
+            flip_depth_ = !(direction.z > 0.3f);
             const float horizontal = std::sqrt(direction.x * direction.x +
                                                direction.z * direction.z);
-            const float total = length(direction);
             turn_degrees_ = 0.0f;
             turn_applied_ = false;
-            if (total > 0.0f && horizontal >= 0.7f * total) {
-                turn_degrees_ = std::atan2(direction.x, -direction.z) *
+            if (horizontal >= 0.7f) {
+                // The turn that brings the facing onto the camera's -z
+                // (flipped) or +z axis.
+                turn_degrees_ = (flip_depth_ ? std::atan2(direction.x, -direction.z)
+                                             : -std::atan2(direction.x, direction.z)) *
                                 57.29577951308232f;
                 turn_applied_ = std::fabs(turn_degrees_) <= maximumTurnDegrees();
             }
@@ -288,7 +311,8 @@ private:
     Step step_;
     HandProgress hand_[2];
     SaberPose result_[2];
-    Vec3 forward_tips_, forward_handles_;
+    Vec3 forward_direction_, forward_handles_;
+    bool flip_depth_;
     float forward_separation_, forward_height_;
     float span_, drop_;
     float turn_degrees_;
