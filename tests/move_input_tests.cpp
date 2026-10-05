@@ -349,6 +349,33 @@ void testImuHold() {
         expect(!tracker.update(time, movebeat::SaberPose(), false, turned).tracked,
                "without a quaternion nothing is held");
     }
+
+    // A partial fix keeps the depth of the last full fix; a jump no hand
+    // makes is held through, unless the new place persists.
+    ImuSaberTracker tracker;
+    const RawQuat still = yawQuat(0.0f, false);
+    unsigned int time = 5000;
+    const movebeat::Vec3 blade(0.0f, 0.0f, -1.0f);
+    const movebeat::Vec3 at(0.0f, 1.2f, 2.0f);
+    tracker.update(time, movebeat::SaberPose(at, at + blade, true), true, still);
+    time += 17;
+    const movebeat::Vec3 drifted(0.05f, 1.25f, 3.5f);
+    movebeat::SaberPose out = tracker.update(
+        time, movebeat::SaberPose(drifted, drifted + blade, true), true, still, true);
+    expect(out.tracked && near(out.handle.x, 0.05f) && near(out.handle.y, 1.25f) &&
+           near(out.handle.z, 2.0f) && near(out.tip.z, 1.0f),
+           "a partial fix follows across and up but keeps the full fix's depth");
+    const movebeat::Vec3 far(1.5f, 1.2f, 2.0f);
+    for (unsigned int frame = 0; frame + 1u < ImuSaberTracker::jumpFrames(); ++frame) {
+        time += 17;
+        out = tracker.update(time, movebeat::SaberPose(far, far + blade, true), true, still);
+        expect(out.tracked && tracker.held() && near(out.handle.x, 0.05f),
+               "a sudden 1.5 m jump is held as a glitch");
+    }
+    time += 17;
+    out = tracker.update(time, movebeat::SaberPose(far, far + blade, true), true, still);
+    expect(out.tracked && !tracker.held() && near(out.handle.x, 1.5f),
+           "a jump that persists is taken as the real place");
 }
 
 void testMoveButtonChord() {

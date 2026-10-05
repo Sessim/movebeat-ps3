@@ -83,6 +83,10 @@ RenderOptions readRenderOptions() {
         else if (strcmp(line, "hand_colors=on") == 0) options.hand_colors = true;
         else if (strcmp(line, "hand_colors=off") == 0) options.hand_colors = false;
         else if (strcmp(line, "background=off") == 0) options.background = false;
+        else if (strncmp(line, "camera_exposure=", 16) == 0)
+            options.camera_exposure = atoi(line + 16);
+        else if (strncmp(line, "camera_quality=", 15) == 0)
+            options.camera_quality = static_cast<float>(atof(line + 15));
     }
     fclose(file);
     return options;

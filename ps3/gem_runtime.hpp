@@ -56,6 +56,10 @@ public:
     // Restarts the sphere calibration of a connected physical slot (the
     // controller should point at the camera and stay still meanwhile).
     bool calibrateSlot(unsigned int slot);
+    // gemPrepareCamera tuning, applied by the next initialize(): maximum
+    // exposure (40..511, higher is brighter but blurs motion) and image
+    // quality (0 favors tracking, 1 the picture).
+    void setCameraTuning(int max_exposure, float image_quality);
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;

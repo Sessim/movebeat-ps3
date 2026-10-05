@@ -37,39 +37,69 @@ public:
 
     ImuSaberTracker() { reset(); }
 
+    // A hand moves well under this much in one frame; a bigger camera jump
+    // is a tracking glitch, unless the new place holds for jumpFrames().
+    static float maxJump() { return 0.35f; }
+    static unsigned int jumpFrames() { return 6; }
+
     void reset() {
-        have_last_ = have_ref_ = false;
+        have_last_ = have_ref_ = have_depth_ = have_output_ = false;
         last_ms_ = ref_ms_ = 0;
         for (int variant = 0; variant < VARIANTS; ++variant) error_[variant] = 0.0f;
         scored_ = 0;
+        jump_frames_ = 0;
+        depth_ = 0.0f;
         held_ = false;
     }
 
     // `optical`: this frame's camera pose (untracked when the camera lost
-    // the sphere). `quat_valid`/`quat`: libgem's orientation this frame.
+    // the sphere); `partial`: the camera sees the sphere without a full
+    // fix, whose depth (distance to the camera, from the sphere's apparent
+    // size) is unreliable, so the depth of the last full fix is kept.
+    // `quat_valid`/`quat`: libgem's orientation this frame.
     SaberPose update(unsigned int now_ms, const SaberPose& optical, bool quat_valid,
-                     const RawQuat& quat) {
+                     const RawQuat& quat, bool partial = false) {
         held_ = false;
         const bool usable_quat = quat_valid && unit(quat);
         if (optical.tracked) {
-            if (usable_quat) {
-                score(now_ms, optical, quat);
-                last_ = optical;
-                last_quat_ = quat;
-                last_ms_ = now_ms;
-                have_last_ = true;
-            } else {
-                have_last_ = have_ref_ = false;
+            SaberPose pose = optical;
+            if (!partial) {
+                depth_ = optical.handle.z;
+                have_depth_ = true;
+            } else if (have_depth_) {
+                const float shift = depth_ - pose.handle.z;
+                pose.handle.z += shift;
+                pose.tip.z += shift;
             }
-            return optical;
+            const bool jump = have_output_ &&
+                lengthSquared(pose.handle - output_handle_) > maxJump() * maxJump();
+            if (jump && ++jump_frames_ < jumpFrames()) {
+                // Hold through the glitch below.
+            } else {
+                jump_frames_ = 0;
+                if (usable_quat) {
+                    if (!partial) score(now_ms, optical, quat);
+                    last_ = pose;
+                    last_quat_ = quat;
+                    last_ms_ = now_ms;
+                    have_last_ = true;
+                } else {
+                    have_last_ = have_ref_ = false;
+                }
+                return output(pose);
+            }
+        } else {
+            jump_frames_ = 0;
         }
         have_ref_ = false;
         if (!usable_quat || !have_last_ || now_ms < last_ms_ ||
-            now_ms - last_ms_ > holdMs())
+            now_ms - last_ms_ > holdMs()) {
+            have_output_ = false;
             return SaberPose();
+        }
         const Vec3 shaft = turn(bestVariant(), quat, last_quat_, last_.tip - last_.handle);
         held_ = true;
-        return SaberPose(last_.handle, last_.handle + shaft, true);
+        return output(SaberPose(last_.handle, last_.handle + shaft, true));
     }
 
     // True when the latest pose came from the quaternion, not the camera.
@@ -134,6 +164,12 @@ private:
         return v + c1 * (2.0f * q.w) + c2 * 2.0f;
     }
 
+    SaberPose output(const SaberPose& pose) {
+        output_handle_ = pose.handle;
+        have_output_ = true;
+        return pose;
+    }
+
     void score(unsigned int now_ms, const SaberPose& optical, const RawQuat& quat) {
         const Vec3 direction = normalized(optical.tip - optical.handle);
         if (!have_ref_ || now_ms < ref_ms_) {
@@ -171,6 +207,11 @@ private:
     float error_[VARIANTS];
     unsigned int scored_;
     bool held_;
+    bool have_depth_;
+    float depth_;
+    bool have_output_;
+    Vec3 output_handle_;
+    unsigned int jump_frames_;
 };
 
 } // namespace ps3

@@ -168,6 +168,9 @@ bool App::initializeSystems(int& exit_code) {
     diagnostic_.phase = "gem_initializing";
     writeRunStatus(kRunStatusPath, diagnostic_);
     gem_.setHandHuesEnabled(render_options.hand_colors);
+    gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
+    diagnostic_.camera_exposure = render_options.camera_exposure;
+    diagnostic_.camera_quality_pct = static_cast<int>(render_options.camera_quality * 100.0f + 0.5f);
     if (!demo_mode_ && !gem_.initialize()) {
         const GemRuntime::InitStage stage = gem_.lastStage();
         const int error = gem_.lastError();

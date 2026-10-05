@@ -44,9 +44,13 @@ struct RenderOptions {
     // "background=off": no sky, frames or beat pulse behind the playfield,
     // to check whether the screen's light disturbs sphere tracking.
     bool background;
+    // "camera_exposure=N" (40..511) and "camera_quality=F" (0..1) for
+    // gemPrepareCamera; defaults 128 and 0.5.
+    int camera_exposure;
+    float camera_quality;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
-                      background(true) {}
+                      background(true), camera_exposure(128), camera_quality(0.5f) {}
 };
 
 RenderOptions readRenderOptions();

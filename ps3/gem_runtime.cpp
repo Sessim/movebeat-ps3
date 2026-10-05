@@ -63,6 +63,8 @@ struct GemRuntime::Impl {
     unsigned int last_tracking[2];
     ImuSaberTracker imu[2];
     unsigned int imu_held_frames;
+    int camera_exposure;
+    float camera_quality;
     unsigned int update_count;
     u32 assigned_hues[4];
     int last_hue_error;
@@ -93,6 +95,7 @@ struct GemRuntime::Impl {
           hand_assignment_known(false), hand_slots_swapped(false),
           hue_assignment_dirty(false), hue_values_known(false),
           hand_hues_enabled(false), hue_wait_frames(0), imu_held_frames(0),
+          camera_exposure(128), camera_quality(0.5f),
           update_count(0),
           last_hue_error(0),
           connection_mask(0), last_error(0),
@@ -199,7 +202,8 @@ bool GemRuntime::initialize() {
     impl_->camera_read.buffer = impl_->camera_info.buffer;
 
     impl_->last_stage = INIT_GEM_CAMERA;
-    if ((impl_->last_error = gemPrepareCamera(128, 0.5f)) != 0) return false;
+    if ((impl_->last_error = gemPrepareCamera(impl_->camera_exposure,
+                                              impl_->camera_quality)) != 0) return false;
     gemReset(0);
     gemReset(1);
     cameraReset(0);
@@ -353,7 +357,8 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                                vectorComponent(states[index].quat, 1),
                                vectorComponent(states[index].quat, 2),
                                vectorComponent(states[index].quat, 3));
-            pose = impl_->imu[index].update(now_ms, pose, results[index] == 0, quat);
+            pose = impl_->imu[index].update(now_ms, pose, results[index] == 0, quat,
+                                            frame.partial[index]);
             frame.held[index] = impl_->imu[index].held();
             if (frame.held[index]) ++impl_->imu_held_frames;
         }
@@ -543,6 +548,13 @@ void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
         impl_->hue_values_known = false;
         impl_->last_hue_error = 0;
     }
+}
+
+void GemRuntime::setCameraTuning(int max_exposure, float image_quality) {
+    if (!impl_) return;
+    impl_->camera_exposure = max_exposure < 40 ? 40 : (max_exposure > 511 ? 511 : max_exposure);
+    impl_->camera_quality = !(image_quality >= 0.0f) ? 0.0f
+                          : (image_quality > 1.0f ? 1.0f : image_quality);
 }
 
 bool GemRuntime::calibrateSlot(unsigned int slot) {
