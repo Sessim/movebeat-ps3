@@ -171,15 +171,22 @@ void testBodyCalibration() {
            calibration.handState(1) == BodyCalibration::HAND_SETTLING &&
            calibration.step() == BodyCalibration::STEP_FORWARD,
            "each hand is measured independently");
-    // The second sphere flickers back in: it needs half a second steady.
-    calibration.sample(time, forward0, forward1);
-    time += 17;
+    // The second sphere appears; a one-frame dropout is skipped, a long
+    // one starts its steady wait over.
+    for (int frame = 0; frame < 10; ++frame, time += 17)
+        calibration.sample(time, forward0, forward1);
     calibration.sample(time, forward0, movebeat::SaberPose());
     time += 17;
-    for (int frame = 0; frame < 25; ++frame, time += 17)
+    for (int frame = 0; frame < 10; ++frame, time += 17)
         calibration.sample(time, forward0, forward1);
+    expect(calibration.handState(1) == BodyCalibration::HAND_MEASURING,
+           "a one-frame dropout does not restart the wait");
+    for (int frame = 0; frame < 15; ++frame, time += 17)
+        calibration.sample(time, forward0, movebeat::SaberPose());
+    calibration.sample(time, forward0, forward1);
+    time += 17;
     expect(calibration.handState(1) == BodyCalibration::HAND_SETTLING,
-           "a flickering sphere starts its steady wait over");
+           "a dropout longer than 0.2 s starts the steady wait over");
     for (int frame = 0; frame < 40; ++frame, time += 17)
         calibration.sample(time, forward0, forward1);
     expect(calibration.step() == BodyCalibration::STEP_SIDES &&
@@ -963,6 +970,15 @@ void testEnergyFailure() {
     expect(game.score().energy == 0, "five misses drain the starting energy");
     expect(game.score().failed, "zero energy fails the level");
     expect(game.finished(2000), "failed level is finished");
+
+    movebeat::GameConfig no_fail;
+    no_fail.energy_failure = false;
+    movebeat::Game relaxed;
+    relaxed.setConfig(no_fail);
+    relaxed.load(chart);
+    relaxed.update(2000, untracked, untracked);
+    expect(relaxed.score().energy == 0 && !relaxed.score().failed,
+           "with energy failure off, empty energy does not fail the level");
 }
 
 void testHighScores() {

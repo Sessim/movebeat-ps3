@@ -113,9 +113,11 @@ public:
     static float maximumScale() { return 1.35f; }
     static float maximumTurnDegrees() { return 30.0f; }
     // A sphere tracked this long after the press is trusted, then measured
-    // for this long.
-    static unsigned int settleMs() { return 500; }
-    static unsigned int measureMs() { return 300; }
+    // for this long. Dropouts up to gapMs() are skipped, not restarted:
+    // on hardware libgem loses a sphere for a frame or two all the time.
+    static unsigned int settleMs() { return 300; }
+    static unsigned int measureMs() { return 250; }
+    static unsigned int gapMs() { return 200; }
 
     BodyCalibration() { reset(); }
 
@@ -215,8 +217,11 @@ private:
     static void advance(HandProgress& hand, const SaberPose& pose, unsigned int time,
                         SaberPose& result) {
         if (hand.state != HAND_SETTLING && hand.state != HAND_MEASURING) return;
-        // A lost sphere, or a gap, starts the steady wait over.
-        if (!valid(pose) || (hand.tracking && (time < hand.last || time - hand.last > 150))) {
+        // A short dropout is skipped; a longer one starts the steady wait
+        // over.
+        const bool gap = hand.tracking && (time < hand.last || time - hand.last > gapMs());
+        if (!valid(pose) && !gap && hand.tracking) return;
+        if (!valid(pose) || gap) {
             hand.state = HAND_SETTLING;
             hand.tracking = false;
             hand.count = 0;

@@ -20,11 +20,12 @@ struct SaberModel {
     Vec3 blade_tip;
 };
 
-// Real Move: about 20 cm long, 4.6 cm sphere, grip under 5 cm wide.
-const float kHiltBelowHandle = 0.06f;
-const float kHiltAboveHandle = 0.12f;
-const float kHiltRadius = 0.022f;
-const float kEmitterRadius = 0.026f;
+// One and a half times a real Move (about 20 cm long, 4.6 cm sphere, grip
+// under 5 cm wide): at play distance the true size read as too thin.
+const float kHiltBelowHandle = 0.09f;
+const float kHiltAboveHandle = 0.18f;
+const float kHiltRadius = 0.033f;
+const float kEmitterRadius = 0.039f;
 
 inline SaberModel saberModel(const SaberPose& pose) {
     SaberModel model;

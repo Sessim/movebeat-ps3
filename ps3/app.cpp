@@ -265,6 +265,9 @@ bool App::selectInitialLevel(int& exit_code) {
     // slope to keep the center level and the lower row below the sightline.
     game_config_.row_pitch_per_depth =
         -(kProjectionEyeHeight + kProjectionCameraHeight) / kProjectionDepth;
+    // No fail for now: tracking on hardware is still being tuned, and a
+    // drained energy bar must not end the song.
+    game_config_.energy_failure = false;
     reloadSelectedChart();
     chart_duration_ms_ = estimateChartDurationMs(selected_chart_);
     carousel_.reset(static_cast<int>(shelf_pos_));
@@ -567,8 +570,9 @@ void App::readInput(FrameInput& input) {
     }
     const MoveFrame& moves = input.moves;
     input.optical = moves;
-    if (moves.held[0] || moves.partial[0]) input.optical.left.tracked = false;
-    if (moves.held[1] || moves.partial[1]) input.optical.right.tracked = false;
+    // Seen by the camera, fully or partly; not held by the sensors alone.
+    if (moves.held[0]) input.optical.left.tracked = false;
+    if (moves.held[1]) input.optical.right.tracked = false;
     input.both_moves_optical = input.optical.left.tracked && input.optical.right.tracked;
     input.buttons = menu_buttons_.update(
         moves, demo_mode_ ? 3u : gem_.lastButtonReadyMask());

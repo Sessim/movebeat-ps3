@@ -27,6 +27,9 @@ struct GameConfig {
     unsigned int swing_angle_window_ms;
     float pre_swing_target_degrees;
     float post_swing_target_degrees;
+    // Empty energy fails the level; off ("no fail"), energy still drains
+    // and shows but the song plays to its end.
+    bool energy_failure;
 
     GameConfig();
 };

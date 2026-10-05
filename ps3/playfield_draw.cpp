@@ -496,13 +496,13 @@ void drawSaber(Framebuffer& screen, const movebeat::SaberPose& saber,
         // blade with a white-hot center.
         const float scale = effectScale(screen);
         screen.glowLine(emitter.x + 0.5f, emitter.y + 0.5f,
-                        tip.x + 0.5f, tip.y + 0.5f, 20.0f * scale,
+                        tip.x + 0.5f, tip.y + 0.5f, 30.0f * scale,
                         withAlpha(core, 0.55f));
-        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 5);
-        screen.line(emitter.x, emitter.y, tip.x, tip.y, 0xfff2f8ffu, 1);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 8);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, 0xfff2f8ffu, 2);
     } else {
-        screen.line(emitter.x, emitter.y, tip.x, tip.y, glow, 15);
-        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 5);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, glow, 22);
+        screen.line(emitter.x, emitter.y, tip.x, tip.y, core, 8);
     }
     drawHilt(screen, model);
     // The Move's sphere glows in the saber's color at the blade's root.

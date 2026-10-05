@@ -61,7 +61,8 @@ private:
         bool both_moves_tracked;
         // Both spheres seen by the camera (not just held by the sensors).
         bool both_moves_optical;
-        // The camera's poses only: what calibration may measure.
+        // The camera's poses only (full or partial fix, never the sensor
+        // hold): what calibration may measure.
         MoveFrame optical;
         bool hand_toggle;
         bool cancel_calibration;

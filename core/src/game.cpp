@@ -135,7 +135,8 @@ GameConfig::GameConfig()
       late_window_ms(180),
       swing_angle_window_ms(200),
       pre_swing_target_degrees(100.0f),
-      post_swing_target_degrees(60.0f) {}
+      post_swing_target_degrees(60.0f),
+      energy_failure(true) {}
 
 bool configureNoteJump(GameConfig& config, float bpm, float note_jump_speed,
                        float start_beat_offset) {
@@ -401,7 +402,7 @@ void Game::registerMiss(unsigned int penalty) {
     ++score_.misses;
     score_.combo = 0;
     score_.energy = penalty >= score_.energy ? 0u : score_.energy - penalty;
-    score_.failed = score_.energy == 0;
+    score_.failed = config_.energy_failure && score_.energy == 0;
 }
 
 float Game::updateSwingTracker(SwingTracker& tracker, unsigned int now_ms,
