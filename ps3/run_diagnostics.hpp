@@ -74,6 +74,8 @@ struct RunStatus {
     // done), arms-down pose seen above the forward one, and the results.
     int calibration_step;
     int body_up_inverted;
+    // The sideways pose was hardly wider than the forward one.
+    int body_narrow_sides;
     int body_span_cm;
     int body_drop_cm;
     int body_turn_deg;

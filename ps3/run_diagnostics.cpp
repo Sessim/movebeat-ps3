@@ -29,7 +29,8 @@ RunStatus::RunStatus()
       gem_slot1_flags(0), tracking_pause_slot0_result(-1),
       tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
       tracking_pause_slot1_flags(0), tracking_quit_count(0),
-      calibration_step(0), body_up_inverted(0), body_span_cm(0), body_drop_cm(0),
+      calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
+      body_span_cm(0), body_drop_cm(0),
       body_turn_deg(0), body_turn_applied(0), body_scale_pct(100), sound_effects(0),
       error_stage(0), error_code(0), level_count(0),
       library_cards_loaded(0), library_card_bytes(0),
@@ -86,7 +87,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "tracking_pause_slot0_result=%d\ntracking_pause_slot1_result=%d\n"
             "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
             "tracking_quit_count=%u\n"
-            "calibration_step=%d\nbody_up_inverted=%d\nbody_span_cm=%d\n"
+            "calibration_step=%d\nbody_up_inverted=%d\nbody_narrow_sides=%d\n"
+            "body_span_cm=%d\n"
             "body_drop_cm=%d\nbody_turn_deg=%d\nbody_turn_applied=%d\n"
             "body_scale_pct=%d\n"
             "sound_effects=%u\n"
@@ -141,7 +143,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.tracking_pause_slot0_result, status.tracking_pause_slot1_result,
             status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
             status.tracking_quit_count,
-            status.calibration_step, status.body_up_inverted, status.body_span_cm,
+            status.calibration_step, status.body_up_inverted,
+            status.body_narrow_sides, status.body_span_cm,
             status.body_drop_cm, status.body_turn_deg, status.body_turn_applied,
             status.body_scale_pct,
             status.sound_effects,

@@ -63,20 +63,19 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
                               bool recalibrating, bool hands_separated,
                               unsigned int progress_ms);
 // The guided calibration: which pose (step 0 forward, 1 sides, 2 down),
-// whether the player matches it (status 0 untracked, 1 wrong pose, 2
-// holding), the hold time, and where the two hands are now (meters
-// relative to the forward pose, x right, y up).
+// each controller's progress (0 waiting for its Move button, 1 waiting for
+// a steady sphere, 2 measuring, 3 done) and where the two hands are now
+// (meters relative to the forward pose, x right, y up).
 struct CalibrationView {
     int step;
-    int status;
-    unsigned int progress_ms;
-    bool inverted_up;
+    int hand_state[2];
     bool hand_visible[2];
     float hand_x[2];
     float hand_y[2];
 
-    CalibrationView() : step(0), status(0), progress_ms(0), inverted_up(false) {
+    CalibrationView() : step(0) {
         for (int slot = 0; slot < 2; ++slot) {
+            hand_state[slot] = 0;
             hand_visible[slot] = false;
             hand_x[slot] = hand_y[slot] = 0.0f;
         }

@@ -130,9 +130,12 @@ void testChartParser() {
            "arc curve rejects an invalid direction code");
 }
 
-// One second of a still two-hand pose at 60 Hz, from `time`.
+// Confirms the pose with both Move buttons and holds it for one second at
+// 60 Hz from `time` (settle 0.5 s, measure 0.3 s).
 bool holdBodyPose(movebeat::BodyCalibration& calibration, unsigned int& time,
                   const movebeat::SaberPose& slot0, const movebeat::SaberPose& slot1) {
+    calibration.confirm(0);
+    calibration.confirm(1);
     bool finished = false;
     for (int frame = 0; frame < 64; ++frame, time += 17)
         finished = calibration.sample(time, slot0, slot1) || finished;
@@ -150,45 +153,70 @@ void testBodyCalibration() {
     // Slot 0 is the player's right hand (camera +x).
     const movebeat::SaberPose forward0 = bodyPose(0.2f, 1.3f, 2.0f, 0.2f, 1.3f, 1.4f);
     const movebeat::SaberPose forward1 = bodyPose(-0.2f, 1.3f, 2.0f, -0.2f, 1.3f, 1.4f);
-    expect(!calibration.sample(time, forward0, movebeat::SaberPose()) &&
-           calibration.status() == BodyCalibration::STATUS_UNTRACKED,
-           "a missing sphere stops the calibration");
-    const movebeat::SaberPose up0 = bodyPose(0.2f, 1.3f, 2.0f, 0.2f, 1.9f, 2.0f);
-    const movebeat::SaberPose up1 = bodyPose(-0.2f, 1.3f, 2.0f, -0.2f, 1.9f, 2.0f);
-    expect(!holdBodyPose(calibration, time, up0, up1) &&
-           calibration.step() == BodyCalibration::STEP_FORWARD &&
-           calibration.status() == BodyCalibration::STATUS_POSE,
-           "blades pointing up are not the forward pose");
-    expect(!holdBodyPose(calibration, time, forward0, forward1) &&
-           calibration.step() == BodyCalibration::STEP_SIDES,
-           "holding the forward pose for a second moves on to the sides");
-    // Too narrow for arms out to the sides.
-    expect(!holdBodyPose(calibration, time, bodyPose(0.4f, 1.3f, 2.0f, 0.9f, 1.3f, 2.0f),
-                         bodyPose(-0.4f, 1.3f, 2.0f, -0.9f, 1.3f, 2.0f)) &&
-           calibration.step() == BodyCalibration::STEP_SIDES,
-           "hands 80 cm apart are not arms out to the sides");
-    expect(!holdBodyPose(calibration, time, bodyPose(0.65f, 1.35f, 2.0f, 1.1f, 1.35f, 2.0f),
-                         bodyPose(-0.65f, 1.35f, 2.0f, -1.1f, 1.35f, 2.0f)) &&
+
+    // Nothing is measured before the Move button says "in the pose".
+    for (int frame = 0; frame < 120; ++frame, time += 17)
+        calibration.sample(time, forward0, forward1);
+    expect(calibration.step() == BodyCalibration::STEP_FORWARD &&
+           calibration.handState(0) == BodyCalibration::HAND_WAITING,
+           "the calibration waits for the Move buttons");
+
+    // One hand confirmed while the other sphere is lost: the tracked hand
+    // is measured on its own; the lost one waits for a steady sphere.
+    calibration.confirm(0);
+    calibration.confirm(1);
+    for (int frame = 0; frame < 64; ++frame, time += 17)
+        calibration.sample(time, forward0, movebeat::SaberPose());
+    expect(calibration.handState(0) == BodyCalibration::HAND_DONE &&
+           calibration.handState(1) == BodyCalibration::HAND_SETTLING &&
+           calibration.step() == BodyCalibration::STEP_FORWARD,
+           "each hand is measured independently");
+    // The second sphere flickers back in: it needs half a second steady.
+    calibration.sample(time, forward0, forward1);
+    time += 17;
+    calibration.sample(time, forward0, movebeat::SaberPose());
+    time += 17;
+    for (int frame = 0; frame < 25; ++frame, time += 17)
+        calibration.sample(time, forward0, forward1);
+    expect(calibration.handState(1) == BodyCalibration::HAND_SETTLING,
+           "a flickering sphere starts its steady wait over");
+    for (int frame = 0; frame < 40; ++frame, time += 17)
+        calibration.sample(time, forward0, forward1);
+    expect(calibration.step() == BodyCalibration::STEP_SIDES &&
+           calibration.handState(0) == BodyCalibration::HAND_WAITING,
+           "both hands measured move on to the sideways pose, waiting again");
+
+    // Whatever the player confirms is accepted; doubtful values are flagged.
+    expect(!holdBodyPose(calibration, time, bodyPose(0.3f, 1.3f, 2.0f, 0.8f, 1.3f, 2.0f),
+                         bodyPose(-0.3f, 1.3f, 2.0f, -0.8f, 1.3f, 2.0f)) &&
            calibration.step() == BodyCalibration::STEP_DOWN,
-           "arms out to the sides move on to arms down");
-    // An upside-down camera axis: "down" reads above the forward pose.
-    expect(!holdBodyPose(calibration, time, bodyPose(0.25f, 1.9f, 2.0f, 0.25f, 2.4f, 2.0f),
-                         bodyPose(-0.25f, 1.9f, 2.0f, -0.25f, 2.4f, 2.0f)) &&
-           calibration.step() == BodyCalibration::STEP_DOWN && calibration.invertedUp(),
-           "hands above the forward pose report a flipped up axis");
-    expect(holdBodyPose(calibration, time, bodyPose(0.25f, 0.75f, 2.0f, 0.25f, 0.2f, 2.0f),
-                        bodyPose(-0.25f, 0.75f, 2.0f, -0.25f, 0.2f, 2.0f)) &&
-           calibration.done() && !calibration.invertedUp(),
-           "arms down completes the calibration");
+           "a narrow sideways pose is accepted");
+    expect(holdBodyPose(calibration, time, bodyPose(0.25f, 1.9f, 2.0f, 0.25f, 2.4f, 2.0f),
+                        bodyPose(-0.25f, 1.9f, 2.0f, -0.25f, 2.4f, 2.0f)) &&
+           calibration.done(), "arms down completes the calibration");
+    expect(calibration.narrowSides() && calibration.invertedUp(),
+           "a narrow sideways pose and arms down above arms forward are flagged");
     expect(calibration.slotsSwapped(), "slot 0 further right makes slot 1 the left hand");
-    expect(near(calibration.span(), 1.3f) && near(calibration.drop(), 0.55f),
+    expect(near(calibration.frame().scale, BodyCalibration::maximumScale()),
+           "an implausible span keeps the scale within limits");
+
+    // A plausible session.
+    movebeat::BodyCalibration good;
+    holdBodyPose(good, time, forward0, forward1);
+    holdBodyPose(good, time, bodyPose(0.65f, 1.35f, 2.0f, 1.1f, 1.35f, 2.0f),
+                 bodyPose(-0.65f, 1.35f, 2.0f, -1.1f, 1.35f, 2.0f));
+    expect(holdBodyPose(good, time, bodyPose(0.25f, 0.75f, 2.0f, 0.25f, 0.2f, 2.0f),
+                        bodyPose(-0.25f, 0.75f, 2.0f, -0.25f, 0.2f, 2.0f)) &&
+           good.done() && !good.invertedUp() && !good.narrowSides(),
+           "a plausible session completes unflagged");
+    expect(near(good.span(), 1.3f) && near(good.drop(), 0.55f),
            "span and drop are measured");
-    expect(calibration.turnApplied() && near(calibration.turnDegrees(), 0.0f),
+    expect(good.turnApplied() && near(good.turnDegrees(), 0.0f),
            "a player facing the camera needs no turn");
 
     // The frame: forward tips at the origin; a 1.3 m span scales hand
     // positions by 1.6/1.3 about the forward handles, blades unchanged.
-    const movebeat::BodyFrame frame = calibration.frame();
+    const movebeat::BodyFrame frame = good.frame();
     expect(near(frame.scale, 1.6f / 1.3f), "the scale makes the span the reference span");
     const movebeat::SaberPose rest = frame.apply(forward0);
     expect(near(rest.tip.x, 0.2f * 1.6f / 1.3f) && near(rest.tip.y, 0.0f) &&
@@ -203,7 +231,6 @@ void testBodyCalibration() {
 
     // A player turned 20 degrees: the turn is measured and undone.
     movebeat::BodyCalibration turned;
-    time = 50000;
     const float angle = 20.0f * 0.0174532925f;
     const movebeat::Vec3 blade(std::sin(angle) * 0.6f, 0.0f, -std::cos(angle) * 0.6f);
     const movebeat::Vec3 left_hand(-0.2f, 1.3f, 2.0f), right_hand(0.2f, 1.3f, 2.0f);

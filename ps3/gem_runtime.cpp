@@ -517,6 +517,15 @@ void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
     }
 }
 
+bool GemRuntime::calibrateSlot(unsigned int slot) {
+    if (!impl_ || !impl_->gem_initialized || slot > 1 ||
+        (impl_->connection_mask & (1u << slot)) == 0)
+        return false;
+    if (gemCalibrate(slot) != 0) return false;
+    impl_->calibration_requested[slot] = true;
+    return true;
+}
+
 void GemRuntime::setHandHuesEnabled(bool enabled) {
     if (impl_) impl_->hand_hues_enabled = enabled;
 }

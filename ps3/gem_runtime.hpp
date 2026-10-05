@@ -50,6 +50,9 @@ public:
     // camera can tell apart from the room, and a fixed hue that blends in
     // (red against skin or warm lamps) loses tracking.
     void setHandHuesEnabled(bool enabled);
+    // Restarts the sphere calibration of a connected physical slot (the
+    // controller should point at the camera and stay still meanwhile).
+    bool calibrateSlot(unsigned int slot);
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;

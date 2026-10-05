@@ -443,7 +443,7 @@ void App::readMenuTestInput(FrameInput& input) {
         // The sideways pose of the guided calibration, for the record.
         if (calibrating_ && !menu_capture_path_ && !demo_scored_frame_saved_ &&
             body_calibration_.step() == movebeat::BodyCalibration::STEP_SIDES &&
-            body_calibration_.progressMs() >= 300u) {
+            body_calibration_.handState(0) == movebeat::BodyCalibration::HAND_MEASURING) {
             menu_capture_path_ = kDemoScoredFramePath;
             demo_scored_frame_saved_ = true;
         }
@@ -960,6 +960,14 @@ void App::beginBodyCalibration() {
 }
 
 void App::scriptCalibrationPose(FrameInput& input, bool crossed) const {
+    // Confirms the pose with each Move button still waiting for it: two
+    // frames pressed out of every ten, so each press is a fresh edge.
+    if (calibrating_ && (menu_test_frame_ % 10u) < 2u) {
+        if (body_calibration_.handState(0) == movebeat::BodyCalibration::HAND_WAITING)
+            input.moves.left_buttons = GEM_BUTTON_MOVE;
+        if (body_calibration_.handState(1) == movebeat::BodyCalibration::HAND_WAITING)
+            input.moves.right_buttons = GEM_BUTTON_MOVE;
+    }
     const float slot0_side = crossed ? 1.0f : -1.0f;
     for (int slot = 0; slot < 2; ++slot) {
         const float x = slot == 0 ? slot0_side : -slot0_side;
@@ -1071,6 +1079,20 @@ void App::updateCalibration(FrameInput& input) {
     const MoveFrame& moves = input.moves;
     if (calibrating_ && !paused_) {
         const movebeat::BodyCalibration::Step before = body_calibration_.step();
+        // The Move button of each controller says "I am in the pose". In
+        // the first pose (pointing at the camera, as libgem wants it) the
+        // press also recalibrates that controller's sphere.
+        const unsigned short pressed[2] = {input.buttons.left_pressed,
+                                           input.buttons.right_pressed};
+        for (unsigned int slot = 0; slot < 2; ++slot) {
+            if ((pressed[slot] & GEM_BUTTON_MOVE) == 0) continue;
+            if (before == movebeat::BodyCalibration::STEP_FORWARD && !demo_mode_ &&
+                gem_.calibrateSlot(slot))
+                printf("Calibration: sphere %u recalibrating\n", slot);
+            body_calibration_.confirm(static_cast<int>(slot));
+            pulseRumble(physicalSlotForHand(slot, hand_slots_swapped_) == 0u ? 0 : 1,
+                        2, 120);
+        }
         input.calibrated_start = body_calibration_.sample(
             nowMilliseconds(), moves.left, moves.right);
         if (body_calibration_.step() != before) {
@@ -1080,8 +1102,9 @@ void App::updateCalibration(FrameInput& input) {
             audio_.playEffect(SFX_DIFFICULTY, 0.6f, 0.0f);
         }
         diagnostic_.calibration_step = static_cast<int>(body_calibration_.step());
-        diagnostic_.body_up_inverted = body_calibration_.invertedUp() ? 1 : 0;
         if (input.calibrated_start) {
+            diagnostic_.body_up_inverted = body_calibration_.invertedUp() ? 1 : 0;
+            diagnostic_.body_narrow_sides = body_calibration_.narrowSides() ? 1 : 0;
             body_frame_ = body_calibration_.frame();
             pose_calibrated_ = true;
             setHandAssignment(body_calibration_.slotsSwapped());
@@ -1442,9 +1465,6 @@ void App::renderOverlays(const FrameInput& input) {
     if (calibrating_) {
         CalibrationView view;
         view.step = static_cast<int>(body_calibration_.step());
-        view.status = static_cast<int>(body_calibration_.status());
-        view.progress_ms = body_calibration_.progressMs();
-        view.inverted_up = body_calibration_.invertedUp();
         // Live hands around the figure: relative to the forward pose once
         // it is known, otherwise to the midpoint of the two handles.
         const movebeat::SaberPose* poses[2] = {&moves.left, &moves.right};
@@ -1452,6 +1472,7 @@ void App::renderOverlays(const FrameInput& input) {
             ? body_calibration_.forwardHandles()
             : (moves.left.handle + moves.right.handle) * 0.5f;
         for (int slot = 0; slot < 2; ++slot) {
+            view.hand_state[slot] = static_cast<int>(body_calibration_.handState(slot));
             view.hand_visible[slot] = poses[slot]->tracked;
             view.hand_x[slot] = poses[slot]->handle.x - reference.x;
             view.hand_y[slot] = poses[slot]->handle.y - reference.y;

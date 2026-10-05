@@ -478,7 +478,7 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
         "ARMS FORWARD", "ARMS OUT TO THE SIDES", "ARMS DOWN"
     };
     static const char* const hints[3] = {
-        "POINT BOTH MOVE AT THE SCREEN",
+        "POINT BOTH MOVE AT THE CAMERA",
         "SPREAD THEM WIDE  LIKE A LETTER T",
         "RELAX BOTH ARMS ALONG THE BODY"
     };
@@ -519,21 +519,26 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
         screen.circle(static_cast<int>(px), static_cast<int>(py), 9, hand_colors[slot]);
     }
 
-    // What to do now, and the hold bar.
-    const char* status = view.status == 0 ? "SHOW BOTH SPHERES TO THE CAMERA"
-                       : (view.status == 1 ? "MATCH THE POSE" : "HOLD STILL");
-    const u32 status_color = view.status == 2 ? 0xff40e890u
-                           : (view.status == 1 ? 0xffffc030u : 0xffff6470u);
-    drawMenuText(screen, status, x + 30, y + 170, 3, status_color);
-    if (step == 2 && view.status == 1 && view.inverted_up)
-        drawMenuText(screen, "CAMERA UP LOOKS FLIPPED", x + 30, y + 206, 2, 0xffff6470u);
-    const int bar_width = 380;
-    const unsigned int elapsed = std::min(1000u, view.progress_ms);
-    screen.rectangle(x + 30, y + 240, bar_width, 14, 0xff303b56u);
-    if (view.status == 2)
-        screen.rectangle(x + 30, y + 240, bar_width * static_cast<int>(elapsed) / 1000, 14,
-                         0xff40e890u);
-    drawMenuText(screen, "HOLD EACH POSE FOR A SECOND", x + 30, y + 280, 2, 0xff7d92b2u);
+    // Each controller: press its Move button in the pose, then hold while
+    // its sphere settles and is measured.
+    drawMenuText(screen, "IN THE POSE PRESS MOVE ON EACH CONTROLLER",
+                 x + 30, y + 150, 2, 0xffd9e7ffu);
+    if (step == 0)
+        drawMenuText(screen, "THIS ALSO CALIBRATES ITS SPHERE", x + 30, y + 176, 2,
+                     0xff9cb3d3u);
+    for (int slot = 0; slot < 2; ++slot) {
+        const int row_y = y + 222 + slot * 48;
+        screen.circle(x + 42, row_y + 8, 10, hand_colors[slot]);
+        const int state = view.hand_state[slot];
+        const char* text = state == 0 ? (view.hand_visible[slot] ? "PRESS MOVE"
+                                                                 : "NOT SEEN  PRESS MOVE")
+                         : state == 1 ? (view.hand_visible[slot] ? "HOLD STILL"
+                                                                 : "WAITING FOR THE SPHERE")
+                         : state == 2 ? "MEASURING" : "OK";
+        const u32 color = state == 3 ? 0xff40e890u
+                        : (state == 0 ? 0xffd9e7ffu : 0xffffc030u);
+        drawMenuText(screen, text, x + 66, row_y, 3, color);
+    }
     drawMenuText(screen, "TRI CANCEL", x + 30, y + height - 40, 2, 0xff9cb3d3u);
 }
 
