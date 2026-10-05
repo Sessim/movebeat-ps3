@@ -127,6 +127,12 @@ private:
     void quitLevel();
     void updateCalibration(FrameInput& input);
     void assignHands(const MoveFrame& moves);
+    void setHandAssignment(bool slots_swapped);
+    // Begins the guided three-pose calibration (forward, sides, down).
+    void beginBodyCalibration();
+    // Emulator scripts: holds the pose the current calibration step asks
+    // for; `crossed` puts GEM slot 0 on the player's right.
+    void scriptCalibrationPose(FrameInput& input, bool crossed) const;
     void handleStart(const FrameInput& input);
     // Both Move buttons: assigns the hands from where the controllers are
     // and starts, calibrating first if this session has no play origin.
@@ -192,10 +198,12 @@ private:
     unsigned long long level_start_us_;
     RunState run_state_;
 
-    movebeat::Vec3 play_origin_;
+    // Camera space to play space, from the guided body calibration (and
+    // re-centered by the quick recalibration after a tracking loss).
+    movebeat::BodyFrame body_frame_;
+    movebeat::BodyCalibration body_calibration_;
     bool hand_slots_swapped_;
     bool hand_assignment_established_;
-    movebeat::PoseCalibration pose_calibration_;
     bool calibrating_;
     // A play origin was measured this session (calibration or recovery).
     bool pose_calibrated_;

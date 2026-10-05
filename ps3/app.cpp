@@ -53,12 +53,6 @@ unsigned int adjustedTime(unsigned int raw_time_ms, int offset_ms) {
     return static_cast<unsigned int>(adjusted);
 }
 
-movebeat::SaberPose translated(const movebeat::SaberPose& pose,
-                               const movebeat::Vec3& origin) {
-    if (!pose.tracked) return pose;
-    return movebeat::SaberPose(pose.handle - origin, pose.tip - origin, true);
-}
-
 unsigned long long nowMicroseconds() {
     u64 seconds = 0;
     u64 nanoseconds = 0;
@@ -440,15 +434,19 @@ void App::readMenuTestInput(FrameInput& input) {
     const unsigned int chord_end = final_end + 6u;
     const unsigned int chord_timeout = chord_end + 600u;
     if (frame >= final_end) {
-        input.moves.left = movebeat::SaberPose(
-            movebeat::Vec3(0.3f, -0.3f, 0.0f), movebeat::Vec3(0.3f, 0.7f, 0.0f), true);
-        input.moves.right = movebeat::SaberPose(
-            movebeat::Vec3(-0.3f, -0.3f, 0.0f), movebeat::Vec3(-0.3f, 0.7f, 0.0f), true);
+        scriptCalibrationPose(input, true);
         if (frame < chord_end) {
             input.moves.left_buttons = GEM_BUTTON_MOVE;
             input.moves.right_buttons = GEM_BUTTON_MOVE;
         }
-        if (frame == chord_end + 20u) menu_capture_path_ = kDemoScoredFramePath;
+        if (calibrating_) scriptCalibrationPose(input, true);
+        // The sideways pose of the guided calibration, for the record.
+        if (calibrating_ && !menu_capture_path_ && !demo_scored_frame_saved_ &&
+            body_calibration_.step() == movebeat::BodyCalibration::STEP_SIDES &&
+            body_calibration_.progressMs() >= 300u) {
+            menu_capture_path_ = kDemoScoredFramePath;
+            demo_scored_frame_saved_ = true;
+        }
         if (run_state_ == RUN_PLAY || frame >= chord_timeout) menu_test_done_ = true;
         return;
     }
@@ -465,11 +463,9 @@ void App::readPlaylistTestInput(FrameInput& input) {
     // screen is skipped with Start, and the summary ends the test.
     input.moves.left_connected = true;
     input.moves.right_connected = true;
-    // Tips average to the origin, so calibration keeps the scripted cuts.
-    input.moves.left = movebeat::SaberPose(
-        movebeat::Vec3(-0.3f, -1.0f, 0.0f), movebeat::Vec3(-0.3f, 0.0f, 0.0f), true);
-    input.moves.right = movebeat::SaberPose(
-        movebeat::Vec3(0.3f, -1.0f, 0.0f), movebeat::Vec3(0.3f, 0.0f, 0.0f), true);
+    // The forward pose: its tips meet at the origin and the sideways pose
+    // spans the reference, so calibration keeps the scripted cuts as they are.
+    scriptCalibrationPose(input, false);
     const unsigned int frame = menu_test_frame_++;
     // One Select press (two frames, then eight released) per shelf step.
     const unsigned int selects_end = 30u + 10u * demo_options_.playlist_shelf;
@@ -481,6 +477,7 @@ void App::readPlaylistTestInput(FrameInput& input) {
             input.moves.left_buttons = GEM_BUTTON_MOVE;
             input.moves.right_buttons = GEM_BUTTON_MOVE;
         }
+        if (calibrating_) scriptCalibrationPose(input, false);
     }
     if (run_state_ != RUN_RESULTS) {
         playlist_test_results_ = 0;
@@ -627,7 +624,7 @@ void App::handleCalibrationCancel(FrameInput& input) {
         (input.level_pressed & kButtonTriangle) != 0;
     if (!input.cancel_calibration) return;
     calibrating_ = false;
-    pose_calibration_.reset();
+    body_calibration_.reset();
     printf("Pose calibration cancelled\n");
 }
 
@@ -945,10 +942,46 @@ void App::handleBackButtons(const FrameInput& input) {
 }
 
 void App::assignHands(const MoveFrame& moves) {
-    hand_slots_swapped_ = shouldSwapHandSlots(
-        moves.left, moves.right) != settings_.invert_hands;
+    setHandAssignment(shouldSwapHandSlots(moves.left, moves.right));
+}
+
+void App::setHandAssignment(bool slots_swapped) {
+    hand_slots_swapped_ = slots_swapped != settings_.invert_hands;
     hand_assignment_established_ = true;
     gem_.setHandSlotsSwapped(hand_slots_swapped_);
+}
+
+void App::beginBodyCalibration() {
+    stopPreview(250);
+    audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
+    body_calibration_.reset();
+    calibrating_ = true;
+    printf("Calibration: arms forward, then to the sides, then down\n");
+}
+
+void App::scriptCalibrationPose(FrameInput& input, bool crossed) const {
+    const float slot0_side = crossed ? 1.0f : -1.0f;
+    for (int slot = 0; slot < 2; ++slot) {
+        const float x = slot == 0 ? slot0_side : -slot0_side;
+        movebeat::SaberPose pose;
+        switch (body_calibration_.step()) {
+        case movebeat::BodyCalibration::STEP_SIDES:
+            pose = movebeat::SaberPose(movebeat::Vec3(x * 0.8f, 0.0f, 0.6f),
+                                       movebeat::Vec3(x * 1.3f, 0.0f, 0.6f), true);
+            break;
+        case movebeat::BodyCalibration::STEP_DOWN:
+            pose = movebeat::SaberPose(movebeat::Vec3(x * 0.25f, -0.6f, 0.6f),
+                                       movebeat::Vec3(x * 0.25f, -1.2f, 0.6f), true);
+            break;
+        default:
+            // Arms forward, blades at the camera; the tips meet the origin.
+            pose = movebeat::SaberPose(movebeat::Vec3(x * 0.2f, 0.0f, 0.6f),
+                                       movebeat::Vec3(x * 0.2f, 0.0f, 0.0f), true);
+            break;
+        }
+        if (slot == 0) input.moves.left = pose;
+        else input.moves.right = pose;
+    }
 }
 
 void App::updateTrackingPause(FrameInput& input) {
@@ -993,7 +1026,8 @@ void App::updateTrackingPause(FrameInput& input) {
         tracking_calibration_.reset();
     } else if (tracking_calibration_.sample(nowMilliseconds(),
                                             moves.left, moves.right)) {
-        play_origin_ = tracking_calibration_.origin();
+        body_frame_.recenter(tracking_calibration_.origin(),
+                             tracking_calibration_.handleOrigin());
         pose_calibrated_ = true;
         assignHands(moves);
         tracking_recalibrating_ = false;
@@ -1036,21 +1070,35 @@ void App::quitLevel() {
 void App::updateCalibration(FrameInput& input) {
     const MoveFrame& moves = input.moves;
     if (calibrating_ && !paused_) {
-        if (input.calibration_hands_separated)
-            input.calibrated_start = pose_calibration_.sample(
-                nowMilliseconds(), moves.left, moves.right);
-        else
-            pose_calibration_.reset();
+        const movebeat::BodyCalibration::Step before = body_calibration_.step();
+        input.calibrated_start = body_calibration_.sample(
+            nowMilliseconds(), moves.left, moves.right);
+        if (body_calibration_.step() != before) {
+            // Each pose held: a tap in both hands.
+            pulseRumble(0, 4, 160);
+            pulseRumble(1, 4, 160);
+            audio_.playEffect(SFX_DIFFICULTY, 0.6f, 0.0f);
+        }
+        diagnostic_.calibration_step = static_cast<int>(body_calibration_.step());
+        diagnostic_.body_up_inverted = body_calibration_.invertedUp() ? 1 : 0;
         if (input.calibrated_start) {
-            play_origin_ = pose_calibration_.origin();
+            body_frame_ = body_calibration_.frame();
             pose_calibrated_ = true;
-            assignHands(moves);
+            setHandAssignment(body_calibration_.slotsSwapped());
             calibrating_ = false;
-            printf("Starting pose assigned GEM slot %u to left hand\n",
-                   physicalSlotForHand(0u, hand_slots_swapped_));
+            diagnostic_.body_span_cm = static_cast<int>(body_calibration_.span() * 100.0f);
+            diagnostic_.body_drop_cm = static_cast<int>(body_calibration_.drop() * 100.0f);
+            diagnostic_.body_turn_deg = static_cast<int>(body_calibration_.turnDegrees());
+            diagnostic_.body_turn_applied = body_calibration_.turnApplied() ? 1 : 0;
+            diagnostic_.body_scale_pct = static_cast<int>(body_frame_.scale * 100.0f + 0.5f);
+            printf("Calibrated: GEM slot %u left, span %d cm, scale %d%%, turn %d deg%s\n",
+                   physicalSlotForHand(0u, hand_slots_swapped_),
+                   diagnostic_.body_span_cm, diagnostic_.body_scale_pct,
+                   diagnostic_.body_turn_deg,
+                   body_calibration_.turnApplied() ? "" : " (not applied)");
         }
     }
-    if (paused_) pose_calibration_.reset();
+    if (paused_) body_calibration_.reset();
 }
 
 bool App::startLevelAudio(const char* failure_message, bool clear_error_on_success) {
@@ -1082,14 +1130,9 @@ void App::handleStart(const FrameInput& input) {
         }
     } else if (input.start_pressed && run_state_ == RUN_SELECT && !paused_ &&
                !input.cancel_calibration && !input.hand_toggle) {
-        // Parse the chart now; the one-second calibration hides the cost.
+        // Parse the chart now; the calibration hides the cost.
         if (!ensureSelectedChart()) return;
-        // Calibration is the first second of the level: let the preview go.
-        stopPreview(250);
-        audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
-        pose_calibration_.reset();
-        calibrating_ = true;
-        printf("Hold both Move steady in a comfortable forward pose for one second\n");
+        beginBodyCalibration();
     } else if (input.calibrated_start ||
                (input.start_pressed && run_state_ == RUN_RESULTS && !paused_ &&
                 input.moves.left.tracked && input.moves.right.tracked)) {
@@ -1116,9 +1159,9 @@ void App::handleMoveChord(const FrameInput& input) {
     ++diagnostic_.menu_chord_starts;
     pulseRumble(0, 5, 200);
     pulseRumble(1, 5, 200);
-    stopPreview(250);
-    audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
     if (ready && pose_calibrated_) {
+        stopPreview(250);
+        audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
         // The hands are wherever the two controllers are right now.
         assignHands(input.moves);
         printf("Move chord: GEM slot %u is the left hand\n",
@@ -1126,11 +1169,10 @@ void App::handleMoveChord(const FrameInput& input) {
         startOrContinue();
         return;
     }
-    // First start of the session (or the hands overlap): the one-second
-    // calibration measures the origin and then assigns the hands.
-    pose_calibration_.reset();
-    calibrating_ = true;
+    // First start of the session (or the hands overlap): the guided
+    // calibration measures the body and assigns the hands, then starts.
     printf("Move chord: calibrating before the first level\n");
+    beginBodyCalibration();
 }
 
 void App::startOrContinue() {
@@ -1219,8 +1261,8 @@ void App::updateGameplay(FrameInput& input) {
     MoveFrame& moves = input.moves;
     if (hand_slots_swapped_) swapMoveFrameHands(moves);
     if (run_state_ == RUN_PLAY) {
-        moves.left = translated(moves.left, play_origin_);
-        moves.right = translated(moves.right, play_origin_);
+        moves.left = body_frame_.apply(moves.left);
+        moves.right = body_frame_.apply(moves.right);
     }
     input.raw_level_time_ms = audio_clock_ ? audio_.timeMs() :
         (run_state_ == RUN_PLAY
@@ -1398,10 +1440,23 @@ void App::renderOverlays(const FrameInput& input) {
                                  tracking_calibration_.progressMs());
     }
     if (calibrating_) {
-        drawCalibrationOverlay(screen_,
-                               moves.left.tracked && moves.right.tracked,
-                               input.calibration_hands_separated,
-                               pose_calibration_.progressMs());
+        CalibrationView view;
+        view.step = static_cast<int>(body_calibration_.step());
+        view.status = static_cast<int>(body_calibration_.status());
+        view.progress_ms = body_calibration_.progressMs();
+        view.inverted_up = body_calibration_.invertedUp();
+        // Live hands around the figure: relative to the forward pose once
+        // it is known, otherwise to the midpoint of the two handles.
+        const movebeat::SaberPose* poses[2] = {&moves.left, &moves.right};
+        movebeat::Vec3 reference = body_calibration_.forwardKnown()
+            ? body_calibration_.forwardHandles()
+            : (moves.left.handle + moves.right.handle) * 0.5f;
+        for (int slot = 0; slot < 2; ++slot) {
+            view.hand_visible[slot] = poses[slot]->tracked;
+            view.hand_x[slot] = poses[slot]->handle.x - reference.x;
+            view.hand_y[slot] = poses[slot]->handle.y - reference.y;
+        }
+        drawCalibrationOverlay(screen_, view);
     }
     if (gem_.captureActive()) drawCaptureIndicator(screen_);
     if (run_state_ == RUN_PLAY && imported_level_ && !selected_level_.charts.empty())

@@ -441,24 +441,100 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
     }
 }
 
-void drawCalibrationOverlay(Framebuffer& screen, bool both_tracked,
-                            bool hands_separated, unsigned int progress_ms) {
-    const int width = screen.width() / 2;
+namespace {
+
+// Front view of a player in the pose of a calibration step; shoulders at
+// (cx, sy). One meter is `scale` pixels, as for the live hand dots.
+void drawPoseFigure(Framebuffer& screen, int step, int cx, int sy, float scale,
+                    u32 color) {
+    const int shoulder = static_cast<int>(0.2f * scale);
+    screen.circle(cx, sy - 40, 18, color);
+    screen.line(cx, sy - 20, cx, sy + 110, color, 5);
+    screen.line(cx - shoulder, sy, cx + shoulder, sy, color, 5);
+    screen.line(cx, sy + 110, cx - 26, sy + 190, color, 5);
+    screen.line(cx, sy + 110, cx + 26, sy + 190, color, 5);
+    for (int side = -1; side <= 1; side += 2) {
+        int hand_x, hand_y;
+        if (step == 1) {
+            hand_x = cx + side * static_cast<int>(0.8f * scale);
+            hand_y = sy;
+        } else if (step == 2) {
+            hand_x = cx + side * static_cast<int>(0.25f * scale);
+            hand_y = sy + static_cast<int>(0.6f * scale);
+        } else {
+            // Arms reach toward the viewer: short, foreshortened.
+            hand_x = cx + side * static_cast<int>(0.2f * scale);
+            hand_y = sy + 10;
+        }
+        screen.line(cx + side * shoulder, sy, hand_x, hand_y, color, 5);
+        screen.circle(hand_x, hand_y, 10, color);
+    }
+}
+
+} // namespace
+
+void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
+    static const char* const titles[3] = {
+        "ARMS FORWARD", "ARMS OUT TO THE SIDES", "ARMS DOWN"
+    };
+    static const char* const hints[3] = {
+        "POINT BOTH MOVE AT THE SCREEN",
+        "SPREAD THEM WIDE  LIKE A LETTER T",
+        "RELAX BOTH ARMS ALONG THE BODY"
+    };
+    const int step = view.step < 0 ? 0 : (view.step > 2 ? 2 : view.step);
+    const int width = 900;
+    const int height = 420;
     const int x = (screen.width() - width) / 2;
-    const int y = screen.height() / 8;
-    const unsigned int elapsed = std::min(1000u, progress_ms);
-    screen.rectangle(x - 12, y - 18, width + 24, 122, 0xff111b30u);
-    drawMenuText(screen, !both_tracked ? "TRACK BOTH SPHERES" :
-                 (!hands_separated ? "SEPARATE MOVE HANDS" :
-                  "HOLD BOTH MOVE STILL"), x + 12, y, 3,
-                 hands_separated ? 0xffd9e7ffu : 0xffffad8bu);
-    drawMenuText(screen, "HANDS APART - BUTTONS UP - SABERS FORWARD",
-                 x + 12, y + 27, 2, 0xff9cb3d3u);
-    screen.rectangle(x, y + 52, width, 14, 0xff303b56u);
-    screen.rectangle(x, y + 52, width * elapsed / 1000, 14,
-                     hands_separated ? 0xff40e890u : 0xffffad8bu);
-    drawMenuText(screen, "TRI CANCEL", x + width / 2 - 65,
-                 y + 80, 2, 0xff9cb3d3u);
+    const int y = (screen.height() - height) / 2 - 20;
+    screen.rectangle(x, y, width, height, 0xff101828u);
+
+    // Steps: three marks, done ones green, the current one bright.
+    for (int mark = 0; mark < 3; ++mark) {
+        const u32 color = mark < step ? 0xff40e890u
+                        : (mark == step ? 0xffd9e7ffu : 0xff3a4766u);
+        screen.rectangle(x + 30 + mark * 46, y + 24, 36, 8, color);
+    }
+    drawNumber(screen, static_cast<unsigned int>(step + 1), x + 200, y + 18, 3,
+               0xffd9e7ffu);
+    screen.line(x + 212, y + 34, x + 220, y + 16, 0xff7d92b2u, 2);
+    drawNumber(screen, 3u, x + 232, y + 18, 3, 0xffd9e7ffu);
+    drawMenuText(screen, titles[step], x + 30, y + 56, 4, 0xffd9e7ffu);
+    drawMenuText(screen, hints[step], x + 30, y + 102, 2, 0xff9cb3d3u);
+
+    // The figure, and the player's hands on it.
+    const float scale = 140.0f;
+    const int cx = x + width - 230;
+    const int sy = y + 150;
+    drawPoseFigure(screen, step, cx, sy, scale, 0xff3a5a86u);
+    const u32 hand_colors[2] = {0xff70d8ffu, 0xffff6878u};
+    for (int slot = 0; slot < 2; ++slot) {
+        if (!view.hand_visible[slot]) continue;
+        float px = cx + view.hand_x[slot] * scale;
+        float py = sy - view.hand_y[slot] * scale;
+        px = std::max(static_cast<float>(x + 470), std::min(px, static_cast<float>(x + width - 20)));
+        py = std::max(static_cast<float>(y + 20), std::min(py, static_cast<float>(y + height - 20)));
+        if (screen.effectsEnabled())
+            screen.glowDisc(px, py, 22.0f, withOpacity(hand_colors[slot], 0.5f));
+        screen.circle(static_cast<int>(px), static_cast<int>(py), 9, hand_colors[slot]);
+    }
+
+    // What to do now, and the hold bar.
+    const char* status = view.status == 0 ? "SHOW BOTH SPHERES TO THE CAMERA"
+                       : (view.status == 1 ? "MATCH THE POSE" : "HOLD STILL");
+    const u32 status_color = view.status == 2 ? 0xff40e890u
+                           : (view.status == 1 ? 0xffffc030u : 0xffff6470u);
+    drawMenuText(screen, status, x + 30, y + 170, 3, status_color);
+    if (step == 2 && view.status == 1 && view.inverted_up)
+        drawMenuText(screen, "CAMERA UP LOOKS FLIPPED", x + 30, y + 206, 2, 0xffff6470u);
+    const int bar_width = 380;
+    const unsigned int elapsed = std::min(1000u, view.progress_ms);
+    screen.rectangle(x + 30, y + 240, bar_width, 14, 0xff303b56u);
+    if (view.status == 2)
+        screen.rectangle(x + 30, y + 240, bar_width * static_cast<int>(elapsed) / 1000, 14,
+                         0xff40e890u);
+    drawMenuText(screen, "HOLD EACH POSE FOR A SECOND", x + 30, y + 280, 2, 0xff7d92b2u);
+    drawMenuText(screen, "TRI CANCEL", x + 30, y + height - 40, 2, 0xff9cb3d3u);
 }
 
 void drawCaptureIndicator(Framebuffer& screen) {

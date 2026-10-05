@@ -62,8 +62,28 @@ void drawBladeLength(Framebuffer& screen, int blade_length_cm);
 void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
                               bool recalibrating, bool hands_separated,
                               unsigned int progress_ms);
-void drawCalibrationOverlay(Framebuffer& screen, bool both_tracked,
-                            bool hands_separated, unsigned int progress_ms);
+// The guided calibration: which pose (step 0 forward, 1 sides, 2 down),
+// whether the player matches it (status 0 untracked, 1 wrong pose, 2
+// holding), the hold time, and where the two hands are now (meters
+// relative to the forward pose, x right, y up).
+struct CalibrationView {
+    int step;
+    int status;
+    unsigned int progress_ms;
+    bool inverted_up;
+    bool hand_visible[2];
+    float hand_x[2];
+    float hand_y[2];
+
+    CalibrationView() : step(0), status(0), progress_ms(0), inverted_up(false) {
+        for (int slot = 0; slot < 2; ++slot) {
+            hand_visible[slot] = false;
+            hand_x[slot] = hand_y[slot] = 0.0f;
+        }
+    }
+};
+
+void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view);
 void drawCaptureIndicator(Framebuffer& screen);
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
                    std::size_t selected_chart);

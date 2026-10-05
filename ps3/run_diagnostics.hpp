@@ -70,6 +70,15 @@ struct RunStatus {
     unsigned int tracking_pause_slot0_flags;
     unsigned int tracking_pause_slot1_flags;
     unsigned int tracking_quit_count;
+    // Guided calibration: current step (0 forward, 1 sides, 2 down, 3
+    // done), arms-down pose seen above the forward one, and the results.
+    int calibration_step;
+    int body_up_inverted;
+    int body_span_cm;
+    int body_drop_cm;
+    int body_turn_deg;
+    int body_turn_applied;
+    int body_scale_pct;
     unsigned int sound_effects;
     unsigned int error_stage;
     unsigned int error_code;

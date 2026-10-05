@@ -130,6 +130,118 @@ void testChartParser() {
            "arc curve rejects an invalid direction code");
 }
 
+// One second of a still two-hand pose at 60 Hz, from `time`.
+bool holdBodyPose(movebeat::BodyCalibration& calibration, unsigned int& time,
+                  const movebeat::SaberPose& slot0, const movebeat::SaberPose& slot1) {
+    bool finished = false;
+    for (int frame = 0; frame < 64; ++frame, time += 17)
+        finished = calibration.sample(time, slot0, slot1) || finished;
+    return finished;
+}
+
+movebeat::SaberPose bodyPose(float hx, float hy, float hz, float tx, float ty, float tz) {
+    return movebeat::SaberPose(movebeat::Vec3(hx, hy, hz), movebeat::Vec3(tx, ty, tz), true);
+}
+
+void testBodyCalibration() {
+    using movebeat::BodyCalibration;
+    movebeat::BodyCalibration calibration;
+    unsigned int time = 1000;
+    // Slot 0 is the player's right hand (camera +x).
+    const movebeat::SaberPose forward0 = bodyPose(0.2f, 1.3f, 2.0f, 0.2f, 1.3f, 1.4f);
+    const movebeat::SaberPose forward1 = bodyPose(-0.2f, 1.3f, 2.0f, -0.2f, 1.3f, 1.4f);
+    expect(!calibration.sample(time, forward0, movebeat::SaberPose()) &&
+           calibration.status() == BodyCalibration::STATUS_UNTRACKED,
+           "a missing sphere stops the calibration");
+    const movebeat::SaberPose up0 = bodyPose(0.2f, 1.3f, 2.0f, 0.2f, 1.9f, 2.0f);
+    const movebeat::SaberPose up1 = bodyPose(-0.2f, 1.3f, 2.0f, -0.2f, 1.9f, 2.0f);
+    expect(!holdBodyPose(calibration, time, up0, up1) &&
+           calibration.step() == BodyCalibration::STEP_FORWARD &&
+           calibration.status() == BodyCalibration::STATUS_POSE,
+           "blades pointing up are not the forward pose");
+    expect(!holdBodyPose(calibration, time, forward0, forward1) &&
+           calibration.step() == BodyCalibration::STEP_SIDES,
+           "holding the forward pose for a second moves on to the sides");
+    // Too narrow for arms out to the sides.
+    expect(!holdBodyPose(calibration, time, bodyPose(0.4f, 1.3f, 2.0f, 0.9f, 1.3f, 2.0f),
+                         bodyPose(-0.4f, 1.3f, 2.0f, -0.9f, 1.3f, 2.0f)) &&
+           calibration.step() == BodyCalibration::STEP_SIDES,
+           "hands 80 cm apart are not arms out to the sides");
+    expect(!holdBodyPose(calibration, time, bodyPose(0.65f, 1.35f, 2.0f, 1.1f, 1.35f, 2.0f),
+                         bodyPose(-0.65f, 1.35f, 2.0f, -1.1f, 1.35f, 2.0f)) &&
+           calibration.step() == BodyCalibration::STEP_DOWN,
+           "arms out to the sides move on to arms down");
+    // An upside-down camera axis: "down" reads above the forward pose.
+    expect(!holdBodyPose(calibration, time, bodyPose(0.25f, 1.9f, 2.0f, 0.25f, 2.4f, 2.0f),
+                         bodyPose(-0.25f, 1.9f, 2.0f, -0.25f, 2.4f, 2.0f)) &&
+           calibration.step() == BodyCalibration::STEP_DOWN && calibration.invertedUp(),
+           "hands above the forward pose report a flipped up axis");
+    expect(holdBodyPose(calibration, time, bodyPose(0.25f, 0.75f, 2.0f, 0.25f, 0.2f, 2.0f),
+                        bodyPose(-0.25f, 0.75f, 2.0f, -0.25f, 0.2f, 2.0f)) &&
+           calibration.done() && !calibration.invertedUp(),
+           "arms down completes the calibration");
+    expect(calibration.slotsSwapped(), "slot 0 further right makes slot 1 the left hand");
+    expect(near(calibration.span(), 1.3f) && near(calibration.drop(), 0.55f),
+           "span and drop are measured");
+    expect(calibration.turnApplied() && near(calibration.turnDegrees(), 0.0f),
+           "a player facing the camera needs no turn");
+
+    // The frame: forward tips at the origin; a 1.3 m span scales hand
+    // positions by 1.6/1.3 about the forward handles, blades unchanged.
+    const movebeat::BodyFrame frame = calibration.frame();
+    expect(near(frame.scale, 1.6f / 1.3f), "the scale makes the span the reference span");
+    const movebeat::SaberPose rest = frame.apply(forward0);
+    expect(near(rest.tip.x, 0.2f * 1.6f / 1.3f) && near(rest.tip.y, 0.0f) &&
+           near(rest.tip.z, 0.0f),
+           "the forward pose lands at the origin");
+    const movebeat::SaberPose reach = frame.apply(
+        bodyPose(0.7f, 1.3f, 2.0f, 0.7f, 1.3f, 1.4f));
+    expect(near(reach.handle.x, 0.7f * 1.6f / 1.3f) &&
+           near(length(reach.tip - reach.handle), 0.6f),
+           "hand reach scales, blade length does not");
+    expect(!frame.apply(movebeat::SaberPose()).tracked, "untracked poses stay untracked");
+
+    // A player turned 20 degrees: the turn is measured and undone.
+    movebeat::BodyCalibration turned;
+    time = 50000;
+    const float angle = 20.0f * 0.0174532925f;
+    const movebeat::Vec3 blade(std::sin(angle) * 0.6f, 0.0f, -std::cos(angle) * 0.6f);
+    const movebeat::Vec3 left_hand(-0.2f, 1.3f, 2.0f), right_hand(0.2f, 1.3f, 2.0f);
+    holdBodyPose(turned, time, movebeat::SaberPose(left_hand, left_hand + blade, true),
+                 movebeat::SaberPose(right_hand, right_hand + blade, true));
+    expect(turned.step() == BodyCalibration::STEP_SIDES &&
+           near(turned.turnDegrees(), 20.0f) && turned.turnApplied(),
+           "the facing is measured from the forward blades");
+    holdBodyPose(turned, time, bodyPose(-0.8f, 1.3f, 2.0f, -1.3f, 1.3f, 2.0f),
+                 bodyPose(0.8f, 1.3f, 2.0f, 1.3f, 1.3f, 2.0f));
+    holdBodyPose(turned, time, bodyPose(-0.25f, 0.7f, 2.0f, -0.25f, 0.1f, 2.0f),
+                 bodyPose(0.25f, 0.7f, 2.0f, 0.25f, 0.1f, 2.0f));
+    expect(turned.done() && !turned.slotsSwapped() && near(turned.frame().scale, 1.0f),
+           "slot 0 on the left keeps the slots, a 1.6 m span keeps the scale");
+    const movebeat::SaberPose aligned = turned.frame().apply(
+        movebeat::SaberPose(right_hand, right_hand + blade, true));
+    const movebeat::Vec3 direction = normalized(aligned.tip - aligned.handle);
+    expect(near(direction.x, 0.0f) && near(direction.z, -1.0f),
+           "after the turn the player's forward is the playfield's");
+
+    // A wide turn (camera far off to the side) is reported, not applied.
+    movebeat::BodyCalibration sideways;
+    const movebeat::Vec3 side_blade(0.6f, 0.0f, -0.2f);
+    holdBodyPose(sideways, time, movebeat::SaberPose(left_hand, left_hand + side_blade, true),
+                 movebeat::SaberPose(right_hand, right_hand + side_blade, true));
+    expect(sideways.step() == BodyCalibration::STEP_SIDES && !sideways.turnApplied(),
+           "a turn beyond 30 degrees is not applied");
+
+    // Recentering after a tracking loss keeps scale and turn.
+    movebeat::BodyFrame moved = frame;
+    moved.recenter(movebeat::Vec3(1.0f, 1.3f, 1.4f), movebeat::Vec3(1.0f, 1.3f, 2.0f));
+    const movebeat::SaberPose recentered = moved.apply(
+        bodyPose(1.2f, 1.3f, 2.0f, 1.2f, 1.3f, 1.4f));
+    expect(near(recentered.tip.x, 0.2f * 1.6f / 1.3f) && near(recentered.tip.z, 0.0f) &&
+           near(moved.scale, frame.scale),
+           "recentering moves the origin and keeps the scale");
+}
+
 void testPoseCalibration() {
     movebeat::PoseCalibration calibration;
     const movebeat::SaberPose left = pose(-0.3f, 1.0f, 2.0f);
@@ -1330,6 +1442,7 @@ int main() {
            "frame timing resets after a diagnostic report");
     checkpoint("chart parser"); testChartParser();
     checkpoint("pose calibration"); testPoseCalibration();
+    checkpoint("body calibration"); testBodyCalibration();
     checkpoint("correct cut"); testCorrectCut();
     checkpoint("whole blade cut"); testWholeBladeCut();
     checkpoint("wrong direction and miss"); testWrongDirectionAndMiss();
