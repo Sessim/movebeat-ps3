@@ -169,6 +169,7 @@ bool App::initializeSystems(int& exit_code) {
     writeRunStatus(kRunStatusPath, diagnostic_);
     gem_.setHandHuesEnabled(render_options.hand_colors);
     gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
+    gem_.setStateFilter(render_options.gem_filter);
     gem_.setHandHueValues(static_cast<unsigned int>(render_options.left_hue < 0 ? 0 : render_options.left_hue),
                           static_cast<unsigned int>(render_options.right_hue < 0 ? 0 : render_options.right_hue));
     diagnostic_.camera_exposure = render_options.camera_exposure;

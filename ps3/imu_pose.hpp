@@ -41,9 +41,14 @@ public:
     // is a tracking glitch, unless the new place holds for jumpFrames().
     static float maxJump() { return 0.35f; }
     static unsigned int jumpFrames() { return 6; }
+    // Depth smoothing: share of the remaining difference taken per frame,
+    // and the largest depth change per frame (5 cm, 3 m/s at 60 Hz).
+    static float depthFollow() { return 0.35f; }
+    static float maxDepthStep() { return 0.05f; }
 
     void reset() {
-        have_last_ = have_ref_ = have_depth_ = have_output_ = false;
+        have_last_ = have_ref_ = have_depth_ = have_output_ = have_smooth_depth_ = false;
+        smooth_depth_ = 0.0f;
         last_ms_ = ref_ms_ = 0;
         for (int variant = 0; variant < VARIANTS; ++variant) error_[variant] = 0.0f;
         scored_ = 0;
@@ -94,7 +99,7 @@ public:
         have_ref_ = false;
         if (!usable_quat || !have_last_ || now_ms < last_ms_ ||
             now_ms - last_ms_ > holdMs()) {
-            have_output_ = false;
+            have_output_ = have_smooth_depth_ = false;
             return SaberPose();
         }
         const Vec3 shaft = turn(bestVariant(), quat, last_quat_, last_.tip - last_.handle);
@@ -164,7 +169,22 @@ private:
         return v + c1 * (2.0f * q.w) + c2 * 2.0f;
     }
 
-    SaberPose output(const SaberPose& pose) {
+    SaberPose output(SaberPose pose) {
+        // Depth comes from the sphere's apparent size, a few pixels at
+        // 2 m: it jitters most. Follow it smoothly and at most
+        // maxDepthStep() per frame; across and up stay as measured.
+        if (have_smooth_depth_) {
+            float step = (pose.handle.z - smooth_depth_) * depthFollow();
+            if (step > maxDepthStep()) step = maxDepthStep();
+            if (step < -maxDepthStep()) step = -maxDepthStep();
+            smooth_depth_ += step;
+        } else {
+            smooth_depth_ = pose.handle.z;
+            have_smooth_depth_ = true;
+        }
+        const float shift = smooth_depth_ - pose.handle.z;
+        pose.handle.z += shift;
+        pose.tip.z += shift;
         output_handle_ = pose.handle;
         have_output_ = true;
         return pose;
@@ -211,6 +231,8 @@ private:
     float depth_;
     bool have_output_;
     Vec3 output_handle_;
+    bool have_smooth_depth_;
+    float smooth_depth_;
     unsigned int jump_frames_;
 };
 

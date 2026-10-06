@@ -87,6 +87,8 @@ RenderOptions readRenderOptions() {
         else if (strcmp(line, "background=off") == 0) options.background = false;
         else if (strncmp(line, "camera_exposure=", 16) == 0)
             options.camera_exposure = atoi(line + 16);
+        else if (strcmp(line, "gem_filter=off") == 0)
+            options.gem_filter = false;
         else if (strncmp(line, "left_hue=", 9) == 0)
             options.left_hue = atoi(line + 9);
         else if (strncmp(line, "right_hue=", 10) == 0)

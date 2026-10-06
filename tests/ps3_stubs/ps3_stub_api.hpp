@@ -121,6 +121,7 @@ s32 gemUpdateStart(const void*, system_time_t);
 s32 gemUpdateFinish();
 s32 gemTrackHues(const u32*, u32*);
 s32 gemCalibrate(u32);
+s32 gemFilterState(u32, u32);
 s32 gemSetRumble(u32, u8);
 
 s32 cameraInit();

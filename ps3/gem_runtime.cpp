@@ -67,6 +67,7 @@ struct GemRuntime::Impl {
     float camera_quality;
     u32 left_hue;
     u32 right_hue;
+    bool gem_filter;
     unsigned int update_count;
     u32 assigned_hues[4];
     int last_hue_error;
@@ -98,7 +99,7 @@ struct GemRuntime::Impl {
           hue_assignment_dirty(false), hue_values_known(false),
           hand_hues_enabled(false), hue_wait_frames(0), imu_held_frames(0),
           camera_exposure(128), camera_quality(0.5f),
-          left_hue(GEM_HUE_LEFT_HAND), right_hue(GEM_HUE_RIGHT_HAND),
+          left_hue(GEM_HUE_LEFT_HAND), right_hue(GEM_HUE_RIGHT_HAND), gem_filter(true),
           update_count(0),
           last_hue_error(0),
           connection_mask(0), last_error(0),
@@ -209,6 +210,9 @@ bool GemRuntime::initialize() {
                                               impl_->camera_quality)) != 0) return false;
     gemReset(0);
     gemReset(1);
+    // libgem's own state filter smooths positions it reports.
+    gemFilterState(0, impl_->gem_filter ? 1u : 0u);
+    gemFilterState(1, impl_->gem_filter ? 1u : 0u);
     cameraReset(0);
     impl_->last_stage = INIT_CAMERA_START;
     if ((impl_->last_error = cameraStart(0)) != 0) return false;
@@ -548,6 +552,10 @@ void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
     }
 }
 
+void GemRuntime::setStateFilter(bool enabled) {
+    if (impl_) impl_->gem_filter = enabled;
+}
+
 void GemRuntime::setHandHueValues(unsigned int left_hue, unsigned int right_hue) {
     if (!impl_) return;
     impl_->left_hue = left_hue % 360u;
@@ -566,6 +574,7 @@ bool GemRuntime::calibrateSlot(unsigned int slot) {
         (impl_->connection_mask & (1u << slot)) == 0)
         return false;
     if (gemCalibrate(slot) != 0) return false;
+    gemFilterState(slot, impl_->gem_filter ? 1u : 0u);
     impl_->calibration_requested[slot] = true;
     // A recalibrated sphere loses its hue: ask again as soon as libgem
     // reports it (in the hand color once the hands are known).

@@ -376,6 +376,23 @@ void testImuHold() {
     out = tracker.update(time, movebeat::SaberPose(far, far + blade, true), true, still);
     expect(out.tracked && !tracker.held() && near(out.handle.x, 1.5f),
            "a jump that persists is taken as the real place");
+
+    // Depth jitter: a 30 cm depth jump moves the hand by at most 5 cm per
+    // frame and settles on the new depth; across and up are not delayed.
+    ImuSaberTracker depth;
+    time = 9000;
+    depth.update(time, movebeat::SaberPose(at, at + blade, true), true, still);
+    const movebeat::Vec3 deeper(0.1f, 1.3f, 2.3f);
+    time += 17;
+    out = depth.update(time, movebeat::SaberPose(deeper, deeper + blade, true), true, still);
+    expect(near(out.handle.z, 2.05f) && near(out.handle.x, 0.1f) && near(out.handle.y, 1.3f) &&
+           near(out.tip.z - out.handle.z, -1.0f),
+           "depth moves at most 5 cm per frame, blade intact, across and up at once");
+    for (int frame = 0; frame < 30; ++frame) {
+        time += 17;
+        out = depth.update(time, movebeat::SaberPose(deeper, deeper + blade, true), true, still);
+    }
+    expect(std::fabs(out.handle.z - 2.3f) < 0.01f, "depth settles on the new value");
 }
 
 void testMoveButtonChord() {

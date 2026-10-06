@@ -62,6 +62,8 @@ public:
     void setCameraTuning(int max_exposure, float image_quality);
     // Hue angles (0..359) of the left and right hand spheres.
     void setHandHueValues(unsigned int left_hue, unsigned int right_hue);
+    // libgem's state filter (gemFilterState), from the next initialize().
+    void setStateFilter(bool enabled);
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;

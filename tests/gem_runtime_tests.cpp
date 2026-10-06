@@ -107,6 +107,7 @@ s32 gemTrackHues(const u32* requested, u32* assigned) {
     return 0;
 }
 s32 gemCalibrate(u32) { ++g_calibrate_count; return 0; }
+s32 gemFilterState(u32, u32) { return 0; }
 s32 gemSetRumble(u32, u8) { return 0; }
 
 s32 cameraInit() { return 0; }

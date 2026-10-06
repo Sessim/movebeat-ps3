@@ -56,10 +56,12 @@ struct RenderOptions {
     // troubles the camera.
     int left_hue;
     int right_hue;
+    // "gem_filter=off": no libgem state filter (gemFilterState).
+    bool gem_filter;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
-                      left_hue(204), right_hue(352) {}
+                      left_hue(204), right_hue(352), gem_filter(true) {}
 };
 
 RenderOptions readRenderOptions();
