@@ -1414,6 +1414,12 @@ void App::updateGameplay(FrameInput& input) {
     if (run_state_ == RUN_PLAY) {
         moves.left = body_frame_.apply(moves.left);
         moves.right = body_frame_.apply(moves.right);
+        // Physical reach limits for real controllers (the emulator's
+        // scripted poses are play-space already and may stand anywhere).
+        if (!demo_mode_) {
+            moves.left = body_frame_.constrain(moves.left);
+            moves.right = body_frame_.constrain(moves.right);
+        }
     }
     input.raw_level_time_ms = audio_clock_ ? audio_.timeMs() :
         (run_state_ == RUN_PLAY

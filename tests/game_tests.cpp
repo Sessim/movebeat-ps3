@@ -322,6 +322,37 @@ void testBodyCalibration() {
            "play-space calibration poses give the identity frame");
 }
 
+void testReachLimits() {
+    const movebeat::BodyFrame frame;
+    // A forward pose inside the reach passes untouched.
+    const movebeat::SaberPose inside(movebeat::Vec3(0.3f, 0.1f, -0.45f),
+                                     movebeat::Vec3(0.3f, 0.2f, 0.5f), true);
+    const movebeat::SaberPose same = frame.constrain(inside);
+    expect(near(same.handle.x, 0.3f) && near(same.handle.z, -0.45f) &&
+           near(same.tip.z, 0.5f), "a hand within reach is not touched");
+    // A glitch throws the hand far behind the player and turns the blade
+    // back: the hand stops at the chest, the blade at the hemisphere.
+    const movebeat::SaberPose thrown(movebeat::Vec3(0.2f, 0.0f, -3.0f),
+                                     movebeat::Vec3(0.2f, 0.0f, -4.0f), true);
+    const movebeat::SaberPose kept = frame.constrain(thrown);
+    const movebeat::Vec3 direction = normalized(kept.tip - kept.handle);
+    expect(near(kept.handle.z, movebeat::BodyFrame::nearestDepth()) &&
+           near(direction.z, movebeat::BodyFrame::minBladeForward()) &&
+           near(length(kept.tip - kept.handle), 1.0f),
+           "a hand behind the chest is held there, a blade pointing back is tilted forward");
+    const movebeat::SaberPose aside(movebeat::Vec3(3.0f, 2.0f, 0.5f),
+                                    movebeat::Vec3(3.0f, 2.0f, 1.5f), true);
+    const movebeat::SaberPose reached = frame.constrain(aside);
+    expect(near(reached.handle.x, 1.0f) && near(reached.handle.y, 0.85f) &&
+           near(reached.handle.z, -0.15f) && near(reached.tip.z, 0.85f),
+           "a hand beyond the arm's reach stops at its edge");
+    // Swings up, down and to the sides keep their blades.
+    const movebeat::SaberPose up(movebeat::Vec3(0.0f, 0.0f, -0.5f),
+                                 movebeat::Vec3(0.0f, 1.0f, -0.5f), true);
+    expect(near(frame.constrain(up).tip.y, 1.0f), "an upright blade is free");
+    expect(!frame.constrain(movebeat::SaberPose()).tracked, "untracked stays untracked");
+}
+
 void testPoseCalibration() {
     movebeat::PoseCalibration calibration;
     const movebeat::SaberPose left = pose(-0.3f, 1.0f, 2.0f);
@@ -1532,6 +1563,7 @@ int main() {
     checkpoint("chart parser"); testChartParser();
     checkpoint("pose calibration"); testPoseCalibration();
     checkpoint("body calibration"); testBodyCalibration();
+    checkpoint("reach limits"); testReachLimits();
     checkpoint("correct cut"); testCorrectCut();
     checkpoint("whole blade cut"); testWholeBladeCut();
     checkpoint("wrong direction and miss"); testWrongDirectionAndMiss();

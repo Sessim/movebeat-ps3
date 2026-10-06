@@ -42,9 +42,9 @@ public:
     static float maxJump() { return 0.35f; }
     static unsigned int jumpFrames() { return 6; }
     // Depth smoothing: share of the remaining difference taken per frame,
-    // and the largest depth change per frame (5 cm, 3 m/s at 60 Hz).
-    static float depthFollow() { return 0.35f; }
-    static float maxDepthStep() { return 0.05f; }
+    // and the largest depth change per frame (3 cm, 1.8 m/s at 60 Hz).
+    static float depthFollow() { return 0.2f; }
+    static float maxDepthStep() { return 0.03f; }
 
     void reset() {
         have_last_ = have_ref_ = have_depth_ = have_output_ = have_smooth_depth_ = false;

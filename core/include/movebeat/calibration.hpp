@@ -93,6 +93,44 @@ struct BodyFrame {
                             orient(handle_origin - hit_origin);
         return SaberPose(handle, handle + orient(pose.tip - pose.handle), true);
     }
+    // Where a hand can physically be in play space (meters; hit origin at
+    // 0, forward +z; the forward pose's handles sit at y 0, z -hitDepth):
+    // not behind the chest, not beyond a stretched arm, within reach to
+    // the sides, up and down. A blade never points back at the player
+    // more than minBladeForward() (its forward share): the forward
+    // hemisphere. A camera glitch cannot throw a saber behind the player.
+    static float reachSide() { return 1.0f; }
+    static float reachUp() { return 0.85f; }
+    static float reachDown() { return 0.95f; }
+    static float nearestDepth() { return -1.25f; }
+    static float farthestDepth() { return -0.15f; }
+    static float minBladeForward() { return -0.2f; }
+
+    static float clampTo(float value, float low, float high) {
+        return value < low ? low : (value > high ? high : value);
+    }
+    SaberPose constrain(const SaberPose& pose) const {
+        if (!pose.tracked) return pose;
+        const Vec3 handle(clampTo(pose.handle.x, -reachSide(), reachSide()),
+                          clampTo(pose.handle.y, -reachDown(), reachUp()),
+                          clampTo(pose.handle.z, nearestDepth(), farthestDepth()));
+        const Vec3 blade = pose.tip - pose.handle;
+        const float length = movebeat::length(blade);
+        if (!(length > 0.0001f)) return SaberPose(handle, handle + blade, true);
+        Vec3 direction = blade * (1.0f / length);
+        if (direction.z < minBladeForward()) {
+            // Keep its sideways/vertical heading, tilted onto the limit.
+            const float side = std::sqrt(direction.x * direction.x +
+                                         direction.y * direction.y);
+            const float keep = std::sqrt(1.0f - minBladeForward() * minBladeForward());
+            direction = side > 0.0001f
+                ? Vec3(direction.x / side * keep, direction.y / side * keep,
+                       minBladeForward())
+                : Vec3(0.0f, keep, minBladeForward());
+        }
+        return SaberPose(handle, handle + direction * length, true);
+    }
+
     // A quick one-pose recalibration (blades pointing forward) moves the
     // origin, keeping turn, depth and scale.
     void recenter(const Vec3& tips, const Vec3& handles) {
