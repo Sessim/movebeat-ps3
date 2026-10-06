@@ -40,11 +40,13 @@ static const u32 GEM_HUE_DONT_CHANGE = 8u << 24;
 static const u32 GEM_HUE_LEFT_HAND = 204u;
 static const u32 GEM_HUE_RIGHT_HAND = 352u;
 
-inline u32 gemHueForPhysicalSlot(unsigned int slot, bool slots_swapped) {
+inline u32 gemHueForPhysicalSlot(unsigned int slot, bool slots_swapped,
+                                 u32 left_hue = GEM_HUE_LEFT_HAND,
+                                 u32 right_hue = GEM_HUE_RIGHT_HAND) {
     if (slot == 0u)
-        return slots_swapped ? GEM_HUE_RIGHT_HAND : GEM_HUE_LEFT_HAND;
+        return slots_swapped ? right_hue : left_hue;
     if (slot == 1u)
-        return slots_swapped ? GEM_HUE_LEFT_HAND : GEM_HUE_RIGHT_HAND;
+        return slots_swapped ? left_hue : right_hue;
     return GEM_HUE_DONT_CARE;
 }
 

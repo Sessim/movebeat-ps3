@@ -121,10 +121,15 @@ void testGestureVertical() {
     events = gesture.update(false, true, 0.004f, 0.23f, 144);
     check(events.released && events.flick_rows_per_second > 15.0f,
           "releasing T mid-motion flicks with the hand's speed");
-    // Lost tracking ends the drag without throwing the list.
+    // A brief dropout is skipped; a longer loss ends the drag without
+    // throwing the list.
     gesture.update(true, true, 0.0f, 0.0f, 200);
     gesture.update(true, true, 0.0f, 0.06f, 216);
     events = gesture.update(true, false, 0.0f, 0.4f, 232);
+    check(!events.released && gesture.vertical(), "a one-frame dropout keeps the drag");
+    events = gesture.update(true, true, 0.0f, 0.09f, 248);
+    check(events.drag_rows > 0.0f, "the drag goes on after the dropout");
+    events = gesture.update(true, false, 0.0f, 0.4f, 600);
     check(events.released && events.flick_rows_per_second == 0.0f,
           "lost tracking cancels the flick");
 }

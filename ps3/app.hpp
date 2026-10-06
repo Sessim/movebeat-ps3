@@ -129,7 +129,11 @@ private:
     // Calibration and tracking recovery.
     void updateTrackingPause(FrameInput& input);
     // Leaves a level for the library (Triangle while tracking is lost).
-    void quitLevel();
+    // Leaves a level for the library (pause menu or tracking pause).
+    void quitLevel(bool tracking_lost);
+    // Start during play: pause menu (continue, restart, back to tracks).
+    void handlePauseMenu(FrameInput& input);
+    void restartLevel();
     void resumeAfterTrackingLoss();
     void updateCalibration(FrameInput& input);
     void assignHands(const MoveFrame& moves);
@@ -234,6 +238,8 @@ private:
     bool preview_active_;
     unsigned int halo_flash_ms_;
     bool paused_;
+    // The player paused the song (Start) and sees the pause menu.
+    bool user_paused_;
     bool tracking_paused_;
     bool tracking_recalibrating_;
     TrackingPauseGate tracking_gate_;

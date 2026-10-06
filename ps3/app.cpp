@@ -100,7 +100,7 @@ App::App()
       left_rumble_power_(0), right_rumble_power_(0), gesture_hand_(-1),
       randomizer_spinning_(false), last_motion_ms_(0), last_tick_row_(0.0f),
       selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0),
-      paused_(false), tracking_paused_(false), tracking_recalibrating_(false),
+      paused_(false), user_paused_(false), tracking_paused_(false), tracking_recalibrating_(false),
       resume_since_ms_(0),
       pause_started_us_(0), diagnostic_frame_(0),
       previous_diagnostic_phase_(""), first_frame_saved_(false),
@@ -169,6 +169,8 @@ bool App::initializeSystems(int& exit_code) {
     writeRunStatus(kRunStatusPath, diagnostic_);
     gem_.setHandHuesEnabled(render_options.hand_colors);
     gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
+    gem_.setHandHueValues(static_cast<unsigned int>(render_options.left_hue < 0 ? 0 : render_options.left_hue),
+                          static_cast<unsigned int>(render_options.right_hue < 0 ? 0 : render_options.right_hue));
     diagnostic_.camera_exposure = render_options.camera_exposure;
     diagnostic_.camera_quality_pct = static_cast<int>(render_options.camera_quality * 100.0f + 0.5f);
     if (!demo_mode_ && !gem_.initialize()) {
@@ -343,6 +345,7 @@ void App::runFrame() {
         if (updateLibraryCards(level_choices_, shelf_order_, center, 1u))
             recordLibraryCardMemory(diagnostic_, level_choices_);
     }
+    handlePauseMenu(input);
     updateTrackingPause(input);
     updateCalibration(input);
     handleStart(input);
@@ -364,7 +367,7 @@ void App::failAudio(const char* message) {
 }
 
 void App::synchronizePause() {
-    const bool requested = g_pause_requested || tracking_paused_;
+    const bool requested = g_pause_requested || tracking_paused_ || user_paused_;
     if (requested == paused_) return;
     const unsigned long long now_us = nowMicroseconds();
     paused_ = requested;
@@ -523,6 +526,30 @@ void App::recordMenuTest(const FrameInput& input) {
 void App::readDemoInput(FrameInput& input) {
     if (demo_options_.menu_test) {
         readMenuTestInput(input);
+        return;
+    }
+    if (demo_options_.pause_test) {
+        // Frames of the scripted song: pause, restart, pause, leave.
+        const unsigned int frame = menu_test_frame_++;
+        unsigned short buttons = 0;
+        if ((frame >= 180u && frame < 182u) || (frame >= 420u && frame < 422u))
+            buttons = kButtonStart;
+        else if (frame >= 240u && frame < 242u)
+            buttons = kButtonCircle;
+        else if (frame >= 460u && frame < 462u)
+            buttons = kButtonTriangle;
+        if (frame == 210u) menu_capture_path_ = kDemoTimedFramePath;
+        if (frame > 462u && run_state_ == RUN_SELECT) menu_test_done_ = true;
+        if (run_state_ != RUN_PLAY || user_paused_) {
+            input.moves = MoveFrame();
+            input.moves.left_connected = input.moves.right_connected = true;
+        } else {
+            input.moves = scriptedDemoFrame(
+                game_, adjustedTime(audio_clock_ ? audio_.timeMs() : 0u,
+                                    settings_.timing_offset_ms),
+                demo_options_.automatic_cuts);
+        }
+        input.moves.right_buttons = buttons;
         return;
     }
     if (demo_options_.playlist_test) {
@@ -859,7 +886,10 @@ void App::updateLibraryMotion(const FrameInput& input) {
         // is the blade-length chord, not a gesture.
         const bool left_t = buttons.left_trigger >= 128u;
         const bool right_t = buttons.right_trigger >= 128u;
-        if (gesture_hand_ < 0 && left_t != right_t) gesture_hand_ = right_t ? 1 : 0;
+        if (gesture_hand_ < 0 && left_t != right_t) {
+            gesture_hand_ = right_t ? 1 : 0;
+            ++diagnostic_.menu_t_presses;
+        }
         const bool held = gesture_hand_ >= 0 && !(left_t && right_t) &&
                           (gesture_hand_ == 1 ? right_t : left_t);
         const movebeat::SaberPose& pose =
@@ -870,6 +900,8 @@ void App::updateLibraryMotion(const FrameInput& input) {
         const bool pointing = gesturePoint(pose, point_x, point_y);
         const MenuGestureEvents events = gesture_.update(
             held, pointing, point_x, point_y, now_ms);
+        if (held && !pointing) ++diagnostic_.menu_t_untracked_frames;
+        if (events.drag_started) ++diagnostic_.menu_gesture_drags;
         if (events.drag_started) {
             carousel_.beginDrag();
             randomizer_spinning_ = false;
@@ -1033,8 +1065,17 @@ void App::updateTrackingPause(FrameInput& input) {
     }
     if (run_state_ != RUN_PLAY || !tracking_paused_) return;
     if ((input.level_pressed & kButtonTriangle) && !g_pause_requested) {
-        quitLevel();
+        quitLevel(true);
         return;
+    }
+    // Pointed at the camera, a Move button press recalibrates that sphere
+    // (and its orientation reference).
+    if (!demo_mode_ && !g_pause_requested) {
+        const unsigned short pressed[2] = {input.buttons.left_pressed,
+                                           input.buttons.right_pressed};
+        for (unsigned int slot = 0; slot < 2; ++slot)
+            if ((pressed[slot] & GEM_BUTTON_MOVE) && gem_.calibrateSlot(slot))
+                printf("Tracking pause: sphere %u recalibrating\n", slot);
     }
     if (!input.both_moves_optical || g_pause_requested) {
         tracking_calibration_.reset();
@@ -1086,7 +1127,48 @@ void App::resumeAfterTrackingLoss() {
     ++diagnostic_.tracking_recovery_count;
 }
 
-void App::quitLevel() {
+void App::handlePauseMenu(FrameInput& input) {
+    if (run_state_ != RUN_PLAY || tracking_paused_ || g_pause_requested) {
+        if (run_state_ != RUN_PLAY) user_paused_ = false;
+        return;
+    }
+    const unsigned short pressed = input.buttons.pressed;
+    if (!user_paused_) {
+        if (!input.start_pressed) return;
+        user_paused_ = true;
+        synchronizePause();
+        input.start_pressed = false;
+        ++diagnostic_.pause_menu_opens;
+        printf("Paused\n");
+        return;
+    }
+    // The menu consumes the buttons; nothing else acts on them.
+    input.start_pressed = false;
+    if (pressed & (kButtonStart | kButtonCross)) {
+        user_paused_ = false;
+        game_.invalidateInput();
+        synchronizePause();
+        printf("Resumed\n");
+    } else if (pressed & kButtonCircle) {
+        user_paused_ = false;
+        restartLevel();
+    } else if (pressed & kButtonTriangle) {
+        user_paused_ = false;
+        quitLevel(false);
+    }
+}
+
+void App::restartLevel() {
+    ++diagnostic_.level_restarts;
+    audio_.shutdown();
+    audio_clock_ = false;
+    synchronizePause();
+    left_rumble_frames_ = right_rumble_frames_ = 0;
+    printf("Level restarted\n");
+    beginLevel();
+}
+
+void App::quitLevel(bool tracking_lost) {
     audio_.shutdown();
     audio_clock_ = false;
     tracking_paused_ = false;
@@ -1104,8 +1186,13 @@ void App::quitLevel() {
     carousel_.reset(static_cast<int>(shelf_pos_));
     last_tick_row_ = carousel_.nearestRow();
     selection_changed_ms_ = nowMilliseconds();
-    ++diagnostic_.tracking_quit_count;
-    printf("Level left while tracking was lost\n");
+    if (tracking_lost) {
+        ++diagnostic_.tracking_quit_count;
+        printf("Level left while tracking was lost\n");
+    } else {
+        ++diagnostic_.pause_quits;
+        printf("Level left from the pause menu\n");
+    }
 }
 
 void App::updateCalibration(FrameInput& input) {
@@ -1126,7 +1213,9 @@ void App::updateCalibration(FrameInput& input) {
                         2, 120);
         }
         input.calibrated_start = body_calibration_.sample(
-            nowMilliseconds(), input.optical.left, input.optical.right);
+            nowMilliseconds(), input.optical.left, input.optical.right,
+            !input.moves.partial[0], !input.moves.partial[1]);
+        diagnostic_.calibration_partial_measures = body_calibration_.partialMeasures();
         // The hands are known after the sideways pose: color the spheres
         // now, so the last pose already checks tracking in those colors.
         if (before == movebeat::BodyCalibration::STEP_SIDES &&
@@ -1494,6 +1583,8 @@ void App::renderOverlays(const FrameInput& input) {
     const MoveFrame& moves = input.moves;
     drawConnection(screen_, 0, moves.left_connected, moves.left.tracked, 0xff40b8ffu);
     drawConnection(screen_, 1, moves.right_connected, moves.right.tracked, 0xffff4058u);
+    if (run_state_ == RUN_PLAY && user_paused_ && !tracking_paused_)
+        drawPauseMenu(screen_);
     if (run_state_ == RUN_PLAY && tracking_paused_) {
         drawTrackingPauseOverlay(screen_, input.both_moves_optical,
                                  tracking_recalibrating_,
@@ -1507,6 +1598,7 @@ void App::renderOverlays(const FrameInput& input) {
     if (calibrating_) {
         CalibrationView view;
         view.step = static_cast<int>(body_calibration_.step());
+        view.directions_disagree = body_calibration_.directionsDisagree();
         // Live hands around the figure: relative to the forward pose once
         // it is known, otherwise to the midpoint of the two handles.
         const movebeat::SaberPose* poses[2] = {&moves.left, &moves.right};
@@ -1609,7 +1701,7 @@ void App::saveDiagnosticFrames(const FrameInput& input) {
         if (first_frame_saved_)
             printf("First rendered frame saved: %s\n", kFirstFramePath);
     }
-    if (scriptedMenuRun() && menu_capture_path_) {
+    if (menu_capture_path_) {
         // Library frames requested by the scripted menu run.
         if (screen_.savePpm(menu_capture_path_))
             printf("Menu test frame saved: %s\n", menu_capture_path_);
@@ -1681,6 +1773,8 @@ void App::publishDiagnostics(const FrameInput& input) {
     const char* diagnostic_phase = run_state_ == RUN_AUDIO_ERROR ? "audio_error" :
         tracking_paused_
             ? (tracking_recalibrating_ ? "tracking_recalibration" : "tracking_pause") :
+        demo_mode_ && demo_options_.pause_test
+            ? (menu_test_done_ ? "pause_test_done" : "pause_test") :
         demo_mode_ ? (demo_options_.playlist_test
                           ? (menu_test_done_ ? "playlist_test_done" : "playlist_test") :
                       !demo_options_.menu_test ? "demo_play" :

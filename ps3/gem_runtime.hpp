@@ -60,6 +60,8 @@ public:
     // exposure (40..511, higher is brighter but blurs motion) and image
     // quality (0 favors tracking, 1 the picture).
     void setCameraTuning(int max_exposure, float image_quality);
+    // Hue angles (0..359) of the left and right hand spheres.
+    void setHandHueValues(unsigned int left_hue, unsigned int right_hue);
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;

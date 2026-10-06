@@ -249,8 +249,10 @@ void runGemRuntimeHueTests() {
     require(runtime.update(frame, 0.6f), "untracked fake Move should update");
     g_state_buttons = GEM_BUTTON_MOVE;
     require(runtime.update(frame, 0.6f), "untracked Move press frame should update");
-    require(g_calibrate_count == calibrations + 2u,
-            "an untracked Move button press should restart sphere calibration");
+    require(g_calibrate_count == calibrations,
+            "a Move button press never recalibrates a sphere by itself");
+    require(runtime.calibrateSlot(1) && g_calibrate_count == calibrations + 1u,
+            "the game recalibrates a sphere only on request");
 
     runtime.shutdown();
     std::puts("All GemRuntime physical LED hue tests passed.");

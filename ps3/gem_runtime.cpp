@@ -65,6 +65,8 @@ struct GemRuntime::Impl {
     unsigned int imu_held_frames;
     int camera_exposure;
     float camera_quality;
+    u32 left_hue;
+    u32 right_hue;
     unsigned int update_count;
     u32 assigned_hues[4];
     int last_hue_error;
@@ -96,6 +98,7 @@ struct GemRuntime::Impl {
           hue_assignment_dirty(false), hue_values_known(false),
           hand_hues_enabled(false), hue_wait_frames(0), imu_held_frames(0),
           camera_exposure(128), camera_quality(0.5f),
+          left_hue(GEM_HUE_LEFT_HAND), right_hue(GEM_HUE_RIGHT_HAND),
           update_count(0),
           last_hue_error(0),
           connection_mask(0), last_error(0),
@@ -390,7 +393,6 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
         }
         const unsigned short buttons = index == 0
             ? frame.left_buttons : frame.right_buttons;
-        const unsigned short pressed = buttons & ~impl_->previous_buttons[index];
         impl_->previous_buttons[index] = buttons;
         if (results[index] == GEM_STATUS_OK)
             impl_->calibration_requested[index] = false;
@@ -407,20 +409,12 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
             } else {
                 recovery_error = calibration_error;
             }
-        } else if ((pressed & GEM_BUTTON_MOVE) != 0 &&
-                   (!(index == 0 ? frame.left.tracked : frame.right.tracked) ||
-                    frame.held[index])) {
-            // Move restarts the sphere calibration only for a controller the
-            // camera cannot track; a tracked Move uses the button in the menu
-            // (randomizer, two-Move start).
-            const int calibration_error = gemCalibrate(index);
-            if (calibration_error == 0) {
-                impl_->calibration_requested[index] = true;
-                impl_->hues_requested = false;
-            } else {
-                recovery_error = calibration_error;
-            }
         }
+        // The Move button never recalibrates by itself: a calibration also
+        // sets the orientation reference, which needs the Move pointed at
+        // the camera; pressed any other way (the randomizer, say) it left a
+        // blade turned round. The game asks for it (calibrateSlot) where
+        // the player is told to point at the camera.
         impl_->previous_results[index] = results[index];
         impl_->last_results[index] = results[index];
         impl_->last_tracking[index] = results[index] == 0 ? states[index].tracking : 0u;
@@ -464,8 +458,10 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     }
     if (impl_->hue_assignment_dirty) {
         const u32 requested_hues[4] = {
-            gemHueForPhysicalSlot(0, impl_->hand_slots_swapped),
-            gemHueForPhysicalSlot(1, impl_->hand_slots_swapped),
+            gemHueForPhysicalSlot(0, impl_->hand_slots_swapped,
+                                  impl_->left_hue, impl_->right_hue),
+            gemHueForPhysicalSlot(1, impl_->hand_slots_swapped,
+                                  impl_->left_hue, impl_->right_hue),
             GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
         };
         u32 assigned_hues[4] = {};
@@ -485,8 +481,10 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
         !impl_->hues_requested) {
         if (impl_->hand_assignment_known && impl_->hand_hues_enabled) {
             const u32 requested_hues[4] = {
-                gemHueForPhysicalSlot(0, impl_->hand_slots_swapped),
-                gemHueForPhysicalSlot(1, impl_->hand_slots_swapped),
+                gemHueForPhysicalSlot(0, impl_->hand_slots_swapped,
+                                  impl_->left_hue, impl_->right_hue),
+                gemHueForPhysicalSlot(1, impl_->hand_slots_swapped,
+                                  impl_->left_hue, impl_->right_hue),
                 GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
             };
             u32 assigned_hues[4] = {};
@@ -548,6 +546,12 @@ void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
         impl_->hue_values_known = false;
         impl_->last_hue_error = 0;
     }
+}
+
+void GemRuntime::setHandHueValues(unsigned int left_hue, unsigned int right_hue) {
+    if (!impl_) return;
+    impl_->left_hue = left_hue % 360u;
+    impl_->right_hue = right_hue % 360u;
 }
 
 void GemRuntime::setCameraTuning(int max_exposure, float image_quality) {

@@ -117,7 +117,9 @@ private:
 // Hand gestures while the Move's T trigger is held. Positions are in meters
 // (x right, y up). The first 3.5 cm of motion decide the axis: a vertical
 // stroke drags the carousel (and flicks it on release), a horizontal stroke
-// steps the difficulty once per 15 cm. Losing tracking cancels the gesture.
+// steps the difficulty once per 15 cm. Tracking dropouts up to
+// lossToleranceMs() are skipped (on hardware a sphere drops for a frame
+// or two all the time); a longer loss cancels the gesture.
 struct MenuGestureEvents {
     bool drag_started;
     float drag_rows;
@@ -135,6 +137,7 @@ public:
     static float lockDistance() { return 0.035f; }
     static float rowsPerMeter() { return 12.0f; }
     static float difficultyDistance() { return 0.15f; }
+    static unsigned int lossToleranceMs() { return 250; }
 
     MenuGesture() { cancel(); }
 
@@ -147,6 +150,9 @@ public:
     MenuGestureEvents update(bool trigger_down, bool tracked, float x, float y,
                              unsigned int now_ms) {
         MenuGestureEvents events;
+        if (trigger_down && !tracked && state_ != IDLE &&
+            now_ms - last_ms_ <= lossToleranceMs())
+            return events;
         if (!trigger_down || !tracked) {
             if (state_ == VERTICAL) {
                 events.released = true;

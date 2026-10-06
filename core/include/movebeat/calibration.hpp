@@ -133,6 +133,9 @@ public:
     static unsigned int settleMs() { return 300; }
     static unsigned int measureMs() { return 250; }
     static unsigned int gapMs() { return 200; }
+    // A measurement uses full camera fixes; partial ones (whose position
+    // scale is unreliable) only when no full fix came for this long.
+    static unsigned int partialFallbackMs() { return 1500; }
 
     BodyCalibration() { reset(); }
 
@@ -151,6 +154,8 @@ public:
         slots_swapped_ = false;
         inverted_up_ = false;
         narrow_sides_ = false;
+        directions_disagree_ = false;
+        partial_measures_ = 0;
     }
 
     Step step() const { return step_; }
@@ -170,6 +175,12 @@ public:
     // was hardly wider than the forward one (hands may be swapped).
     bool invertedUp() const { return inverted_up_; }
     bool narrowSides() const { return narrow_sides_; }
+    // The forward pose was refused: the two blades pointed different ways
+    // (a sphere calibrated while not pointing at the camera turns its
+    // blade round). Both hands are asked again.
+    bool directionsDisagree() const { return directions_disagree_; }
+    // Hands measured from partial fixes only (fallback).
+    unsigned int partialMeasures() const { return partial_measures_; }
     Vec3 forwardHandles() const { return forward_handles_; }
     // The forward pose pointed along the camera's -z (play depth flipped).
     bool flipDepth() const { return flip_depth_; }
@@ -197,12 +208,17 @@ public:
         hand_[slot].state = HAND_SETTLING;
     }
 
-    // Feeds one frame of both physical slots; true when the last pose ends.
-    bool sample(unsigned int time, const SaberPose& slot0, const SaberPose& slot1) {
+    // Feeds one frame of both physical slots (`full`: the camera has a full
+    // fix of that slot); true when the last pose ends.
+    bool sample(unsigned int time, const SaberPose& slot0, const SaberPose& slot1,
+                bool full0 = true, bool full1 = true) {
         if (step_ == STEP_DONE) return false;
         const SaberPose* poses[2] = {&slot0, &slot1};
-        for (int slot = 0; slot < 2; ++slot) advance(hand_[slot], *poses[slot], time,
-                                                      result_[slot]);
+        const bool full[2] = {full0, full1};
+        for (int slot = 0; slot < 2; ++slot) {
+            if (advance(hand_[slot], *poses[slot], full[slot], time, result_[slot]))
+                ++partial_measures_;
+        }
         if (hand_[0].state != HAND_DONE || hand_[1].state != HAND_DONE) return false;
         finishStep();
         return step_ == STEP_DONE;
@@ -217,9 +233,12 @@ private:
         unsigned int count;
         Vec3 handle_sum;
         Vec3 tip_sum;
+        unsigned int full_count;
+        Vec3 full_handle_sum;
+        Vec3 full_tip_sum;
 
         HandProgress() : state(HAND_WAITING), tracking(false), since(0), last(0),
-                         count(0) {}
+                         count(0), full_count(0) {}
     };
     static float clampScale(float scale) {
         return scale < minimumScale() ? minimumScale()
@@ -233,19 +252,19 @@ private:
                lengthSquared(p.tip - p.handle) > 0.0001f;
     }
 
-    static void advance(HandProgress& hand, const SaberPose& pose, unsigned int time,
-                        SaberPose& result) {
-        if (hand.state != HAND_SETTLING && hand.state != HAND_MEASURING) return;
+    // True when the hand was finished from partial fixes.
+    static bool advance(HandProgress& hand, const SaberPose& pose, bool full,
+                        unsigned int time, SaberPose& result) {
+        if (hand.state != HAND_SETTLING && hand.state != HAND_MEASURING) return false;
         // A short dropout is skipped; a longer one starts the steady wait
         // over.
         const bool gap = hand.tracking && (time < hand.last || time - hand.last > gapMs());
-        if (!valid(pose) && !gap && hand.tracking) return;
+        if (!valid(pose) && !gap && hand.tracking) return false;
         if (!valid(pose) || gap) {
-            hand.state = HAND_SETTLING;
-            hand.tracking = false;
-            hand.count = 0;
-            hand.handle_sum = hand.tip_sum = Vec3();
-            if (!valid(pose)) return;
+            const HandState state = HAND_SETTLING;
+            hand = HandProgress();
+            hand.state = state;
+            if (!valid(pose)) return false;
         }
         if (!hand.tracking) {
             hand.tracking = true;
@@ -253,24 +272,45 @@ private:
         }
         hand.last = time;
         if (hand.state == HAND_SETTLING) {
-            if (time - hand.since < settleMs()) return;
+            if (time - hand.since < settleMs()) return false;
             hand.state = HAND_MEASURING;
             hand.since = time;
         }
         hand.handle_sum = hand.handle_sum + pose.handle;
         hand.tip_sum = hand.tip_sum + pose.tip;
         ++hand.count;
-        if (time - hand.since >= measureMs() && hand.count >= 8) {
+        if (full) {
+            hand.full_handle_sum = hand.full_handle_sum + pose.handle;
+            hand.full_tip_sum = hand.full_tip_sum + pose.tip;
+            ++hand.full_count;
+        }
+        const unsigned int elapsed = time - hand.since;
+        if (elapsed >= measureMs() && hand.full_count >= 8) {
+            const float inverse = 1.0f / static_cast<float>(hand.full_count);
+            result = SaberPose(hand.full_handle_sum * inverse,
+                               hand.full_tip_sum * inverse, true);
+            hand.state = HAND_DONE;
+            return false;
+        }
+        if (elapsed >= partialFallbackMs() && hand.count >= 8) {
             const float inverse = 1.0f / static_cast<float>(hand.count);
             result = SaberPose(hand.handle_sum * inverse, hand.tip_sum * inverse, true);
             hand.state = HAND_DONE;
+            return true;
         }
+        return false;
     }
 
     void finishStep() {
         const SaberPose& a = result_[0];
         const SaberPose& b = result_[1];
         if (step_ == STEP_FORWARD) {
+            if (dot(normalized(a.tip - a.handle), normalized(b.tip - b.handle)) < 0.5f) {
+                directions_disagree_ = true;
+                for (int slot = 0; slot < 2; ++slot) hand_[slot] = HandProgress();
+                return;
+            }
+            directions_disagree_ = false;
             forward_handles_ = (a.handle + b.handle) * 0.5f;
             forward_height_ = forward_handles_.y;
             forward_separation_ = std::fabs(a.handle.x - b.handle.x);
@@ -320,6 +360,8 @@ private:
     bool slots_swapped_;
     bool inverted_up_;
     bool narrow_sides_;
+    bool directions_disagree_;
+    unsigned int partial_measures_;
 };
 
 } // namespace movebeat

@@ -357,6 +357,18 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
     drawCenteredMenuText(screen, "TRI BACK TO TRACKS", height - 40, 2, 0xffd9e7ffu);
 }
 
+void drawPauseMenu(Framebuffer& screen) {
+    const int width = 520;
+    const int height = 250;
+    const int x = (screen.width() - width) / 2;
+    const int y = (screen.height() - height) / 2;
+    screen.rectangle(x, y, width, height, 0xff101828u);
+    drawCenteredMenuText(screen, "PAUSED", y + 30, 4, 0xffd9e7ffu);
+    drawMenuText(screen, "START  CONTINUE", x + 70, y + 100, 3, 0xff40e890u);
+    drawMenuText(screen, "CIRCLE  RESTART", x + 70, y + 145, 3, 0xffffc030u);
+    drawMenuText(screen, "TRI  BACK TO TRACKS", x + 70, y + 190, 3, 0xffff6470u);
+}
+
 void drawAudioError(Framebuffer& screen, int error) {
     const int center_x = screen.width() / 2;
     const int center_y = screen.height() / 2;
@@ -432,7 +444,7 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
     drawMenuText(screen, "HANDS APART - BUTTONS UP - SABERS FORWARD",
                  x + 25, y + 77, 2, 0xff9cb3d3u);
     // A sphere the camera lost for good: its Move button recalibrates it.
-    drawMenuText(screen, "MOVE BUTTON  RESET SPHERE      TRI  QUIT",
+    drawMenuText(screen, "AIM AT CAMERA  MOVE RESETS SPHERE  TRI QUIT",
                  x + 25, y + 140, 2, 0xff9cb3d3u);
     screen.rectangle(x + 25, y + 108, width - 50, 14, 0xff303b56u);
     if (both_moves_tracked && (!recalibrating || hands_separated)) {
@@ -525,7 +537,10 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
     // its sphere settles and is measured.
     drawMenuText(screen, "IN THE POSE PRESS MOVE ON EACH CONTROLLER",
                  x + 30, y + 150, 2, 0xffd9e7ffu);
-    if (step == 0)
+    if (step == 0 && view.directions_disagree)
+        drawMenuText(screen, "BLADES DISAGREE  AIM BOTH AT THE CAMERA AGAIN",
+                     x + 30, y + 176, 2, 0xffff6470u);
+    else if (step == 0)
         drawMenuText(screen, "THIS ALSO CALIBRATES ITS SPHERE", x + 30, y + 176, 2,
                      0xff9cb3d3u);
     for (int slot = 0; slot < 2; ++slot) {

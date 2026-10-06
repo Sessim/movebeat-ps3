@@ -22,12 +22,15 @@ struct EmulatorDemoOptions {
     bool playlist_test;
     // The playlist shelf the test plays (1 = first playlist by title).
     unsigned int playlist_shelf;
+    // During the demo song: pause (Start), restart (Circle), pause again
+    // and leave for the track list (Triangle).
+    bool pause_test;
 
     EmulatorDemoOptions() : enabled(false), automatic_cuts(true),
                             tracking_loss_test(false),
                             chart_index(0), capture_at_ms(0),
                             menu_test(false), playlist_test(false),
-                            playlist_shelf(1) {}
+                            playlist_shelf(1), pause_test(false) {}
 };
 
 EmulatorDemoOptions readEmulatorDemoOptions();
@@ -48,9 +51,15 @@ struct RenderOptions {
     // gemPrepareCamera; defaults 128 and 0.5.
     int camera_exposure;
     float camera_quality;
+    // "left_hue=N", "right_hue=N": sphere hue angles (default 204 blue,
+    // 352 red); a swap tells whether a color or a side of the room
+    // troubles the camera.
+    int left_hue;
+    int right_hue;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
-                      background(true), camera_exposure(128), camera_quality(0.5f) {}
+                      background(true), camera_exposure(128), camera_quality(0.5f),
+                      left_hue(204), right_hue(352) {}
 };
 
 RenderOptions readRenderOptions();

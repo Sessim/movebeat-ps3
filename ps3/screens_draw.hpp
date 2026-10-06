@@ -56,6 +56,8 @@ void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
 void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
                          const PlaylistChoice& playlist,
                          const std::vector<LevelChoice>& levels);
+// Start during a song: continue, restart or back to the track list.
+void drawPauseMenu(Framebuffer& screen);
 void drawAudioError(Framebuffer& screen, int error);
 void drawTimingOffset(Framebuffer& screen, int offset_ms);
 void drawBladeLength(Framebuffer& screen, int blade_length_cm);
@@ -68,12 +70,14 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
 // (meters relative to the forward pose, x right, y up).
 struct CalibrationView {
     int step;
+    // The forward pose was refused: the blades pointed different ways.
+    bool directions_disagree;
     int hand_state[2];
     bool hand_visible[2];
     float hand_x[2];
     float hand_y[2];
 
-    CalibrationView() : step(0) {
+    CalibrationView() : step(0), directions_disagree(false) {
         for (int slot = 0; slot < 2; ++slot) {
             hand_state[slot] = 0;
             hand_visible[slot] = false;

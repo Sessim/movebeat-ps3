@@ -45,6 +45,8 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.menu_test = true;
         else if (strcmp(line, "playlist_test=1") == 0)
             options.playlist_test = true;
+        else if (strcmp(line, "pause_test=1") == 0)
+            options.pause_test = true;
         else if (strncmp(line, "playlist_shelf=", 15) == 0)
             options.playlist_shelf = static_cast<unsigned int>(strtoul(line + 15, 0, 10));
         else if (strncmp(line, "level_id=", 9) == 0 &&
@@ -85,6 +87,10 @@ RenderOptions readRenderOptions() {
         else if (strcmp(line, "background=off") == 0) options.background = false;
         else if (strncmp(line, "camera_exposure=", 16) == 0)
             options.camera_exposure = atoi(line + 16);
+        else if (strncmp(line, "left_hue=", 9) == 0)
+            options.left_hue = atoi(line + 9);
+        else if (strncmp(line, "right_hue=", 10) == 0)
+            options.right_hue = atoi(line + 10);
         else if (strncmp(line, "camera_quality=", 15) == 0)
             options.camera_quality = static_cast<float>(atof(line + 15));
     }

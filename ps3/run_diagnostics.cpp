@@ -22,16 +22,19 @@ RunStatus::RunStatus()
       batch_dropped_primitives(0), library_scan_ms(0), menu_steps(0),
       menu_step_avg_us(0), menu_step_max_us(0), menu_idle_max_us(0),
       menu_ticks(0), menu_flicks(0), menu_difficulty_changes(0),
-      menu_randomizer_spins(0), menu_preview_starts(0), menu_chord_starts(0),
+      menu_randomizer_spins(0), menu_preview_starts(0), menu_t_presses(0),
+      menu_t_untracked_frames(0), menu_gesture_drags(0), menu_chord_starts(0),
       pose_calibrated(0), playlist_count(0), shelf(0), playlist_songs_played(0),
       playlist_total_score(0), playlist_complete(0),
       gem_slot0_result(-1), gem_slot1_result(-1), gem_slot0_flags(0),
       gem_slot1_flags(0), tracking_pause_slot0_result(-1),
       tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
-      tracking_pause_slot1_flags(0), tracking_quit_count(0), imu_held_frames(0), camera_exposure(128), camera_quality_pct(50),
+      tracking_pause_slot1_flags(0), tracking_quit_count(0), pause_menu_opens(0), level_restarts(0),
+      pause_quits(0), imu_held_frames(0), camera_exposure(128), camera_quality_pct(50),
       imu_slot0_variant(0), imu_slot1_variant(0), imu_slot0_error_deg(0),
       imu_slot1_error_deg(0), imu_slot0_scored(0), imu_slot1_scored(0),
       calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
+      calibration_partial_measures(0),
       body_span_cm(0), body_drop_cm(0),
       body_turn_deg(0), body_turn_applied(0), body_flip_depth(0), body_scale_pct(100), sound_effects(0),
       error_stage(0), error_code(0), level_count(0),
@@ -81,6 +84,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "menu_step_max_us=%u\nmenu_idle_max_us=%u\n"
             "menu_ticks=%u\nmenu_flicks=%u\nmenu_difficulty_changes=%u\n"
             "menu_randomizer_spins=%u\nmenu_preview_starts=%u\n"
+            "menu_t_presses=%u\nmenu_t_untracked_frames=%u\nmenu_gesture_drags=%u\n"
             "menu_chord_starts=%u\npose_calibrated=%d\n"
             "playlist_count=%u\nshelf=%u\nplaylist_songs_played=%u\n"
             "playlist_total_score=%u\nplaylist_complete=%d\n"
@@ -89,11 +93,13 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "tracking_pause_slot0_result=%d\ntracking_pause_slot1_result=%d\n"
             "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
             "tracking_quit_count=%u\n"
+            "pause_menu_opens=%u\nlevel_restarts=%u\npause_quits=%u\n"
             "imu_held_frames=%u\ncamera_exposure=%d\ncamera_quality_pct=%d\n"
             "imu_slot0_variant=%d\nimu_slot1_variant=%d\n"
             "imu_slot0_error_deg=%d\nimu_slot1_error_deg=%d\n"
             "imu_slot0_scored=%u\nimu_slot1_scored=%u\n"
             "calibration_step=%d\nbody_up_inverted=%d\nbody_narrow_sides=%d\n"
+            "calibration_partial_measures=%u\n"
             "body_span_cm=%d\n"
             "body_drop_cm=%d\nbody_turn_deg=%d\nbody_turn_applied=%d\n"
             "body_flip_depth=%d\n"
@@ -142,6 +148,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.menu_step_max_us, status.menu_idle_max_us,
             status.menu_ticks, status.menu_flicks, status.menu_difficulty_changes,
             status.menu_randomizer_spins, status.menu_preview_starts,
+            status.menu_t_presses, status.menu_t_untracked_frames,
+            status.menu_gesture_drags,
             status.menu_chord_starts, status.pose_calibrated,
             status.playlist_count, status.shelf, status.playlist_songs_played,
             status.playlist_total_score, status.playlist_complete,
@@ -149,13 +157,15 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.gem_slot0_flags, status.gem_slot1_flags,
             status.tracking_pause_slot0_result, status.tracking_pause_slot1_result,
             status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
-            status.tracking_quit_count, status.imu_held_frames,
+            status.tracking_quit_count, status.pause_menu_opens,
+            status.level_restarts, status.pause_quits, status.imu_held_frames,
             status.camera_exposure, status.camera_quality_pct,
             status.imu_slot0_variant, status.imu_slot1_variant,
             status.imu_slot0_error_deg, status.imu_slot1_error_deg,
             status.imu_slot0_scored, status.imu_slot1_scored,
             status.calibration_step, status.body_up_inverted,
-            status.body_narrow_sides, status.body_span_cm,
+            status.body_narrow_sides, status.calibration_partial_measures,
+            status.body_span_cm,
             status.body_drop_cm, status.body_turn_deg, status.body_turn_applied,
             status.body_flip_depth,
             status.body_scale_pct,

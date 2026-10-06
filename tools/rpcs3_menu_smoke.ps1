@@ -9,7 +9,9 @@ param(
     [switch]$Playlist,
     # Which playlist shelf to play (1 = first playlist by title).
     [ValidateRange(1, 32)]
-    [int]$Shelf = 1
+    [int]$Shelf = 1,
+    # Pause, restart and leave the demo song (demo_mode.ini pause_test=1).
+    [switch]$PauseTest
 )
 
 # Runs the game's scripted library navigation (demo_mode.ini menu_test=1)
@@ -43,7 +45,7 @@ if (Test-Path -LiteralPath $demoBackup) {
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $reportDir = Join-Path $project ("out/rpcs3-{0}-smoke/$stamp" -f $(if ($Playlist) { 'playlist' } else { 'menu' }))
-$mode = if ($Playlist) { 'playlist_test' } else { 'menu_test' }
+$mode = if ($PauseTest) { 'pause_test' } elseif ($Playlist) { 'playlist_test' } else { 'menu_test' }
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
 $baseline = if (Test-Path -LiteralPath $statusPath) {
     (Get-Item -LiteralPath $statusPath).LastWriteTimeUtc
@@ -138,6 +140,9 @@ $report = [pscustomobject]@{
     playlist_songs_played = [int]$status['playlist_songs_played']
     playlist_total_score = [int]$status['playlist_total_score']
     playlist_complete = [int]$status['playlist_complete']
+    pause_menu_opens = [int]$status['pause_menu_opens']
+    level_restarts = [int]$status['level_restarts']
+    pause_quits = [int]$status['pause_quits']
     sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii

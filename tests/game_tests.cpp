@@ -207,6 +207,34 @@ void testBodyCalibration() {
     expect(near(calibration.frame().scale, BodyCalibration::maximumScale()),
            "an implausible span keeps the scale within limits");
 
+    // A blade turned round in the forward pose is refused: both hands are
+    // asked again; agreeing blades then pass.
+    movebeat::BodyCalibration turned_round;
+    expect(!holdBodyPose(turned_round, time, forward0,
+                         bodyPose(-0.2f, 1.3f, 2.0f, -0.2f, 1.3f, 2.6f)) &&
+           turned_round.step() == BodyCalibration::STEP_FORWARD &&
+           turned_round.directionsDisagree() &&
+           turned_round.handState(0) == BodyCalibration::HAND_WAITING,
+           "blades pointing opposite ways refuse the forward pose");
+    holdBodyPose(turned_round, time, forward0, forward1);
+    expect(turned_round.step() == BodyCalibration::STEP_SIDES &&
+           !turned_round.directionsDisagree(),
+           "agreeing blades then pass the forward pose");
+
+    // Full fixes are measured; partial ones only as a late fallback.
+    movebeat::BodyCalibration fixes;
+    fixes.confirm(0);
+    fixes.confirm(1);
+    for (int frame = 0; frame < 60; ++frame, time += 17)
+        fixes.sample(time, forward0, forward1, true, false);
+    expect(fixes.handState(0) == BodyCalibration::HAND_DONE &&
+           fixes.handState(1) == BodyCalibration::HAND_MEASURING,
+           "a hand with partial fixes only keeps waiting for full ones");
+    for (int frame = 0; frame < 70; ++frame, time += 17)
+        fixes.sample(time, forward0, forward1, true, false);
+    expect(fixes.step() == BodyCalibration::STEP_SIDES && fixes.partialMeasures() == 1,
+           "after 1.5 s partial fixes are measured as a fallback");
+
     // A plausible session.
     movebeat::BodyCalibration good;
     holdBodyPose(good, time, forward0, forward1);

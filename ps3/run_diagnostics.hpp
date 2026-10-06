@@ -48,6 +48,11 @@ struct RunStatus {
     unsigned int menu_difficulty_changes;
     unsigned int menu_randomizer_spins;
     unsigned int menu_preview_starts;
+    // Gestures: T presses that began one, frames with T held while the
+    // Move was untracked, and vertical drags recognized.
+    unsigned int menu_t_presses;
+    unsigned int menu_t_untracked_frames;
+    unsigned int menu_gesture_drags;
     // Levels started with both Move buttons; a play origin is measured.
     unsigned int menu_chord_starts;
     int pose_calibrated;
@@ -70,6 +75,10 @@ struct RunStatus {
     unsigned int tracking_pause_slot0_flags;
     unsigned int tracking_pause_slot1_flags;
     unsigned int tracking_quit_count;
+    // Pause menu: opened, levels restarted, levels left.
+    unsigned int pause_menu_opens;
+    unsigned int level_restarts;
+    unsigned int pause_quits;
     // Inertial hold: frames a pose was held by the Move's sensors, and per
     // slot the quaternion reading chosen (0-3), its disagreement with the
     // camera (degrees) and the turns it was scored on.
@@ -89,6 +98,8 @@ struct RunStatus {
     int body_up_inverted;
     // The sideways pose was hardly wider than the forward one.
     int body_narrow_sides;
+    // Calibration hands measured from partial fixes (fallback).
+    unsigned int calibration_partial_measures;
     int body_span_cm;
     int body_drop_cm;
     int body_turn_deg;
