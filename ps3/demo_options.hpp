@@ -58,14 +58,14 @@ struct RenderOptions {
     int right_hue;
     // "gem_filter=off": no libgem state filter (gemFilterState).
     bool gem_filter;
-    // "camera_depth=on": hands follow the camera's (smoothed) depth;
-    // otherwise they stay at the forward calibration pose's depth.
+    // Hands follow the camera's (smoothed) depth; "camera_depth=off" keeps
+    // them at the forward calibration pose's depth.
     bool camera_depth;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
-                      camera_depth(false) {}
+                      camera_depth(true) {}
 };
 
 RenderOptions readRenderOptions();

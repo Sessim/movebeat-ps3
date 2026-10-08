@@ -90,7 +90,7 @@ App::FrameInput::FrameInput()
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
-      draw_background_(true), camera_depth_(false), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
+      draw_background_(true), camera_depth_(true), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
       imported_level_(false), selected_level_index_(0),
       selected_chart_index_(0), selected_chart_loaded_(false),
       chart_duration_ms_(0), audio_clock_(false),

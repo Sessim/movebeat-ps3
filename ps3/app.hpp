@@ -175,8 +175,8 @@ private:
 
     std::vector<LevelChoice> level_choices_;
     bool draw_background_;
-    // Hand depth from the camera (renderer.ini camera_depth=on); off, the
-    // hands stay at the forward pose's depth.
+    // Hand depth from the camera (default; renderer.ini camera_depth=off
+    // keeps the hands at the forward pose's depth).
     bool camera_depth_;
     std::vector<PlaylistChoice> playlists_;
     std::size_t shelf_;
