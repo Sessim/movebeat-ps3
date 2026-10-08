@@ -83,7 +83,9 @@ struct RunStatus {
     // slot the quaternion reading chosen (0-3), its disagreement with the
     // camera (degrees) and the turns it was scored on.
     unsigned int imu_held_frames;
-    // gemPrepareCamera settings in use (renderer.ini).
+    // gemPrepareCamera settings in use (renderer.ini), and whether hand
+    // depth comes from the camera.
+    int camera_depth;
     int camera_exposure;
     int camera_quality_pct;
     int imu_slot0_variant;

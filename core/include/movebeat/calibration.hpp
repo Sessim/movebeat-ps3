@@ -131,6 +131,17 @@ struct BodyFrame {
         return SaberPose(handle, handle + direction * length, true);
     }
 
+    // Hands at the forward pose's depth, blades as they are: the camera
+    // judges depth from a sphere a few pixels wide (about 30 cm per pixel
+    // at 2 m), while long blades cross the hit plane from any hand depth
+    // within half a meter.
+    SaberPose lockDepth(const SaberPose& pose) const {
+        if (!pose.tracked) return pose;
+        const float shift = -hitDepth() - pose.handle.z;
+        return SaberPose(Vec3(pose.handle.x, pose.handle.y, pose.handle.z + shift),
+                         Vec3(pose.tip.x, pose.tip.y, pose.tip.z + shift), true);
+    }
+
     // A quick one-pose recalibration (blades pointing forward) moves the
     // origin, keeping turn, depth and scale.
     void recenter(const Vec3& tips, const Vec3& handles) {

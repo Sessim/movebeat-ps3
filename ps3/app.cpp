@@ -90,7 +90,7 @@ App::FrameInput::FrameInput()
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
-      draw_background_(true), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
+      draw_background_(true), camera_depth_(false), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
       imported_level_(false), selected_level_index_(0),
       selected_chart_index_(0), selected_chart_loaded_(false),
       chart_duration_ms_(0), audio_clock_(false),
@@ -145,6 +145,8 @@ bool App::initializeSystems(int& exit_code) {
     }
     const RenderOptions render_options = readRenderOptions();
     draw_background_ = render_options.background;
+    camera_depth_ = render_options.camera_depth;
+    diagnostic_.camera_depth = camera_depth_ ? 1 : 0;
     screen_.setEffectsEnabled(render_options.effects);
     if (!screen_.initialize(render_options.software ? RENDERER_FORCE_SOFTWARE
                                                     : RENDERER_PREFER_RSX)) {
@@ -1417,6 +1419,10 @@ void App::updateGameplay(FrameInput& input) {
         // Physical reach limits for real controllers (the emulator's
         // scripted poses are play-space already and may stand anywhere).
         if (!demo_mode_) {
+            if (!camera_depth_) {
+                moves.left = body_frame_.lockDepth(moves.left);
+                moves.right = body_frame_.lockDepth(moves.right);
+            }
             moves.left = body_frame_.constrain(moves.left);
             moves.right = body_frame_.constrain(moves.right);
         }

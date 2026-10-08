@@ -175,6 +175,9 @@ private:
 
     std::vector<LevelChoice> level_choices_;
     bool draw_background_;
+    // Hand depth from the camera (renderer.ini camera_depth=on); off, the
+    // hands stay at the forward pose's depth.
+    bool camera_depth_;
     std::vector<PlaylistChoice> playlists_;
     std::size_t shelf_;
     // Library indices of the shown shelf, in carousel order, and the

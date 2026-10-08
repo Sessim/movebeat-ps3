@@ -351,6 +351,15 @@ void testReachLimits() {
                                  movebeat::Vec3(0.0f, 1.0f, -0.5f), true);
     expect(near(frame.constrain(up).tip.y, 1.0f), "an upright blade is free");
     expect(!frame.constrain(movebeat::SaberPose()).tracked, "untracked stays untracked");
+
+    // Depth lock: the hand goes to the forward pose's depth, blade intact.
+    const movebeat::SaberPose locked = frame.lockDepth(
+        movebeat::SaberPose(movebeat::Vec3(0.4f, 0.3f, -1.1f),
+                            movebeat::Vec3(0.4f, 0.8f, -0.3f), true));
+    expect(near(locked.handle.x, 0.4f) && near(locked.handle.y, 0.3f) &&
+           near(locked.handle.z, -movebeat::BodyFrame::hitDepth()) &&
+           near(locked.tip.z - locked.handle.z, 0.8f) && near(locked.tip.y, 0.8f),
+           "a depth-locked hand keeps its place across and up and its blade");
 }
 
 void testPoseCalibration() {

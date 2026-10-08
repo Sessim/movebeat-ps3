@@ -41,10 +41,21 @@ public:
     // is a tracking glitch, unless the new place holds for jumpFrames().
     static float maxJump() { return 0.35f; }
     static unsigned int jumpFrames() { return 6; }
-    // Depth smoothing: share of the remaining difference taken per frame,
-    // and the largest depth change per frame (3 cm, 1.8 m/s at 60 Hz).
-    static float depthFollow() { return 0.2f; }
+    // Depth smoothing, after psmoveapi's adaptive radius smoothing
+    // (tracker_adaptive_z: share = min(radius change / 4 px + 0.15, 1)):
+    // small changes (jitter) are followed slowly, large ones (motion) at
+    // once. A PS Eye pixel of sphere radius is about 0.08 m * depth^2 of
+    // depth, so 4 px is depthPerPixel() * 4 * depth^2. At most
+    // maxDepthStep() per frame (3 cm, 1.8 m/s at 60 Hz).
+    static float depthPerPixel() { return 0.08f; }
+    static float minDepthFollow() { return 0.15f; }
     static float maxDepthStep() { return 0.03f; }
+    static float depthFollow(float change, float depth) {
+        const float distance = depth < 0.5f ? 0.5f : depth;
+        const float four_pixels = depthPerPixel() * 4.0f * distance * distance;
+        const float share = change / four_pixels + minDepthFollow();
+        return share > 1.0f ? 1.0f : share;
+    }
 
     void reset() {
         have_last_ = have_ref_ = have_depth_ = have_output_ = have_smooth_depth_ = false;
@@ -174,7 +185,9 @@ private:
         // 2 m: it jitters most. Follow it smoothly and at most
         // maxDepthStep() per frame; across and up stay as measured.
         if (have_smooth_depth_) {
-            float step = (pose.handle.z - smooth_depth_) * depthFollow();
+            const float difference = pose.handle.z - smooth_depth_;
+            float step = difference * depthFollow(std::fabs(difference),
+                                                  std::fabs(smooth_depth_));
             if (step > maxDepthStep()) step = maxDepthStep();
             if (step < -maxDepthStep()) step = -maxDepthStep();
             smooth_depth_ += step;
