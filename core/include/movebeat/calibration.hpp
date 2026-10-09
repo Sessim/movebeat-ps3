@@ -73,10 +73,15 @@ struct BodyFrame {
     float yaw_sin;
     float scale;
     bool flip_depth;
+    // How far a hand may go toward the chest and forward of the forward
+    // pose's depth (meters): the camera's depth is coarse.
+    float depth_back;
+    float depth_forward;
 
     static float hitDepth() { return 0.45f; }
 
-    BodyFrame() : yaw_cos(1.0f), yaw_sin(0.0f), scale(1.0f), flip_depth(false) {}
+    BodyFrame() : yaw_cos(1.0f), yaw_sin(0.0f), scale(1.0f), flip_depth(false),
+                  depth_back(0.8f), depth_forward(0.3f) {}
 
     Vec3 turn(const Vec3& v) const {
         return Vec3(v.x * yaw_cos + v.z * yaw_sin, v.y,
@@ -102,9 +107,9 @@ struct BodyFrame {
     static float reachSide() { return 1.0f; }
     static float reachUp() { return 0.85f; }
     static float reachDown() { return 0.95f; }
-    static float nearestDepth() { return -1.25f; }
-    static float farthestDepth() { return -0.15f; }
     static float minBladeForward() { return -0.2f; }
+    float nearestDepth() const { return -hitDepth() - depth_back; }
+    float farthestDepth() const { return -hitDepth() + depth_forward; }
 
     static float clampTo(float value, float low, float high) {
         return value < low ? low : (value > high ? high : value);

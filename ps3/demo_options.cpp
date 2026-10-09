@@ -89,6 +89,8 @@ RenderOptions readRenderOptions() {
             options.camera_exposure = atoi(line + 16);
         else if (strcmp(line, "gem_filter=off") == 0)
             options.gem_filter = false;
+        else if (strncmp(line, "depth_range_cm=", 15) == 0)
+            options.depth_range_cm = atoi(line + 15);
         else if (strcmp(line, "camera_depth=off") == 0)
             options.camera_depth = false;
         else if (strcmp(line, "camera_depth=on") == 0)

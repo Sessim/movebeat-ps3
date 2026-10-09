@@ -61,11 +61,14 @@ struct RenderOptions {
     // Hands follow the camera's (smoothed) depth; "camera_depth=off" keeps
     // them at the forward calibration pose's depth.
     bool camera_depth;
+    // "depth_range_cm=N": how far a hand may move toward the chest or
+    // forward of the forward calibration pose (default 30).
+    int depth_range_cm;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
-                      camera_depth(true) {}
+                      camera_depth(true), depth_range_cm(30) {}
 };
 
 RenderOptions readRenderOptions();

@@ -79,6 +79,9 @@ struct RunStatus {
     unsigned int pause_menu_opens;
     unsigned int level_restarts;
     unsigned int pause_quits;
+    unsigned int pause_calibrations;
+    // renderer.ini depth_range_cm in use.
+    int depth_range_cm;
     // Inertial hold: frames a pose was held by the Move's sensors, and per
     // slot the quaternion reading chosen (0-3), its disagreement with the
     // camera (degrees) and the turns it was scored on.

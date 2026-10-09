@@ -336,7 +336,7 @@ void testReachLimits() {
                                      movebeat::Vec3(0.2f, 0.0f, -4.0f), true);
     const movebeat::SaberPose kept = frame.constrain(thrown);
     const movebeat::Vec3 direction = normalized(kept.tip - kept.handle);
-    expect(near(kept.handle.z, movebeat::BodyFrame::nearestDepth()) &&
+    expect(near(kept.handle.z, frame.nearestDepth()) && near(kept.handle.z, -1.25f) &&
            near(direction.z, movebeat::BodyFrame::minBladeForward()) &&
            near(length(kept.tip - kept.handle), 1.0f),
            "a hand behind the chest is held there, a blade pointing back is tilted forward");
@@ -351,6 +351,17 @@ void testReachLimits() {
                                  movebeat::Vec3(0.0f, 1.0f, -0.5f), true);
     expect(near(frame.constrain(up).tip.y, 1.0f), "an upright blade is free");
     expect(!frame.constrain(movebeat::SaberPose()).tracked, "untracked stays untracked");
+
+    // A narrower depth range: 30 cm either way of the forward pose.
+    movebeat::BodyFrame narrow;
+    narrow.depth_back = narrow.depth_forward = 0.3f;
+    const movebeat::SaberPose near_chest = narrow.constrain(movebeat::SaberPose(
+        movebeat::Vec3(0.0f, 0.0f, -1.2f), movebeat::Vec3(0.0f, 0.0f, -0.2f), true));
+    const movebeat::SaberPose far_out = narrow.constrain(movebeat::SaberPose(
+        movebeat::Vec3(0.0f, 0.0f, 0.4f), movebeat::Vec3(0.0f, 0.0f, 1.4f), true));
+    expect(near(near_chest.handle.z, -0.75f) && near(far_out.handle.z, -0.15f) &&
+           near(far_out.tip.z, 0.85f),
+           "the depth range holds a hand within 30 cm of the forward pose");
 
     // Depth lock: the hand goes to the forward pose's depth, blade intact.
     const movebeat::SaberPose locked = frame.lockDepth(

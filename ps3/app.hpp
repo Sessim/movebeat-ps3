@@ -178,6 +178,8 @@ private:
     // Hand depth from the camera (default; renderer.ini camera_depth=off
     // keeps the hands at the forward pose's depth).
     bool camera_depth_;
+    // renderer.ini depth_range_cm, in meters (applied to the body frame).
+    float depth_range_;
     std::vector<PlaylistChoice> playlists_;
     std::size_t shelf_;
     // Library indices of the shown shelf, in carousel order, and the

@@ -359,14 +359,15 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
 
 void drawPauseMenu(Framebuffer& screen) {
     const int width = 520;
-    const int height = 250;
+    const int height = 295;
     const int x = (screen.width() - width) / 2;
     const int y = (screen.height() - height) / 2;
     screen.rectangle(x, y, width, height, 0xff101828u);
     drawCenteredMenuText(screen, "PAUSED", y + 30, 4, 0xffd9e7ffu);
     drawMenuText(screen, "START  CONTINUE", x + 70, y + 100, 3, 0xff40e890u);
     drawMenuText(screen, "CIRCLE  RESTART", x + 70, y + 145, 3, 0xffffc030u);
-    drawMenuText(screen, "TRI  BACK TO TRACKS", x + 70, y + 190, 3, 0xffff6470u);
+    drawMenuText(screen, "SQUARE  CALIBRATE", x + 70, y + 190, 3, 0xff70d8ffu);
+    drawMenuText(screen, "TRI  BACK TO TRACKS", x + 70, y + 235, 3, 0xffff6470u);
 }
 
 void drawAudioError(Framebuffer& screen, int error) {

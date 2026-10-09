@@ -56,7 +56,8 @@ void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
 void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
                          const PlaylistChoice& playlist,
                          const std::vector<LevelChoice>& levels);
-// Start during a song: continue, restart or back to the track list.
+// Start during a song: continue, restart, calibrate or back to the
+// track list.
 void drawPauseMenu(Framebuffer& screen);
 void drawAudioError(Framebuffer& screen, int error);
 void drawTimingOffset(Framebuffer& screen, int offset_ms);

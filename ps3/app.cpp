@@ -90,7 +90,7 @@ App::FrameInput::FrameInput()
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
-      draw_background_(true), camera_depth_(true), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
+      draw_background_(true), camera_depth_(true), depth_range_(0.3f), shelf_(0), shelf_pos_(0), next_song_remaining_ms_(0), last_playlist_ms_(0),
       imported_level_(false), selected_level_index_(0),
       selected_chart_index_(0), selected_chart_loaded_(false),
       chart_duration_ms_(0), audio_clock_(false),
@@ -146,6 +146,12 @@ bool App::initializeSystems(int& exit_code) {
     const RenderOptions render_options = readRenderOptions();
     draw_background_ = render_options.background;
     camera_depth_ = render_options.camera_depth;
+    {
+        int range_cm = render_options.depth_range_cm;
+        range_cm = range_cm < 5 ? 5 : (range_cm > 100 ? 100 : range_cm);
+        depth_range_ = range_cm * 0.01f;
+        diagnostic_.depth_range_cm = range_cm;
+    }
     diagnostic_.camera_depth = camera_depth_ ? 1 : 0;
     screen_.setEffectsEnabled(render_options.effects);
     if (!screen_.initialize(render_options.software ? RENDERER_FORCE_SOFTWARE
@@ -539,10 +545,14 @@ void App::readDemoInput(FrameInput& input) {
             buttons = kButtonStart;
         else if (frame >= 240u && frame < 242u)
             buttons = kButtonCircle;
-        else if (frame >= 460u && frame < 462u)
+        else if (frame >= 440u && frame < 442u)
+            buttons = kButtonSquare;
+        else if (frame > 450u && !calibrating_ && user_paused_ &&
+                 diagnostic_.pause_calibrations > 0u && frame % 10u < 2u)
             buttons = kButtonTriangle;
         if (frame == 210u) menu_capture_path_ = kDemoTimedFramePath;
-        if (frame > 462u && run_state_ == RUN_SELECT) menu_test_done_ = true;
+        if (frame > 450u && run_state_ == RUN_SELECT) menu_test_done_ = true;
+        if (frame >= 1800u) menu_test_done_ = true;
         if (run_state_ != RUN_PLAY || user_paused_) {
             input.moves = MoveFrame();
             input.moves.left_connected = input.moves.right_connected = true;
@@ -553,6 +563,14 @@ void App::readDemoInput(FrameInput& input) {
                 demo_options_.automatic_cuts);
         }
         input.moves.right_buttons = buttons;
+        if (calibrating_) {
+            scriptCalibrationPose(input, false);
+            if (body_calibration_.step() == movebeat::BodyCalibration::STEP_SIDES &&
+                !demo_scored_frame_saved_) {
+                menu_capture_path_ = kDemoScoredFramePath;
+                demo_scored_frame_saved_ = true;
+            }
+        }
         return;
     }
     if (demo_options_.playlist_test) {
@@ -1145,9 +1163,14 @@ void App::handlePauseMenu(FrameInput& input) {
         printf("Paused\n");
         return;
     }
-    // The menu consumes the buttons; nothing else acts on them.
+    // The menu consumes the buttons; nothing else acts on them. While
+    // the calibration runs (Square), it has the buttons (Triangle cancels).
     input.start_pressed = false;
-    if (pressed & (kButtonStart | kButtonCross)) {
+    if (calibrating_ || input.cancel_calibration) return;
+    if (pressed & kButtonSquare) {
+        ++diagnostic_.pause_calibrations;
+        beginBodyCalibration();
+    } else if (pressed & (kButtonStart | kButtonCross)) {
         user_paused_ = false;
         game_.invalidateInput();
         synchronizePause();
@@ -1199,7 +1222,9 @@ void App::quitLevel(bool tracking_lost) {
 }
 
 void App::updateCalibration(FrameInput& input) {
-    if (calibrating_ && !paused_) {
+    // The pause menu's calibration runs while the song is paused.
+    const bool other_pause = g_pause_requested || tracking_paused_;
+    if (calibrating_ && (!paused_ || (user_paused_ && !other_pause))) {
         const movebeat::BodyCalibration::Step before = body_calibration_.step();
         // The Move button of each controller says "I am in the pose". In
         // the first pose (pointing at the camera, as libgem wants it) the
@@ -1235,6 +1260,7 @@ void App::updateCalibration(FrameInput& input) {
             diagnostic_.body_up_inverted = body_calibration_.invertedUp() ? 1 : 0;
             diagnostic_.body_narrow_sides = body_calibration_.narrowSides() ? 1 : 0;
             body_frame_ = body_calibration_.frame();
+            body_frame_.depth_back = body_frame_.depth_forward = depth_range_;
             pose_calibrated_ = true;
             setHandAssignment(body_calibration_.slotsSwapped());
             calibrating_ = false;
@@ -1251,7 +1277,7 @@ void App::updateCalibration(FrameInput& input) {
                    body_calibration_.turnApplied() ? "" : " (not applied)");
         }
     }
-    if (paused_) body_calibration_.reset();
+    if (paused_ && (other_pause || !user_paused_)) body_calibration_.reset();
 }
 
 bool App::startLevelAudio(const char* failure_message, bool clear_error_on_success) {
@@ -1596,7 +1622,7 @@ void App::renderOverlays(const FrameInput& input) {
     const MoveFrame& moves = input.moves;
     drawConnection(screen_, 0, moves.left_connected, moves.left.tracked, 0xff40b8ffu);
     drawConnection(screen_, 1, moves.right_connected, moves.right.tracked, 0xffff4058u);
-    if (run_state_ == RUN_PLAY && user_paused_ && !tracking_paused_)
+    if (run_state_ == RUN_PLAY && user_paused_ && !tracking_paused_ && !calibrating_)
         drawPauseMenu(screen_);
     if (run_state_ == RUN_PLAY && tracking_paused_) {
         drawTrackingPauseOverlay(screen_, input.both_moves_optical,
