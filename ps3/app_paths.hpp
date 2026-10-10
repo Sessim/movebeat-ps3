@@ -5,6 +5,9 @@ namespace ps3 {
 
 // Files the PS3 application reads or writes inside its installed USRDIR.
 const char kLevelRoot[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/levels";
+// The hard-disk copy of a USB level's music (one slot, see AudioCache).
+const char kUsbAudioCachePath[] =
+    "/dev_hdd0/game/MOVEBEAT1/USRDIR/usb_audio_cache.ogg";
 // Level bundles on USB drives 0..7 (printf format with the drive number).
 const char kUsbLevelRootFormat[] = "/dev_usb%03d/MOVEBEAT/levels";
 const char kScoreLog[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/scores.log";

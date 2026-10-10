@@ -118,6 +118,11 @@ struct RunStatus {
     int level_count;
     // Levels found on USB drives (MOVEBEAT/levels).
     unsigned int usb_level_count;
+    // USB levels' music played from its disk copy, copies that failed, and
+    // how long the latest start waited for the copy to finish (ms).
+    unsigned int usb_audio_cached;
+    unsigned int usb_audio_cache_failures;
+    unsigned int usb_audio_wait_ms;
     unsigned int library_cards_loaded;
     unsigned int library_card_bytes;
     int imported_level;

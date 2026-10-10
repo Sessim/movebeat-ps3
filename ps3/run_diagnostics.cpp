@@ -37,7 +37,8 @@ RunStatus::RunStatus()
       calibration_partial_measures(0),
       body_span_cm(0), body_drop_cm(0),
       body_turn_deg(0), body_turn_applied(0), body_flip_depth(0), body_scale_pct(100), sound_effects(0),
-      error_stage(0), error_code(0), level_count(0), usb_level_count(0),
+      error_stage(0), error_code(0), level_count(0), usb_level_count(0), usb_audio_cached(0),
+      usb_audio_cache_failures(0), usb_audio_wait_ms(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
       left_connected(0), right_connected(0),
@@ -106,7 +107,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "body_flip_depth=%d\n"
             "body_scale_pct=%d\n"
             "sound_effects=%u\n"
-            "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\nusb_level_count=%u\n"
+            "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\nusb_level_count=%u\nusb_audio_cached=%u\n"
+            "usb_audio_cache_failures=%u\nusb_audio_wait_ms=%u\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
             "imported_level=%d\nlevel_id=%s\nchart_difficulty=%s\n"
             "left_connected=%d\nright_connected=%d\n"
@@ -173,7 +175,9 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.body_scale_pct,
             status.sound_effects,
             status.error_stage, status.error_code,
-            status.level_count, status.usb_level_count, status.library_cards_loaded,
+            status.level_count, status.usb_level_count, status.usb_audio_cached,
+            status.usb_audio_cache_failures, status.usb_audio_wait_ms,
+            status.library_cards_loaded,
             status.library_card_bytes, status.imported_level,
             status.level_id.c_str(), status.chart_difficulty.c_str(),
             status.left_connected,

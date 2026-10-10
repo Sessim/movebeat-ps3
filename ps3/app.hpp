@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "audio_cache.hpp"
 #include "audio_player.hpp"
 #include "cut_feedback.hpp"
 #include "demo_options.hpp"
@@ -205,6 +206,10 @@ private:
     CutFeedback cut_feedback_;
     SaberTrail saber_trails_[2];
     AudioPlayer audio_;
+    // USB levels' music copied to the hard disk before it plays.
+    AudioCache audio_cache_;
+    // Starts copying the music at `path` if it lives on a USB drive.
+    void cacheUsbAudio(const std::string& path);
     bool audio_clock_;
     int audio_start_error_;
     movebeat::HighScore best_score_;

@@ -358,6 +358,9 @@ void App::runFrame() {
     updateTrackingPause(input);
     updateCalibration(input);
     handleStart(input);
+    // A piece of a USB level's music per frame (128 KiB: well under 1 ms
+    // of a frame on the disk, done within a calibration).
+    if (audio_cache_.busy() && run_state_ != RUN_PLAY) audio_cache_.step(128u * 1024u);
     updatePlaylistRun();
     updateGameplay(input);
     renderFrame(input, frame_work_start_us);
@@ -1021,6 +1024,8 @@ void App::setHandAssignment(bool slots_swapped) {
 
 void App::beginBodyCalibration() {
     stopPreview(250);
+    // The calibration's seconds copy a USB level's music to the disk.
+    if (run_state_ == RUN_SELECT) cacheUsbAudio(audio_path_);
     audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
     body_calibration_.reset();
     calibrating_ = true;
@@ -1280,8 +1285,29 @@ void App::updateCalibration(FrameInput& input) {
     if (paused_ && (other_pause || !user_paused_)) body_calibration_.reset();
 }
 
+void App::cacheUsbAudio(const std::string& path) {
+    if (demo_mode_ && demo_options_.menu_test) return;
+    if (AudioCache::needsCache(path)) audio_cache_.begin(path, kUsbAudioCachePath);
+}
+
 bool App::startLevelAudio(const char* failure_message, bool clear_error_on_success) {
-    audio_clock_ = audio_.start(audio_path_);
+    // Music from a USB drive plays from its hard-disk copy, so the drive
+    // and the PS Eye do not share the bus during play.
+    std::string playable = audio_path_;
+    if (AudioCache::needsCache(audio_path_)) {
+        const unsigned long long start_us = nowMicroseconds();
+        cacheUsbAudio(audio_path_);
+        if (audio_cache_.finish()) {
+            playable = audio_cache_.playable(audio_path_);
+            ++diagnostic_.usb_audio_cached;
+        } else {
+            ++diagnostic_.usb_audio_cache_failures;
+            printf("USB music copy failed; playing from the drive\n");
+        }
+        diagnostic_.usb_audio_wait_ms = static_cast<unsigned int>(
+            (nowMicroseconds() - start_us) / 1000ull);
+    }
+    audio_clock_ = audio_.start(playable);
     if (!audio_clock_) {
         audio_start_error_ = audio_.lastError();
         run_state_ = RUN_AUDIO_ERROR;
@@ -1388,6 +1414,11 @@ void App::updatePlaylistRun() {
     if (run_state_ != RUN_RESULTS || !playlist_run_.hasNext() ||
         next_song_remaining_ms_ == 0 || paused_)
         return;
+    // The countdown copies the next song's music if it is on a USB drive.
+    if (!audio_cache_.busy() && shelf_pos_ + 1 < shelf_order_.size()) {
+        const LevelChoice& next = level_choices_[shelf_order_[shelf_pos_ + 1]];
+        cacheUsbAudio(next.directory + "/" + next.manifest.audio);
+    }
     if (elapsed >= next_song_remaining_ms_) playNextPlaylistSong();
     else next_song_remaining_ms_ -= elapsed;
 }

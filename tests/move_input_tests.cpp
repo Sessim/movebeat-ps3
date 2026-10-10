@@ -3,6 +3,7 @@
 #include "menu_buttons.hpp"
 #include "hand_assignment.hpp"
 #include "imu_pose.hpp"
+#include "audio_cache.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -395,6 +396,48 @@ void testImuHold() {
     expect(std::fabs(out.handle.z - 2.3f) < 0.01f, "depth settles on the new value");
 }
 
+void testAudioCache() {
+    using movebeat::ps3::AudioCache;
+    expect(AudioCache::needsCache("/dev_usb000/MOVEBEAT/levels/x/audio.egg") &&
+           !AudioCache::needsCache("/dev_hdd0/game/MOVEBEAT1/USRDIR/levels/x/audio.egg"),
+           "only USB paths go through the cache");
+    const std::string source = "movebeat_cache_source.tmp";
+    const std::string target = "movebeat_cache_target.tmp";
+    std::string payload;
+    for (int index = 0; index < 300000; ++index)
+        payload.push_back(static_cast<char>((index * 7 + 3) & 0xff));
+    FILE* file = fopen(source.c_str(), "wb");
+    fwrite(payload.data(), 1, payload.size(), file);
+    fclose(file);
+
+    AudioCache cache;
+    expect(cache.playable(source) == source, "an uncached file plays from its source");
+    cache.begin(source, target);
+    int steps = 0;
+    while (!cache.step(64 * 1024) && steps < 100) ++steps;
+    expect(cache.ready() && steps >= 4 && cache.copiedBytes() == payload.size(),
+           "the copy goes a piece per step");
+    std::string copied;
+    file = fopen(target.c_str(), "rb");
+    char buffer[4096];
+    size_t count;
+    while ((count = fread(buffer, 1, sizeof(buffer), file)) > 0) copied.append(buffer, count);
+    fclose(file);
+    expect(copied == payload && cache.playable(source) == target,
+           "the disk copy is exact and plays instead of the source");
+    cache.begin(source, target);
+    expect(cache.ready() && !cache.busy(), "the same source is not copied again");
+    expect(cache.playable("other.ogg") == "other.ogg", "another file plays from its source");
+
+    AudioCache missing;
+    missing.begin("movebeat_cache_missing.tmp", target);
+    expect(missing.failed() && !missing.finish() &&
+           missing.playable("movebeat_cache_missing.tmp") == "movebeat_cache_missing.tmp",
+           "a failed copy falls back to the source");
+    remove(source.c_str());
+    remove(target.c_str());
+}
+
 void testMoveButtonChord() {
     using movebeat::ps3::MoveButtonChord;
     using movebeat::ps3::MoveChordEvents;
@@ -453,6 +496,7 @@ int main() {
     testMenuButtonEdges();
     testMoveButtonChord();
     testImuHold();
+    testAudioCache();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();
