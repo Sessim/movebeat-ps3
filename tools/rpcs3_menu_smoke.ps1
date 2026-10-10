@@ -144,6 +144,7 @@ $report = [pscustomobject]@{
     level_restarts = [int]$status['level_restarts']
     pause_quits = [int]$status['pause_quits']
     pause_calibrations = [int]$status['pause_calibrations']
+    results_replays = [int]$status['results_replays']
     sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii

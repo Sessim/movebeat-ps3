@@ -129,6 +129,10 @@ public:
     void record(const PlaylistSongResult& result) {
         if (active_) results_.push_back(result);
     }
+    // Forgets the latest result (its song is played again).
+    void dropLast() {
+        if (!results_.empty()) results_.pop_back();
+    }
     // A next song exists after the one just recorded.
     bool hasNext() const { return active_ && position_ + 1 < tracks_.size(); }
     // Moves to the next song; returns its library index.

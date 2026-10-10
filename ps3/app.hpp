@@ -68,8 +68,9 @@ private:
         bool hand_toggle;
         bool cancel_calibration;
         bool calibrated_start;
-        // Both Move buttons together; a lone Move tap (physical slot or -1).
-        bool move_chord;
+        // A lone Move tap (physical slot or -1) and both Move buttons held
+        // for half a second.
+        bool move_long_chord;
         int move_tap_slot;
         unsigned int raw_level_time_ms;
         unsigned int level_time_ms;
@@ -104,7 +105,7 @@ private:
     void handleCalibrationCancel(FrameInput& input);
     void handleLibraryNavigation(const FrameInput& input);
     void handleLibrarySettings(const FrameInput& input);
-    void handleBackButtons(const FrameInput& input);
+    void handleBackButtons(FrameInput& input);
     void reloadSelectedChart();
     bool ensureSelectedChart();
     void selectLevel(std::size_t index);
@@ -145,9 +146,10 @@ private:
     // for; `crossed` puts GEM slot 0 on the player's right.
     void scriptCalibrationPose(FrameInput& input, bool crossed) const;
     void handleStart(const FrameInput& input);
-    // Both Move buttons: assigns the hands from where the controllers are
-    // and starts, calibrating first if this session has no play origin.
-    void handleMoveChord(const FrameInput& input);
+    // Results: continue (Cross, Circle, Move), replay (Triangle), stop a
+    // playlist (Square).
+    void handleResultsButtons(FrameInput& input);
+    void backToLibrary();
     void beginLevel();
     // Start in the library (a playlist shelf begins a run), replay on the
     // results screen, or the next song of a playlist run.

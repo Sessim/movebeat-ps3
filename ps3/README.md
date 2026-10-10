@@ -257,6 +257,9 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
    GEM or inertial button sample in the latest frame (bit 0 left, bit 1 right).
 9. Face the camera and hold the Move controllers comfortably in front of you,
    separated left/right by at least 15 cm, with both blades pointing forward.
+   (Controls changed since: see "Управление" in the top-level README. A
+   single Move tap or Start always starts through the guided calibration;
+   holding both Move buttons spins the randomizer.)
    Press both Move buttons together (within 300 ms): the controller that is
    further left becomes the left hand and the level starts at once if this
    session already has a play origin; otherwise (first start, or after a
@@ -273,7 +276,7 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
    the left hand. Camera X-axis orientation still needs physical verification.
    If blue and red hands are reversed on your setup, hold both T triggers and
    press Select on the track screen to toggle `HANDS AUTO` / `HANDS FLIPPED`
-   (Select alone steps through the playlist shelves); this correction is saved in
+   (Square steps through the playlist shelves); this correction is saved in
    `settings.ini` and applied to the next calibration. The diagnostic
    `invert_hands_setting` shows the saved correction separately from the
    effective `hand_slots_swapped` value. After calibration, the physical Move

@@ -80,6 +80,8 @@ struct RunStatus {
     unsigned int level_restarts;
     unsigned int pause_quits;
     unsigned int pause_calibrations;
+    // Songs played again from their results (Triangle).
+    unsigned int results_replays;
     // renderer.ini depth_range_cm in use.
     int depth_range_cm;
     // Inertial hold: frames a pose was held by the Move's sensors, and per

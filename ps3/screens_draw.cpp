@@ -247,12 +247,13 @@ void drawLevelLibrary(Framebuffer& screen,
         }
     }
 
-    drawMenuText(screen, "HOLD T  UP DOWN  SCROLL     LEFT RIGHT  DIFFICULTY",
-                 width / 2 - 300, height - 56, 2, 0xff9cb3d3u);
+    drawMenuText(screen,
+                 "HOLD T  UP DOWN  SCROLL   LEFT RIGHT  DIFFICULTY   HOLD BOTH MOVE  RANDOM",
+                 width / 2 - 444, height - 56, 2, 0xff9cb3d3u);
     drawMenuText(screen, view.shelf_count > 1
-                     ? "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE    SELECT  LISTS"
-                     : "BOTH MOVE  PLAY    ONE MOVE  RANDOM    START  CALIBRATE",
-                 view.shelf_count > 1 ? width / 2 - 432 : width / 2 - 330,
+                     ? "TRI CIRCLE  TRACKS   CROSS  DIFFICULTY   SQUARE  LISTS   MOVE  PLAY"
+                     : "TRI CIRCLE  TRACKS   CROSS  DIFFICULTY   MOVE  PLAY",
+                 view.shelf_count > 1 ? width / 2 - 402 : width / 2 - 306,
                  height - 30, 2, 0xff9cb3d3u);
 }
 
@@ -294,6 +295,11 @@ void drawResults(Framebuffer& screen,
                      screen.width() / 6, small / 2 + 1, 0xffff5060u);
 }
 
+void drawResultsHint(Framebuffer& screen) {
+    drawCenteredMenuText(screen, "CROSS  CIRCLE  MOVE  CONTINUE      TRI  REPLAY",
+                         screen.height() - 40, 2, 0xff9cb3d3u);
+}
+
 void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
                       const LevelChoice& next, unsigned int seconds_left) {
     const int width = screen.width();
@@ -313,8 +319,8 @@ void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
         drawMenuText(screen, "TRACK", width / 2 - 110, y + 26, 3, 0xffd9e7ffu);
     }
     drawNumber(screen, seconds_left, width / 2 + 330, y + 18, 6, 0xfff0d050u);
-    drawMenuText(screen, "START  NOW      TRI  STOP", width / 2 - 150, y + 92, 2,
-                 0xff9cb3d3u);
+    drawMenuText(screen, "CROSS  NOW     TRI  REPLAY     SQUARE  STOP", width / 2 - 246,
+                 y + 92, 2, 0xff9cb3d3u);
 }
 
 void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
@@ -354,7 +360,7 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
         drawNumber(screen, result.score, width / 2 + 300, y + 13, 4,
                    result.failed ? 0xffff5060u : 0xfff0d050u);
     }
-    drawCenteredMenuText(screen, "TRI BACK TO TRACKS", height - 40, 2, 0xffd9e7ffu);
+    drawCenteredMenuText(screen, "CROSS  BACK TO TRACKS", height - 40, 2, 0xffd9e7ffu);
 }
 
 void drawPauseMenu(Framebuffer& screen) {
@@ -364,7 +370,7 @@ void drawPauseMenu(Framebuffer& screen) {
     const int y = (screen.height() - height) / 2;
     screen.rectangle(x, y, width, height, 0xff101828u);
     drawCenteredMenuText(screen, "PAUSED", y + 30, 4, 0xffd9e7ffu);
-    drawMenuText(screen, "START  CONTINUE", x + 70, y + 100, 3, 0xff40e890u);
+    drawMenuText(screen, "CROSS  CONTINUE", x + 70, y + 100, 3, 0xff40e890u);
     drawMenuText(screen, "CIRCLE  RESTART", x + 70, y + 145, 3, 0xffffc030u);
     drawMenuText(screen, "SQUARE  CALIBRATE", x + 70, y + 190, 3, 0xff70d8ffu);
     drawMenuText(screen, "TRI  BACK TO TRACKS", x + 70, y + 235, 3, 0xffff6470u);
@@ -379,7 +385,7 @@ void drawAudioError(Framebuffer& screen, int error) {
                  4, 0xffff6470u);
     drawHexNumber(screen, static_cast<unsigned int>(error), center_x,
                   center_y - 8, screen.height() / 75 + 2, 0xffffd070u);
-    drawMenuText(screen, "TRI BACK TO TRACKS", center_x - 187,
+    drawMenuText(screen, "CROSS  BACK TO TRACKS", center_x - 125,
                  center_y + 76, 2, 0xffd9e7ffu);
 }
 
@@ -557,7 +563,8 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
                         : (state == 0 ? 0xffd9e7ffu : 0xffffc030u);
         drawMenuText(screen, text, x + 66, row_y, 3, color);
     }
-    drawMenuText(screen, "TRI CANCEL", x + 30, y + height - 40, 2, 0xff9cb3d3u);
+    drawMenuText(screen, "TRI  START OVER      CROSS  BACK", x + 30, y + height - 40, 2,
+                 0xff9cb3d3u);
 }
 
 void drawCaptureIndicator(Framebuffer& screen) {

@@ -352,6 +352,9 @@ void testPlaylistShelf() {
     second.failed = true;
     run.record(second);
     check(!run.hasNext() && run.complete(), "the last song completes the run");
+    run.dropLast();
+    check(!run.complete() && run.results().size() == 1, "a replayed song drops its result");
+    run.record(second);
     check(run.totalScore() == 1500 && run.totalHits() == 15 && run.totalMisses() == 2,
           "the run totals every song");
     run.stop();

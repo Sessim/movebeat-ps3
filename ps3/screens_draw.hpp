@@ -59,6 +59,8 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
 // Start during a song: continue, restart, calibrate or back to the
 // track list.
 void drawPauseMenu(Framebuffer& screen);
+// Under the results of a single song: continue or replay.
+void drawResultsHint(Framebuffer& screen);
 void drawAudioError(Framebuffer& screen, int error);
 void drawTimingOffset(Framebuffer& screen, int offset_ms);
 void drawBladeLength(Framebuffer& screen, int blade_length_cm);

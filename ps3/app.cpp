@@ -86,7 +86,7 @@ App::FrameInput::FrameInput()
       start_pressed(false), both_moves_tracked(false), both_moves_optical(false),
       hand_toggle(false),
       cancel_calibration(false), calibrated_start(false),
-      move_chord(false), move_tap_slot(-1), raw_level_time_ms(0), level_time_ms(0) {}
+      move_long_chord(false), move_tap_slot(-1), raw_level_time_ms(0), level_time_ms(0) {}
 
 App::App()
     : process_start_us_(nowMicroseconds()), demo_mode_(false),
@@ -428,17 +428,18 @@ void App::readMenuTestInput(FrameInput& input) {
     const unsigned int flick_start = swipe_end + 30u;
     const unsigned int flick_end = flick_start + 12u;
     const unsigned int coast_end = flick_end + 150u;
-    const unsigned int random_end = coast_end + 2u;
+    // Both Move buttons held 0.67 s: the randomizer.
+    const unsigned int random_end = coast_end + 40u;
     const unsigned int final_end = random_end + 150u;
     unsigned short buttons = 0;
     float hand_x = 0.0f;
     float hand_y = 0.0f;
     if (frame < single_end) {
-        if (frame % 8u < 2u) buttons = GEM_BUTTON_CROSS;
+        if (frame % 8u < 2u) buttons = GEM_BUTTON_CIRCLE;
     } else if (frame < hold_end) {
-        buttons = GEM_BUTTON_CROSS;
+        buttons = GEM_BUTTON_CIRCLE;
     } else if (frame >= pause_end && frame < difficulty_end) {
-        if ((frame - pause_end) % 8u < 2u) buttons = GEM_BUTTON_CIRCLE;
+        if ((frame - pause_end) % 8u < 2u) buttons = GEM_BUTTON_CROSS;
     } else if (frame >= swipe_start && frame < swipe_end) {
         input.moves.right_trigger = 255;
         hand_x = (frame - swipe_start) * 0.018f;
@@ -447,22 +448,20 @@ void App::readMenuTestInput(FrameInput& input) {
         hand_y = (frame - flick_start) * 0.025f;
     } else if (frame >= coast_end && frame < random_end) {
         buttons = GEM_BUTTON_MOVE;
+        input.moves.left_buttons = GEM_BUTTON_MOVE;
     }
     // Two library frames: resting with the preview after the flick, and
     // right after the sideways stroke while the halo flares.
     if (frame == coast_end - 5u) menu_capture_path_ = kDemoFramePath;
     if (frame == swipe_end + 2u) menu_capture_path_ = kDemoTimedFramePath;
-    // Last, both Move buttons with the controllers held crossed over: GEM
-    // slot 0 on the player's right. Nothing is calibrated yet, so the chord
-    // calibrates (one still second) and must make slot 1 the left hand.
-    const unsigned int chord_end = final_end + 6u;
+    // Last, a single Move tap with the controllers held crossed over: GEM
+    // slot 0 on the player's right. The start calibrates (three poses) and
+    // must make slot 1 the left hand.
+    const unsigned int chord_end = final_end + 3u;
     const unsigned int chord_timeout = chord_end + 600u;
     if (frame >= final_end) {
         scriptCalibrationPose(input, true);
-        if (frame < chord_end) {
-            input.moves.left_buttons = GEM_BUTTON_MOVE;
-            input.moves.right_buttons = GEM_BUTTON_MOVE;
-        }
+        if (frame < chord_end) input.moves.left_buttons = GEM_BUTTON_MOVE;
         if (calibrating_) scriptCalibrationPose(input, true);
         // The sideways pose of the guided calibration, for the record.
         if (calibrating_ && !menu_capture_path_ && !demo_scored_frame_saved_ &&
@@ -481,26 +480,24 @@ void App::readMenuTestInput(FrameInput& input) {
 }
 
 void App::readPlaylistTestInput(FrameInput& input) {
-    // Scripted playlist run (play itself uses the scripted cuts): Select
-    // shows the first playlist, both Move buttons start it (the first
-    // start calibrates), the first countdown runs out, the second results
-    // screen is skipped with Start, and the summary ends the test.
+    // Scripted playlist run (play itself uses the scripted cuts): Square
+    // shows the first playlist, a Move tap starts it (through the
+    // calibration), the first countdown runs out, the second results
+    // screen goes on with Cross, and the summary ends the test.
     input.moves.left_connected = true;
     input.moves.right_connected = true;
     // The forward pose: its tips meet at the origin and the sideways pose
     // spans the reference, so calibration keeps the scripted cuts as they are.
     scriptCalibrationPose(input, false);
     const unsigned int frame = menu_test_frame_++;
-    // One Select press (two frames, then eight released) per shelf step.
+    // One Square press (two frames, then eight released) per shelf step.
     const unsigned int selects_end = 30u + 10u * demo_options_.playlist_shelf;
     if (run_state_ == RUN_SELECT) {
         if (frame >= 30u && frame < selects_end && (frame - 30u) % 10u < 2u)
-            input.moves.right_buttons = kButtonSelect;
+            input.moves.right_buttons = kButtonSquare;
         if (frame == selects_end + 30u) menu_capture_path_ = kDemoFramePath;
-        if (frame >= selects_end + 50u && frame < selects_end + 56u) {
-            input.moves.left_buttons = GEM_BUTTON_MOVE;
+        if (frame >= selects_end + 50u && frame < selects_end + 53u)
             input.moves.right_buttons = GEM_BUTTON_MOVE;
-        }
         if (calibrating_) scriptCalibrationPose(input, false);
     }
     if (run_state_ != RUN_RESULTS) {
@@ -509,8 +506,12 @@ void App::readPlaylistTestInput(FrameInput& input) {
         const unsigned int results_frame = playlist_test_results_++;
         const std::size_t played = playlist_run_.results().size();
         if (played == 1u && results_frame == 150u) menu_capture_path_ = kDemoTimedFramePath;
+        // The first song once again (Triangle), before its countdown ends.
+        if (played == 1u && diagnostic_.results_replays == 0u &&
+            results_frame >= 200u && results_frame < 202u)
+            input.moves.right_buttons = kButtonTriangle;
         if (played == 2u && results_frame >= 60u && results_frame < 62u)
-            input.moves.right_buttons = kButtonStart;
+            input.moves.right_buttons = kButtonCross;
         if (playlist_run_.complete() && results_frame == 30u)
             menu_capture_path_ = kDemoScoredFramePath;
         if (playlist_run_.complete() && results_frame >= 40u) menu_test_done_ = true;
@@ -522,7 +523,7 @@ void App::readPlaylistTestInput(FrameInput& input) {
 void App::recordMenuTest(const FrameInput& input) {
     // The chord start (chart parse, calibration, level) is not menu cost.
     if (menu_test_done_ || diagnostic_.menu_chord_starts) return;
-    if (input.level_pressed || input.selection_pressed) {
+    if (input.level_pressed || (input.buttons.pressed & kButtonCross)) {
         ++diagnostic_.menu_steps;
         menu_step_total_us_ += last_frame_active_us_;
         diagnostic_.menu_step_avg_us = static_cast<unsigned int>(
@@ -643,11 +644,14 @@ void App::readInput(FrameInput& input) {
     }
     input.calibration_hands_separated =
         handsSeparatedForCalibration(input.optical.left, input.optical.right);
+    // With a T held, Circle/Square adjust settings (selection_pressed);
+    // otherwise Triangle/Circle move through the tracks (level_pressed,
+    // with auto-repeat), Cross steps the difficulty, Square the shelves.
     input.selection_pressed = static_cast<unsigned short>(
         buttons.pressed & (kButtonCircle | kButtonSquare));
     input.level_pressed = static_cast<unsigned short>(
         (buttons.pressed | repeated_navigation | pointer_navigation) &
-        (kButtonTriangle | kButtonCross));
+        (kButtonTriangle | kButtonCircle));
     const bool left_trigger_down = buttons.left_trigger >= 128u;
     const bool right_trigger_down = buttons.right_trigger >= 128u;
     input.blade_modifier = left_trigger_down && right_trigger_down;
@@ -659,7 +663,7 @@ void App::readInput(FrameInput& input) {
     const MoveChordEvents chord = move_chord_.update(
         (buttons.left_held & GEM_BUTTON_MOVE) != 0,
         (buttons.right_held & GEM_BUTTON_MOVE) != 0, nowMilliseconds());
-    input.move_chord = chord.chord;
+    input.move_long_chord = chord.long_chord;
     input.move_tap_slot = chord.tap_slot;
     // A reconnected Move may be held differently: measure the origin again.
     if (!moves.left_connected || !moves.right_connected) pose_calibrated_ = false;
@@ -686,12 +690,18 @@ void App::handleHandToggle(FrameInput& input) {
 }
 
 void App::handleCalibrationCancel(FrameInput& input) {
-    input.cancel_calibration = calibrating_ &&
-        (input.level_pressed & kButtonTriangle) != 0;
-    if (!input.cancel_calibration) return;
-    calibrating_ = false;
-    body_calibration_.reset();
-    printf("Pose calibration cancelled\n");
+    if (!calibrating_) return;
+    // Triangle starts the calibration over; Cross leaves it (back to the
+    // track list, or to the pause menu it came from).
+    input.cancel_calibration = (input.buttons.pressed & kButtonCross) != 0;
+    if (input.cancel_calibration) {
+        calibrating_ = false;
+        body_calibration_.reset();
+        printf("Pose calibration cancelled\n");
+    } else if (input.buttons.pressed & kButtonTriangle) {
+        body_calibration_.reset();
+        printf("Pose calibration started over\n");
+    }
 }
 
 void App::reloadSelectedChart() {
@@ -715,11 +725,12 @@ void App::reloadSelectedChart() {
 
 void App::handleLibraryNavigation(const FrameInput& input) {
     if (run_state_ != RUN_SELECT || calibrating_ || input.cancel_calibration ||
-        input.hand_toggle || !input.level_pressed || shelf_order_.size() <= 1)
+        input.hand_toggle || input.blade_modifier || input.timing_modifier ||
+        !input.level_pressed || shelf_order_.size() <= 1)
         return;
     // The carousel animates the step; updateLibraryMotion selects the
-    // track it lands on.
-    if (input.level_pressed & kButtonCross) carousel_.step(1);
+    // track it lands on. Triangle: the track above, Circle: below.
+    if (input.level_pressed & kButtonCircle) carousel_.step(1);
     else if (input.level_pressed & kButtonTriangle) carousel_.step(-1);
 }
 
@@ -753,7 +764,8 @@ void App::selectShelfPosition(std::size_t position) {
 
 void App::handleShelfSwitch(const FrameInput& input) {
     if (run_state_ != RUN_SELECT || calibrating_ || paused_ || input.hand_toggle ||
-        input.blade_modifier || (input.buttons.pressed & kButtonSelect) == 0 ||
+        input.blade_modifier || input.timing_modifier ||
+        (input.buttons.pressed & kButtonSquare) == 0 ||
         playlists_.empty())
         return;
     showShelf((shelf_ + 1) % (playlists_.size() + 1));
@@ -812,8 +824,16 @@ bool App::ensureSelectedChart() {
 
 void App::handleLibrarySettings(const FrameInput& input) {
     if (run_state_ != RUN_SELECT || calibrating_ || input.cancel_calibration ||
-        input.hand_toggle || !input.selection_pressed)
+        input.hand_toggle)
         return;
+    if (!input.blade_modifier && !input.timing_modifier) {
+        // Cross: the next difficulty, round and round.
+        if ((input.buttons.pressed & kButtonCross) && imported_level_ &&
+            !selected_level_.charts.empty())
+            changeDifficulty(1, true, 1);
+        return;
+    }
+    if (!input.selection_pressed) return;
     if (input.blade_modifier) {
         if (input.selection_pressed & kButtonCircle)
             settings_.blade_length_cm += 5;
@@ -833,9 +853,6 @@ void App::handleLibrarySettings(const FrameInput& input) {
         settings_.timing_offset_ms = clamp(settings_.timing_offset_ms, -500, 500);
         saveSettings();
         printf("Timing offset: %+d ms\n", settings_.timing_offset_ms);
-    } else if (imported_level_ && !selected_level_.charts.empty()) {
-        changeDifficulty((input.selection_pressed & kButtonCircle) ? 1 : -1,
-                         true, 1);
     }
 }
 
@@ -939,9 +956,9 @@ void App::updateLibraryMotion(const FrameInput& input) {
         if (events.difficulty_step)
             changeDifficulty(events.difficulty_step, false, gesture_hand_);
         if (!held) gesture_hand_ = -1;
-        // A Move button tap: spin to a random other track, one extra lap
-        // for show. (Both Move buttons together start the level.)
-        if (input.move_tap_slot >= 0 && count > 1 && !carousel_.dragging()) {
+        // Both Move buttons held: spin to a random other track, one extra
+        // lap for show. (A single Move tap starts the level.)
+        if (input.move_long_chord && count > 1 && !carousel_.dragging()) {
             const std::size_t pick = random_.pickOther(shelf_pos_, count);
             const std::size_t ahead = (pick + count - shelf_pos_) % count;
             carousel_.step(static_cast<int>(ahead + (count <= 40 ? count : 0)));
@@ -992,23 +1009,67 @@ void App::updateLibraryMotion(const FrameInput& input) {
     }
 }
 
-void App::handleBackButtons(const FrameInput& input) {
-    if (run_state_ == RUN_AUDIO_ERROR && (input.level_pressed & kButtonTriangle)) {
+void App::handleBackButtons(FrameInput& input) {
+    if (run_state_ == RUN_AUDIO_ERROR &&
+        (input.buttons.pressed & (kButtonTriangle | kButtonCross))) {
         run_state_ = RUN_SELECT;
         audio_start_error_ = 0;
         diagnostic_.audio_error_code = 0;
     }
-    if (run_state_ == RUN_RESULTS && (input.level_pressed & kButtonTriangle)) {
-        run_state_ = RUN_SELECT;
-        if (playlist_run_.active()) printf("Playlist run stopped\n");
-        playlist_run_.stop();
-        next_song_remaining_ms_ = 0;
-        carousel_.reset(static_cast<int>(shelf_pos_));
-        last_tick_row_ = carousel_.nearestRow();
-        game_.reset();
-        cut_feedback_.clear();
-        selection_changed_ms_ = nowMilliseconds();
-        printf("Returned to level selection\n");
+    handleResultsButtons(input);
+}
+
+void App::backToLibrary() {
+    run_state_ = RUN_SELECT;
+    if (playlist_run_.active()) printf("Playlist run stopped\n");
+    playlist_run_.stop();
+    next_song_remaining_ms_ = 0;
+    carousel_.reset(static_cast<int>(shelf_pos_));
+    last_tick_row_ = carousel_.nearestRow();
+    game_.reset();
+    cut_feedback_.clear();
+    selection_changed_ms_ = nowMilliseconds();
+    printf("Returned to level selection\n");
+}
+
+void App::handleResultsButtons(FrameInput& input) {
+    if (run_state_ != RUN_RESULTS || paused_) return;
+    const unsigned short pressed = input.buttons.pressed;
+    // The results screen has these buttons: the library it may return to
+    // must not act on them in the same frame (a Move tap would start).
+    input.move_tap_slot = -1;
+    input.start_pressed = false;
+    input.buttons.pressed = 0;
+    input.level_pressed = 0;
+    input.selection_pressed = 0;
+    const bool proceed = (pressed & (kButtonCross | kButtonCircle)) != 0 ||
+                         input.move_tap_slot >= 0;
+    const bool replay = (pressed & kButtonTriangle) != 0;
+    if (playlist_run_.active() && playlist_run_.hasNext()) {
+        // Between playlist songs: on now, the last song again, or stop.
+        if (proceed) {
+            playNextPlaylistSong();
+        } else if (replay && ensureSelectedChart()) {
+            playlist_run_.dropLast();
+            next_song_remaining_ms_ = 0;
+            ++diagnostic_.results_replays;
+            printf("Playlist song replayed\n");
+            beginLevel();
+        } else if (pressed & kButtonSquare) {
+            backToLibrary();
+        }
+        return;
+    }
+    if (playlist_run_.complete()) {
+        if (proceed || (pressed & kButtonSquare)) backToLibrary();
+        return;
+    }
+    if (proceed) {
+        backToLibrary();
+    } else if (replay && ensureSelectedChart()) {
+        ++diagnostic_.results_replays;
+        printf("Level replayed\n");
+        beginLevel();
     }
 }
 
@@ -1175,7 +1236,7 @@ void App::handlePauseMenu(FrameInput& input) {
     if (pressed & kButtonSquare) {
         ++diagnostic_.pause_calibrations;
         beginBodyCalibration();
-    } else if (pressed & (kButtonStart | kButtonCross)) {
+    } else if (pressed & kButtonCross) {
         user_paused_ = false;
         game_.invalidateInput();
         synchronizePause();
@@ -1333,51 +1394,19 @@ void App::handleStart(const FrameInput& input) {
         } else {
             printf("GEM capture could not open: %s\n", kCapturePath);
         }
-    } else if (input.start_pressed && run_state_ == RUN_SELECT && !paused_ &&
+    } else if ((input.start_pressed || input.move_tap_slot >= 0) &&
+               run_state_ == RUN_SELECT && !paused_ && !calibrating_ &&
                !input.cancel_calibration && !input.hand_toggle) {
-        // Parse the chart now; the calibration hides the cost.
+        // A single Move tap (or Start): always through the calibration,
+        // which also parses the chart unnoticed.
         if (!ensureSelectedChart()) return;
+        ++diagnostic_.menu_chord_starts;
+        pulseRumble(0, 4, 180);
+        pulseRumble(1, 4, 180);
         beginBodyCalibration();
-    } else if (input.calibrated_start ||
-               (input.start_pressed && run_state_ == RUN_RESULTS && !paused_ &&
-                input.moves.left.tracked && input.moves.right.tracked)) {
+    } else if (input.calibrated_start) {
         startOrContinue();
-    } else {
-        handleMoveChord(input);
     }
-}
-
-void App::handleMoveChord(const FrameInput& input) {
-    if (!input.move_chord || paused_ || calibrating_ ||
-        input.cancel_calibration || input.hand_toggle ||
-        (run_state_ != RUN_SELECT && run_state_ != RUN_RESULTS))
-        return;
-    const bool ready = handsSeparatedForCalibration(input.moves.left,
-                                                    input.moves.right);
-    // The results screen replays with the measured origin; it needs both
-    // spheres in view to tell the hands apart.
-    if (run_state_ == RUN_RESULTS && !(ready && pose_calibrated_)) return;
-    // The summary after a finished playlist only goes back (Triangle).
-    if (run_state_ == RUN_RESULTS && playlist_run_.active() &&
-        !playlist_run_.hasNext()) return;
-    if (!ensureSelectedChart()) return;
-    ++diagnostic_.menu_chord_starts;
-    pulseRumble(0, 5, 200);
-    pulseRumble(1, 5, 200);
-    if (ready && pose_calibrated_) {
-        stopPreview(250);
-        audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
-        // The hands are wherever the two controllers are right now.
-        assignHands(input.moves);
-        printf("Move chord: GEM slot %u is the left hand\n",
-               physicalSlotForHand(0u, hand_slots_swapped_));
-        startOrContinue();
-        return;
-    }
-    // First start of the session (or the hands overlap): the guided
-    // calibration measures the body and assigns the hands, then starts.
-    printf("Move chord: calibrating before the first level\n");
-    beginBodyCalibration();
 }
 
 void App::startOrContinue() {
@@ -1719,6 +1748,7 @@ void App::renderFrame(const FrameInput& input,
                             playlists_[playlist_run_.playlist()], level_choices_);
     } else if (run_state_ == RUN_RESULTS) {
         drawResults(screen_, game_.score(), best_score_);
+        if (!playlist_run_.hasNext()) drawResultsHint(screen_);
         if (playlist_run_.hasNext()) {
             const std::size_t next = shelf_order_[(shelf_pos_ + 1) % shelf_order_.size()];
             drawPlaylistNext(screen_, playlist_run_, level_choices_[next],

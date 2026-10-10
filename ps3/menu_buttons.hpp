@@ -100,8 +100,9 @@ public:
 
     unsigned short update(unsigned short held, unsigned short pressed,
                           unsigned int now_ms) {
+        // Triangle: the track above, Circle: the track below.
         const unsigned short navigation = static_cast<unsigned short>(
-            GEM_BUTTON_TRIANGLE | GEM_BUTTON_CROSS);
+            GEM_BUTTON_TRIANGLE | GEM_BUTTON_CIRCLE);
         held &= navigation;
         pressed &= navigation;
         if (held == 0 || held == navigation) {
@@ -132,16 +133,19 @@ private:
 struct MoveChordEvents {
     bool chord;
     int tap_slot;
+    // Both Move buttons held for holdMs() (once per hold).
+    bool long_chord;
 
-    MoveChordEvents() : chord(false), tap_slot(-1) {}
+    MoveChordEvents() : chord(false), tap_slot(-1), long_chord(false) {}
 };
 
 class MoveButtonChord {
 public:
     static unsigned int windowMs() { return 300u; }
     static unsigned int tapMs() { return 800u; }
+    static unsigned int holdMs() { return 500u; }
 
-    MoveButtonChord() {
+    MoveButtonChord() : both_(false), long_fired_(false), both_since_ms_(0) {
         for (unsigned int i = 0; i < 2; ++i) {
             held_[i] = used_[i] = false;
             press_ms_[i] = 0;
@@ -172,12 +176,28 @@ public:
                 events.tap_slot = static_cast<int>(i);
             used_[i] = true;
         }
+        if (held[0] && held[1]) {
+            if (!both_) {
+                both_ = true;
+                long_fired_ = false;
+                both_since_ms_ = now_ms;
+            }
+            if (!long_fired_ && now_ms - both_since_ms_ >= holdMs()) {
+                events.long_chord = true;
+                long_fired_ = true;
+            }
+        } else {
+            both_ = false;
+        }
         held_[0] = held[0];
         held_[1] = held[1];
         return events;
     }
 
 private:
+    bool both_;
+    bool long_fired_;
+    unsigned int both_since_ms_;
     bool held_[2];
     bool used_[2];
     unsigned int press_ms_[2];

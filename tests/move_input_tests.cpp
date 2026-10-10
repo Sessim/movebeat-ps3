@@ -172,7 +172,8 @@ void testMenuButtonEdges() {
 
 void testMenuNavigationRepeat() {
     movebeat::ps3::MenuNavigationRepeat repeat;
-    const unsigned short cross = movebeat::ps3::GEM_BUTTON_CROSS;
+    // Circle is "next track" (the name below is historical).
+    const unsigned short cross = movebeat::ps3::GEM_BUTTON_CIRCLE;
     const unsigned short triangle = movebeat::ps3::GEM_BUTTON_TRIANGLE;
     expect(repeat.update(cross, 0, 1000) == 0 &&
            repeat.update(cross, 0, 2000) == 0,
@@ -476,6 +477,21 @@ void testMoveButtonChord() {
         expect(events.tap_slot < 0, "an overlapped press is not a tap");
         events = chord.update(false, false, 1650u);
         expect(events.tap_slot < 0, "the late overlapped press is not a tap either");
+    }
+    {
+        // Both held half a second: one long chord (the randomizer).
+        MoveButtonChord chord;
+        expect(!chord.update(true, true, 1000u).long_chord &&
+               !chord.update(true, true, 1400u).long_chord,
+               "a short chord is not a long chord");
+        expect(chord.update(true, true, 1500u).long_chord &&
+               !chord.update(true, true, 1700u).long_chord,
+               "both Move held 500 ms fire one long chord");
+        MoveChordEvents events = chord.update(false, false, 1800u);
+        expect(events.tap_slot < 0, "releasing a long chord is no tap");
+        expect(!chord.update(true, true, 2000u).long_chord &&
+               chord.update(true, true, 2600u).long_chord,
+               "a new hold fires again");
     }
     {
         // A long hold is not a tap; a tap after a chord works again.
