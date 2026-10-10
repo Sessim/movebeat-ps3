@@ -138,6 +138,13 @@ if(Python3_Interpreter_FOUND)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     add_test(
+        NAME movebeat_usb_export_tests
+        COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_usb_export -v
+    )
+    set_tests_properties(movebeat_usb_export_tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
         NAME movebeat_library_card_tests
         COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_library_card -v
     )

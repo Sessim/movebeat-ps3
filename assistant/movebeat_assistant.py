@@ -41,12 +41,16 @@ from tools.beatsaver_import import (
 )
 from tools.validate_bundle import validate_bundle
 from tools.ftp_upload import TransferError, upload_bundle
+from tools.usb_export import (
+    UsbExportError, check_ps3_volume, export_bundle, export_bundles,
+    library_bundles, list_removable_drives, read_volume,
+)
 from assistant.ftp_profile import (
     default_profile_path, load_ftp_profile, save_ftp_profile,
 )
 
 
-APP_VERSION = "0.2.5"
+APP_VERSION = "0.2.6"
 APP_NAME = f"MoveBeat Track Assistant {APP_VERSION}"
 MAX_PREVIEW_PIXELS = 16_000_000
 
@@ -129,6 +133,9 @@ class AssistantApp(tk.Tk):
         self.ftp_port_var = tk.StringVar(value="21")
         self.ftp_user_var = tk.StringVar(value="anonymous")
         self.ftp_password_var = tk.StringVar()
+        self.usb_drive_var = tk.StringVar()
+        self.usb_status_var = tk.StringVar(value="Вставьте флешку и нажмите «Обновить».")
+        self.usb_drives: dict[str, Path] = {}
         self.ftp_profile_path = default_profile_path()
         try:
             profile = load_ftp_profile(self.ftp_profile_path)
@@ -247,6 +254,27 @@ class AssistantApp(tk.Tk):
         transfer.columnconfigure(1, weight=2)
         transfer.columnconfigure(4, weight=2)
 
+        usb_frame = ttk.LabelFrame(
+            outer, text="Флешка для PS3 (уровень выбирается выше, в поле «Уровень»)",
+            padding=10)
+        usb_frame.pack(fill="x", pady=(10, 0))
+        ttk.Label(usb_frame, text="Носитель:").grid(row=0, column=0, sticky="w")
+        self.usb_drive = ttk.Combobox(
+            usb_frame, textvariable=self.usb_drive_var, width=42, state="readonly")
+        self.usb_drive.grid(row=0, column=1, sticky="ew", padx=(4, 8))
+        self.usb_drive.bind("<<ComboboxSelected>>", lambda _event: self._show_usb_status())
+        ttk.Button(usb_frame, text="Обновить", command=self.refresh_usb_drives).grid(
+            row=0, column=2, padx=(0, 12))
+        self.usb_button = ttk.Button(
+            usb_frame, text="Уровень на флешку", command=self.start_usb_export)
+        self.usb_button.grid(row=0, column=3)
+        self.usb_all_button = ttk.Button(
+            usb_frame, text="Все уровни на флешку", command=self.start_usb_export_all)
+        self.usb_all_button.grid(row=0, column=4, padx=(8, 0))
+        ttk.Label(usb_frame, textvariable=self.usb_status_var, wraplength=900,
+                  justify="left").grid(row=1, column=0, columnspan=5, sticky="w", pady=(8, 0))
+        usb_frame.columnconfigure(1, weight=1)
+
         actions = ttk.Frame(outer)
         actions.pack(fill="x", pady=10)
         self.import_button = ttk.Button(actions, text="Подготовить уровень", command=self.start_import)
@@ -270,6 +298,7 @@ class AssistantApp(tk.Tk):
             self._append_log(f"Проект: {self.project_root}\n")
         self._append_log("Загружайте карты только с разрешения правообладателей и по правилам BeatSaver.\n")
         self.refresh_bundles()
+        self.refresh_usb_drives()
 
     def _append_log(self, text: str) -> None:
         self.log.configure(state="normal")
@@ -283,6 +312,8 @@ class AssistantApp(tk.Tk):
         self.search_button.configure(state=state)
         self.import_button.configure(state=state)
         self.ftp_button.configure(state=state)
+        self.usb_button.configure(state=state)
+        self.usb_all_button.configure(state=state)
         if self.project_root is not None and shutil.which("wsl.exe") is not None:
             self.pkg_button.configure(state=state)
         self.cancel_button.configure(
@@ -316,7 +347,7 @@ class AssistantApp(tk.Tk):
             while True:
                 kind, payload = self.events.get_nowait()
                 terminal_event = kind in (
-                    "search", "imported", "package", "uploaded", "result", "error")
+                    "search", "imported", "package", "uploaded", "exported", "result", "error")
                 if kind == "progress":
                     done, total = payload
                     if total:
@@ -343,6 +374,23 @@ class AssistantApp(tk.Tk):
                     self.progress.configure(mode="determinate")
                     self.progress_var.set(min(100, done * 100 / total) if total else 0)
                     self.status_var.set(f"FTP: {done / 1048576:.1f} / {total / 1048576:.1f} МиБ")
+                elif kind == "usb_progress":
+                    done, total = payload
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.progress_var.set(min(100, done * 100 / total) if total else 0)
+                    self.status_var.set(f"Флешка: {done / 1048576:.1f} / {total / 1048576:.1f} МиБ")
+                elif kind == "usb_count":
+                    done, total = payload
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.progress_var.set(min(100, done * 100 / total) if total else 0)
+                    self.status_var.set(f"Флешка: уровень {done} из {total}")
+                elif kind == "exported":
+                    self._append_log(str(payload) + "\n")
+                    self._show_usb_status()
+                    messagebox.showinfo(
+                        APP_NAME, str(payload) + "\n\nВставьте флешку в PS3 до запуска игры.")
                 elif kind == "uploaded":
                     self._append_log(f"Уровень отправлен: {payload}\n")
                     messagebox.showinfo(
@@ -360,7 +408,7 @@ class AssistantApp(tk.Tk):
                         self._review_import(payload[0], payload[1])
                 elif kind == "error":
                     exc, trace = payload
-                    if isinstance(exc, (MapImportError, TransferError)):
+                    if isinstance(exc, (MapImportError, TransferError, UsbExportError)):
                         self._append_log(f"Ошибка: {exc}\n")
                     else:
                         self._append_log(trace + "\n")
@@ -589,6 +637,89 @@ class AssistantApp(tk.Tk):
             self.events.put(("uploaded", remote))
 
         self._run("Отправка уровня на PS3…", operation)
+
+    def refresh_usb_drives(self) -> None:
+        self.usb_drives = {}
+        for root in list_removable_drives():
+            try:
+                volume = read_volume(root)
+                label = (f"{root}  {volume.label or 'без метки'}, {volume.filesystem}, "
+                         f"свободно {volume.free_bytes / 1073741824:.1f} ГБ")
+            except (OSError, UsbExportError):
+                label = f"{root}  (не читается)"
+            self.usb_drives[label] = root
+        names = list(self.usb_drives)
+        self.usb_drive.configure(values=names)
+        current = self.usb_drive_var.get()
+        self.usb_drive_var.set(current if current in names else (names[0] if names else ""))
+        self._show_usb_status()
+
+    def _show_usb_status(self) -> None:
+        root = self.usb_drives.get(self.usb_drive_var.get())
+        if root is None:
+            self.usb_status_var.set(
+                "Съёмных носителей не найдено. Вставьте флешку и нажмите «Обновить».")
+            return
+        try:
+            volume = read_volume(root)
+            check_ps3_volume(volume)
+        except (OSError, UsbExportError) as exc:
+            self.usb_status_var.set(str(exc))
+            return
+        library = root / "MOVEBEAT" / "levels"
+        present = len(library_bundles(library))
+        self.usb_status_var.set(
+            f"{volume.filesystem}: PS3 прочитает. Уровни кладутся в {library}"
+            f" (сейчас там {present}). Флешку вставьте в PS3 до запуска игры.")
+
+    def _usb_target(self) -> Path | None:
+        root = self.usb_drives.get(self.usb_drive_var.get())
+        if root is None:
+            messagebox.showwarning(APP_NAME, "Вставьте флешку и нажмите «Обновить».")
+        return root
+
+    def start_usb_export(self) -> None:
+        drive = self._usb_target()
+        name = self.ftp_bundle_var.get().strip()
+        if drive is None:
+            return
+        if not name:
+            messagebox.showwarning(APP_NAME, "Выберите уровень в поле «Уровень».")
+            return
+        directory = Path(self.output_var.get()).expanduser() / name
+
+        def operation() -> None:
+            destination = export_bundle(
+                directory, drive,
+                progress=lambda done, total: self.events.put(("usb_progress", (done, total))))
+            self.events.put(("exported", f"Уровень скопирован и проверен: {destination}"))
+
+        self._run("Копирование на флешку…", operation)
+
+    def start_usb_export_all(self) -> None:
+        drive = self._usb_target()
+        if drive is None:
+            return
+        bundles = library_bundles(Path(self.output_var.get()).expanduser())
+        if not bundles:
+            messagebox.showwarning(APP_NAME, "В каталоге уровней нет подготовленных уровней.")
+            return
+        if not messagebox.askyesno(
+                APP_NAME, f"Скопировать на {drive} все уровни и плей-листы ({len(bundles)})?\n"
+                "Уже записанные на флешку пропускаются, ничего не заменяется."):
+            return
+
+        def operation() -> None:
+            report = export_bundles(
+                bundles, drive,
+                progress=lambda done, total: self.events.put(("usb_count", (done, total))))
+            lines = [f"Скопировано: {len(report.copied)}, пропущено: {len(report.skipped)}"]
+            lines += [f"  {name}: {reason}" for name, reason in report.skipped[:12]]
+            if len(report.skipped) > 12:
+                lines.append(f"  … и ещё {len(report.skipped) - 12}")
+            self.events.put(("exported", "\n".join(lines)))
+
+        self._run("Копирование уровней на флешку…", operation)
 
     def save_ftp_connection(self) -> None:
         try:
