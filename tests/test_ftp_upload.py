@@ -125,7 +125,9 @@ class FtpUploadTests(unittest.TestCase):
                                 perm="elradfmwMT")
 
             class Handler(FTPHandler):
-                pass
+                # Like webMAN MOD: a Latin-1 greeting with temperatures.
+                encoding = "latin-1"
+                banner = "webMAN MOD 1.47 [CPU: 55°C RSX: 50°C]"
 
             Handler.authorizer = authorizer
             server = FTPServer(("127.0.0.1", 0), Handler)

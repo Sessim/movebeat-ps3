@@ -86,7 +86,8 @@ def monitor(args: argparse.Namespace) -> int:
     saw_running = False
     saw_missing = False
 
-    with ftplib.FTP() as ftp:
+    # Latin-1: webMAN MOD's greeting carries a Latin-1 degree sign.
+    with ftplib.FTP(encoding="latin-1") as ftp:
         ftp.connect(args.host, args.port, timeout=args.connect_timeout)
         ftp.login(args.user, args.password)
         while time.monotonic() < deadline:

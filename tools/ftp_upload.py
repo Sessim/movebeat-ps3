@@ -25,6 +25,16 @@ class TransferError(Exception):
     pass
 
 
+def ps3_ftp() -> ftplib.FTP:
+    """An FTP client for PS3 servers: replies are read as Latin-1.
+
+    webMAN MOD's greeting reports temperatures with a Latin-1 degree sign
+    (byte 0xB0), which ftplib's default UTF-8 decoding rejects. MoveBeat's
+    own names are ASCII, so Latin-1 loses nothing.
+    """
+    return ftplib.FTP(encoding="latin-1")
+
+
 def _names(ftp: ftplib.FTP) -> set[str]:
     try:
         return {item.rstrip("/").rsplit("/", 1)[-1].casefold()
@@ -53,7 +63,7 @@ def upload_bundle(
     directory: Path, host: str, port: int = 21, user: str = "anonymous",
     password: str = "", *,
     progress: Callable[[int, int], None] | None = None,
-    ftp_factory: Callable[[], ftplib.FTP] = ftplib.FTP,
+    ftp_factory: Callable[[], ftplib.FTP] = ps3_ftp,
 ) -> str:
     """Upload without replacing an existing level; return its remote path."""
     directory = Path(directory)
