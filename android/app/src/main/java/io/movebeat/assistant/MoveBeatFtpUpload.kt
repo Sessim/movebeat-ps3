@@ -15,10 +15,21 @@ import java.util.zip.ZipInputStream
 object MoveBeatFtpUpload {
     const val REMOTE_LIBRARY = "/dev_hdd0/game/MOVEBEAT1/USRDIR/levels"
     private const val TIMEOUT_MS = 20_000
+    /** A data transfer with no byte moved for this long is abandoned. */
+    const val STALL_TIMEOUT_MS = 30_000L
+    private const val CHUNK = 16 * 1024
     private val safeName = Regex("[A-Za-z0-9][A-Za-z0-9._+-]*")
 
+    /**
+     * [stage] receives what is happening ("отправка audio.egg (2/6)"), so a
+     * report can say where a transfer stopped. A data connection that
+     * moves nothing for [stallTimeoutMs] (a socket write never times out
+     * by itself) aborts the upload with that stage in the message.
+     */
     fun upload(bundle: PreparedBundle, host: String, port: Int, username: String,
-               password: String, progress: (Long, Long) -> Unit = { _, _ -> }): String {
+               password: String, stallTimeoutMs: Long = STALL_TIMEOUT_MS,
+               stage: (String) -> Unit = {},
+               progress: (Long, Long) -> Unit = { _, _ -> }): String {
         require(host.isNotBlank() && host.none { it == '\r' || it == '\n' || it == '\u0000' }) {
             "Введите корректный адрес PS3"
         }
@@ -33,7 +44,8 @@ object MoveBeatFtpUpload {
         val stage = ".movebeat-upload-$levelName-${java.util.UUID.randomUUID().toString().take(12)}"
         val uploaded = mutableListOf<String>()
 
-        FtpSession(host.trim(), port).use { ftp ->
+        FtpSession(host.trim(), port, stallTimeoutMs).use { ftp ->
+            stage("вход на FTP-сервер")
             ftp.login(username.ifBlank { "anonymous" }, password)
             ftp.commandChecked("TYPE I", 200)
             ftp.commandChecked("CWD $REMOTE_LIBRARY", 250)
@@ -45,14 +57,22 @@ object MoveBeatFtpUpload {
             var published = false
             try {
                 ftp.commandChecked("CWD $stage", 250)
+                var index = 0
                 for ((filename, bytes) in files) {
                     uploaded += filename
+                    index += 1
+                    ftp.stageName = "отправка $filename (${index}/${files.size})"
+                    stage(ftp.stageName)
                     ftp.store(filename, bytes) { count ->
                         done += count
                         progress(done, total)
                     }
                 }
+                index = 0
                 for ((filename, bytes) in files) {
+                    index += 1
+                    ftp.stageName = "проверка $filename (${index}/${files.size})"
+                    stage(ftp.stageName)
                     val digest = MessageDigest.getInstance("SHA-256")
                     val remote = ftp.retrieve(filename) { chunk ->
                         digest.update(chunk)
@@ -64,6 +84,8 @@ object MoveBeatFtpUpload {
                         "Проверка загруженного файла не прошла: $filename"
                     }
                 }
+                ftp.stageName = "публикация уровня"
+                stage(ftp.stageName)
                 ftp.commandChecked("CWD $REMOTE_LIBRARY", 250)
                 require(ftp.listNames().none { it.equals(levelName, ignoreCase = true) }) {
                     "Уровень $levelName появился на PS3 во время передачи; существующий файл не затронут"
@@ -136,11 +158,28 @@ object MoveBeatFtpUpload {
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes).joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
 
-    private class FtpSession(host: String, port: Int) : AutoCloseable {
+    private class FtpSession(host: String, port: Int, private val stallTimeoutMs: Long) :
+        AutoCloseable {
         private val control = Socket()
         private val reader: BufferedReader
         private val writer: OutputStreamWriter
         private val serverHost = host
+        @Volatile var stageName = "подключение"
+        // Watchdog: a blocked data write has no timeout of its own.
+        @Volatile private var activeData: Socket? = null
+        @Volatile private var lastActivity = System.currentTimeMillis()
+        @Volatile private var stalled = false
+        @Volatile private var closed = false
+        private val watchdog = Thread {
+            while (!closed) {
+                try { Thread.sleep(200) } catch (_: InterruptedException) { break }
+                val data = activeData ?: continue
+                if (System.currentTimeMillis() - lastActivity > stallTimeoutMs) {
+                    stalled = true
+                    try { data.close() } catch (_: Exception) { }
+                }
+            }
+        }.apply { isDaemon = true }
 
         init {
             control.connect(InetSocketAddress(host, port), TIMEOUT_MS)
@@ -148,7 +187,10 @@ object MoveBeatFtpUpload {
             reader = BufferedReader(InputStreamReader(control.getInputStream(), Charsets.ISO_8859_1))
             writer = OutputStreamWriter(control.getOutputStream(), Charsets.ISO_8859_1)
             expect(readReply(), 220)
+            watchdog.start()
         }
+
+        private fun touch() { lastActivity = System.currentTimeMillis() }
 
         fun login(username: String, password: String) {
             val userReply = command("USER $username")
@@ -181,8 +223,9 @@ object MoveBeatFtpUpload {
                 val output = socket.getOutputStream()
                 var offset = 0
                 while (offset < bytes.size) {
-                    val count = minOf(64 * 1024, bytes.size - offset)
+                    val count = minOf(CHUNK, bytes.size - offset)
                     output.write(bytes, offset, count)
+                    touch()
                     offset += count
                     onBytes(count)
                 }
@@ -193,10 +236,11 @@ object MoveBeatFtpUpload {
         fun retrieve(filename: String, onBytes: (ByteArray) -> Unit): Long {
             var size = 0L
             dataInputCommand("RETR $filename") { input ->
-                val buffer = ByteArray(64 * 1024)
+                val buffer = ByteArray(CHUNK)
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
+                    touch()
                     size += count
                     onBytes(buffer.copyOf(count))
                 }
@@ -227,7 +271,13 @@ object MoveBeatFtpUpload {
                     throw FtpReplyException(preliminary.code,
                         "FTP-сервер отказал в передаче (код ${preliminary.code})")
                 }
-                data.use(transfer)
+                touch()
+                activeData = data
+                try {
+                    data.use(transfer)
+                } finally {
+                    activeData = null
+                }
                 val completion = readReply()
                 if (completion.code != 226 && completion.code != 250) {
                     throw FtpReplyException(completion.code,
@@ -235,6 +285,12 @@ object MoveBeatFtpUpload {
                 }
             } catch (error: Exception) {
                 try { data.close() } catch (_: Exception) { }
+                if (stalled) {
+                    stalled = false
+                    throw IllegalStateException(
+                        "FTP-сервер PS3 перестал принимать данные на этапе «$stageName» " +
+                            "(${stallTimeoutMs / 1000} с без движения)", error)
+                }
                 throw error
             }
         }
@@ -303,6 +359,8 @@ object MoveBeatFtpUpload {
             IllegalStateException(message)
 
         override fun close() {
+            closed = true
+            watchdog.interrupt()
             try { writer.write("QUIT\r\n"); writer.flush() } catch (_: Exception) { }
             try { control.close() } catch (_: Exception) { }
         }

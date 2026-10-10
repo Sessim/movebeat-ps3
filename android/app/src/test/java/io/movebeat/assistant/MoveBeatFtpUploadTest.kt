@@ -62,10 +62,31 @@ class MoveBeatFtpUploadTest {
         }
     }
 
-    private fun bundle(): PreparedBundle {
+    @Test fun stalledServerAbortsWithTheStage() {
+        FakePs3Ftp(stallStore = true).use { server ->
+            val stages = mutableListOf<String>()
+            val started = System.currentTimeMillis()
+            val error = try {
+                MoveBeatFtpUpload.upload(bundle(audioBytes = 8 * 1024 * 1024), "127.0.0.1",
+                    server.port, "test-user", "test-pass", stallTimeoutMs = 1000,
+                    stage = { stages += it })
+                null
+            } catch (caught: IllegalStateException) { caught }
+            assertTrue(error?.message.orEmpty().contains("перестал принимать данные"))
+            assertTrue(error?.message.orEmpty().contains("отправка audio.ogg"))
+            assertTrue(System.currentTimeMillis() - started < 15_000)
+            assertTrue(stages.any { it.startsWith("отправка audio.ogg") })
+            assertFalse(server.levels.containsKey("testmap"))
+        }
+    }
+
+    private fun bundle(audioBytes: Int = 4): PreparedBundle {
+        val audio = ByteArray(4 + audioBytes).also {
+            it[0] = 79; it[1] = 103; it[2] = 103; it[3] = 83
+        }
         val files = linkedMapOf(
             "level.ini" to "format=1\ntitle=Test\n".toByteArray(),
-            "audio.ogg" to byteArrayOf(79, 103, 103, 83, 1, 2, 3, 4)
+            "audio.ogg" to audio
         )
         val entries = JSONArray()
         for ((name, bytes) in files) entries.put(JSONObject()
@@ -87,7 +108,8 @@ class MoveBeatFtpUploadTest {
         .digest(bytes).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     private class FakePs3Ftp(initial: Map<String, Map<String, ByteArray>> = emptyMap(),
-                             private val corruptReadback: Boolean = false) : AutoCloseable {
+                             private val corruptReadback: Boolean = false,
+                             private val stallStore: Boolean = false) : AutoCloseable {
         private val listener = ServerSocket(0, 4, InetAddress.getLoopbackAddress())
         val port: Int get() = listener.localPort
         val levels = initial.mapValuesTo(linkedMapOf()) { it.value.toMutableMap() }
@@ -147,6 +169,14 @@ class MoveBeatFtpUploadTest {
                         }
                         "STOR" -> {
                             reply("150 Send data")
+                            if (stallStore && argument == "audio.ogg") {
+                                // Accept the data connection, then never read it.
+                                val data = passive!!.accept()
+                                data.receiveBufferSize = 4096
+                                Thread.sleep(4000)
+                                data.close()
+                                break
+                            }
                             val bytes = passive!!.accept().use { it.getInputStream().readBytes() }
                             levels.getValue(cwd)[argument] = bytes
                             passive!!.close(); passive = null; reply("226 Stored")

@@ -219,12 +219,19 @@ class MainActivity : Activity() {
                 val username = ftpUsername.text.toString().trim().ifBlank { "anonymous" }
                 val password = ftpPassword.text.toString()
                 var lastProgress = 0L
+                var stageText = ""
                 runTask {
-                    val remote = MoveBeatFtpUpload.upload(bundle, host, port, username, password) { done, total ->
-                        if (done == total || done - lastProgress >= 256 * 1024) {
+                    val remote = MoveBeatFtpUpload.upload(bundle, host, port, username, password,
+                        stage = { text ->
+                            stageText = text
+                            runOnUiThread { output.text = "FTP: $text" }
+                        }) { done, total ->
+                        if (done == total || done - lastProgress >= 128 * 1024) {
                             lastProgress = done
+                            val kib = 1024L
                             runOnUiThread {
-                                output.text = if (total > 0) "FTP: ${done / 1048576} / ${total / 1048576} МиБ"
+                                output.text = if (total > 0)
+                                    "FTP: $stageText\n${done / kib} / ${total / kib} КиБ"
                                     else "Проверка FTP-передачи…"
                             }
                         }
