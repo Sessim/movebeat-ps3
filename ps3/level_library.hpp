@@ -48,7 +48,11 @@ const std::size_t kLibraryCardWindow = 3;
 // by title (ASCII case-insensitive); charts are not parsed here. Playlist
 // bundles with at least one track in the library go to `playlists`, by
 // title.
-std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists);
+// USB drives add the bundles in MOVEBEAT/levels (kUsbLevelRootFormat); a
+// folder name already on the hard disk wins. `usb_levels` receives how many
+// levels came from USB.
+std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists,
+                                         unsigned int* usb_levels = 0);
 // Unloads cards outside the window around `position` of `order` (library
 // indices as the carousel shows them) and loads at most `max_loads`
 // missing ones, nearest first. Returns the number loaded, so scrolling

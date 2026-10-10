@@ -5,6 +5,8 @@ namespace ps3 {
 
 // Files the PS3 application reads or writes inside its installed USRDIR.
 const char kLevelRoot[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/levels";
+// Level bundles on USB drives 0..7 (printf format with the drive number).
+const char kUsbLevelRootFormat[] = "/dev_usb%03d/MOVEBEAT/levels";
 const char kScoreLog[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/scores.log";
 const char kSettingsPath[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/settings.ini";
 const char kCapturePath[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/gem_capture.csv";

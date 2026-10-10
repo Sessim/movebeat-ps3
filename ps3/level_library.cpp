@@ -74,18 +74,25 @@ movebeat::Note makeNote(unsigned int time_ms, int lane, int row,
 
 } // namespace
 
-std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists) {
-    std::vector<LevelChoice> choices;
-    playlists.clear();
-    DIR* directory = opendir(kLevelRoot);
-    if (!directory) return choices;
+namespace {
+
+// Adds the level and playlist bundles of one library folder; a folder name
+// already found (on the hard disk, or an earlier USB drive) is skipped.
+// Returns the number of levels added.
+unsigned int scanLibraryRoot(const std::string& root, std::vector<LevelChoice>& choices,
+                             std::vector<PlaylistChoice>& playlists,
+                             std::vector<std::string>& names) {
+    DIR* directory = opendir(root.c_str());
+    if (!directory) return 0;
+    unsigned int added = 0;
     for (dirent* entry = readdir(directory); entry; entry = readdir(directory)) {
         const std::string name(entry->d_name);
         // Dot names include the FTP uploader's unfinished staging folders.
         if (name.empty() || name[0] == '.' ||
             name.find('/') != std::string::npos ||
             name.find('\\') != std::string::npos) continue;
-        const std::string path = std::string(kLevelRoot) + "/" + name;
+        if (std::find(names.begin(), names.end(), name) != names.end()) continue;
+        const std::string path = root + "/" + name;
         std::string error;
         // Only level.ini is parsed here; charts are parsed when a level is
         // started, so startup cost no longer grows with chart sizes.
@@ -93,19 +100,43 @@ std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists)
             LevelChoice choice;
             choice.directory = path;
             if (movebeat::loadLevelDirectory(path, choice.manifest, error)) {
-                if (levelChartFilesExist(path, choice.manifest))
+                if (levelChartFilesExist(path, choice.manifest)) {
                     choices.push_back(choice);
+                    names.push_back(name);
+                    ++added;
+                }
                 continue;
             }
         }
         if (playlists.size() < kMaxLibraryPlaylists) {
             PlaylistChoice playlist;
             playlist.directory = path;
-            if (movebeat::loadPlaylistDirectory(path, playlist.manifest, error))
+            if (movebeat::loadPlaylistDirectory(path, playlist.manifest, error)) {
                 playlists.push_back(playlist);
+                names.push_back(name);
+            }
         }
     }
     closedir(directory);
+    return added;
+}
+
+} // namespace
+
+std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists,
+                                         unsigned int* usb_levels) {
+    std::vector<LevelChoice> choices;
+    std::vector<std::string> names;
+    playlists.clear();
+    scanLibraryRoot(kLevelRoot, choices, playlists, names);
+    // Bundles copied to a USB drive play from there: no FTP needed.
+    unsigned int from_usb = 0;
+    for (int drive = 0; drive < 8; ++drive) {
+        char root[48];
+        snprintf(root, sizeof(root), kUsbLevelRootFormat, drive);
+        from_usb += scanLibraryRoot(root, choices, playlists, names);
+    }
+    if (usb_levels) *usb_levels = from_usb;
     std::sort(choices.begin(), choices.end(), levelChoiceLess);
 
     std::vector<const movebeat::LevelManifest*> manifests;

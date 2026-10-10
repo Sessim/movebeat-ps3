@@ -116,6 +116,8 @@ struct RunStatus {
     unsigned int error_stage;
     unsigned int error_code;
     int level_count;
+    // Levels found on USB drives (MOVEBEAT/levels).
+    unsigned int usb_level_count;
     unsigned int library_cards_loaded;
     unsigned int library_card_bytes;
     int imported_level;

@@ -216,7 +216,7 @@ void App::runStartupFailure(GemRuntime::InitStage stage, int error) {
 
 bool App::selectInitialLevel(int& exit_code) {
     const unsigned long long scan_start_us = nowMicroseconds();
-    level_choices_ = discoverLibrary(playlists_);
+    level_choices_ = discoverLibrary(playlists_, &diagnostic_.usb_level_count);
     diagnostic_.library_scan_ms = static_cast<unsigned int>(
         (nowMicroseconds() - scan_start_us) / 1000ull);
     diagnostic_.playlist_count = static_cast<unsigned int>(playlists_.size());
@@ -224,8 +224,8 @@ bool App::selectInitialLevel(int& exit_code) {
     if (demo_mode_ && !demo_options_.level_id.empty()) {
         bool found = false;
         for (std::size_t index = 0; index < level_choices_.size(); ++index) {
-            const std::string name = level_choices_[index].directory.substr(
-                std::string(kLevelRoot).size() + 1);
+            const std::string& path = level_choices_[index].directory;
+            const std::string name = path.substr(path.find_last_of('/') + 1);
             if (name == demo_options_.level_id) {
                 selected_level_index_ = index;
                 found = true;
