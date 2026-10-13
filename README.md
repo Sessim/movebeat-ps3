@@ -8,6 +8,10 @@ blocks to the music with two blades; maps come from BeatSaver. The project
 follows the general genre but **contains no code, music, maps, models, name or
 other material from Beat Saber**.
 
+[![MoveBeat on YouTube: gameplay on a real PS3](https://img.youtube.com/vi/wMVJnFPkHqQ/maxresdefault.jpg)](https://youtu.be/wMVJnFPkHqQ)
+
+▶ [Watch the 30-second trailer](https://youtu.be/wMVJnFPkHqQ)
+
 This is an early version: it has been played on one console (HEN, PS Eye
 under the TV, about 2 m from the player) and tested in the RPCS3 emulator.
 Tracking depends a lot on lighting and camera placement. Bug reports with the

@@ -8,6 +8,10 @@ PlayStation Move и камерой PlayStation Eye. Вы рубите летящ
 жанр, но **не содержит код, музыку, карты, модели, название или другие
 материалы Beat Saber**.
 
+[![MoveBeat на YouTube: игра на настоящей PS3](https://img.youtube.com/vi/wMVJnFPkHqQ/maxresdefault.jpg)](https://youtu.be/wMVJnFPkHqQ)
+
+▶ [Смотреть 30-секундный ролик](https://youtu.be/wMVJnFPkHqQ)
+
 Ранняя версия: проверена на одной консоли (HEN, PS Eye под телевизором, около
 2 м до игрока) и в эмуляторе RPCS3. Трекинг сильно зависит от освещения и
 положения камеры. Сообщения об ошибках и `run_status.ini` из
