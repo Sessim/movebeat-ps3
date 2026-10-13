@@ -29,6 +29,7 @@ from typing import Callable
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tools.ui_language import tr  # noqa: E402
 from tools.validate_bundle import validate_bundle  # noqa: E402
 
 
@@ -42,7 +43,10 @@ SPARE_BYTES = 2 * 1024 * 1024
 
 
 class UsbExportError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, no_space: bool = False) -> None:
+        super().__init__(message)
+        # The drive is full: copying further bundles is pointless.
+        self.no_space = no_space
 
 
 @dataclass
@@ -89,11 +93,13 @@ def read_volume(root: Path) -> Volume:
         if not ctypes.windll.kernel32.GetVolumeInformationW(
                 ctypes.c_wchar_p(drive), label, len(label), None, None, None,
                 filesystem, len(filesystem)):
-            raise UsbExportError(f"Не удалось прочитать носитель {drive}: вставлен ли он?")
+            raise UsbExportError(tr(f"Не удалось прочитать носитель {drive}: вставлен ли он?",
+                                    f"Cannot read drive {drive}: is it plugged in?"))
         free = ctypes.c_ulonglong(0)
         if not ctypes.windll.kernel32.GetDiskFreeSpaceExW(
                 ctypes.c_wchar_p(drive), ctypes.byref(free), None, None):
-            raise UsbExportError(f"Не удалось узнать свободное место на {drive}")
+            raise UsbExportError(tr(f"Не удалось узнать свободное место на {drive}",
+                                    f"Cannot find the free space on {drive}"))
         return Volume(Path(drive), filesystem.value, label.value, free.value)
     usage = shutil.disk_usage(root)
     return Volume(root, "unknown", "", usage.free)
@@ -103,10 +109,16 @@ def check_ps3_volume(volume: Volume) -> None:
     """Refuses a drive the PS3 cannot read, with what to do about it."""
     if volume.filesystem.upper() not in PS3_FILESYSTEMS:
         raise UsbExportError(
-            f"Носитель {volume.root} отформатирован в {volume.filesystem or 'неизвестную ФС'}, "
-            "а PS3 читает с USB только FAT32. Отформатируйте его в FAT32 "
-            "(для дисков больше 32 ГБ Windows не предлагает FAT32 — подойдёт, "
-            "например, Rufus или guiformat). Форматирование сотрёт данные на носителе.")
+            tr(f"Носитель {volume.root} отформатирован в "
+               f"{volume.filesystem or 'неизвестную ФС'}, "
+               "а PS3 читает с USB только FAT32. Отформатируйте его в FAT32 "
+               "(для дисков больше 32 ГБ Windows не предлагает FAT32 — подойдёт, "
+               "например, Rufus или guiformat). Форматирование сотрёт данные на носителе.",
+               f"Drive {volume.root} is formatted as "
+               f"{volume.filesystem or 'an unknown filesystem'}, "
+               "but the PS3 only reads FAT32 from USB. Format it as FAT32 "
+               "(Windows does not offer FAT32 for drives over 32 GB; Rufus or "
+               "guiformat can do it). Formatting erases the drive."))
 
 
 def _sha256(path: Path) -> str:
@@ -120,7 +132,9 @@ def _sha256(path: Path) -> str:
 def _bundle_files(directory: Path) -> list[tuple[str, int, str]]:
     errors = validate_bundle(directory)
     if errors:
-        raise UsbExportError(f"Уровень {directory.name} не прошёл проверку: " + "; ".join(errors))
+        raise UsbExportError(tr(f"Уровень {directory.name} не прошёл проверку: ",
+                                f"Level {directory.name} failed its check: ") +
+                             "; ".join(errors))
     report_path = directory / "conversion-report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     entries = [(entry["path"], entry["size"], entry["sha256"]) for entry in report["files"]]
@@ -129,9 +143,11 @@ def _bundle_files(directory: Path) -> list[tuple[str, int, str]]:
                     hashlib.sha256(report_bytes).hexdigest()))
     for name, size, _ in entries:
         if not SAFE_NAME.fullmatch(name):
-            raise UsbExportError(f"Недопустимое имя файла для FAT32: {name}")
+            raise UsbExportError(tr(f"Недопустимое имя файла для FAT32: {name}",
+                                    f"File name not allowed on FAT32: {name}"))
         if size > FAT32_MAX_FILE:
-            raise UsbExportError(f"Файл {name} больше 4 ГБ: на FAT32 он не поместится")
+            raise UsbExportError(tr(f"Файл {name} больше 4 ГБ: на FAT32 он не поместится",
+                                    f"File {name} is over 4 GB and does not fit on FAT32"))
     return entries
 
 
@@ -142,19 +158,23 @@ def export_bundle(directory: Path, drive: Path, *,
     directory = Path(directory)
     name = directory.name
     if directory.is_symlink() or not SAFE_NAME.fullmatch(name):
-        raise UsbExportError(f"Недопустимое имя уровня: {name}")
+        raise UsbExportError(tr(f"Недопустимое имя уровня: {name}",
+                                f"Level name not allowed: {name}"))
     entries = _bundle_files(directory)
     volume = volume_reader(Path(drive))
     check_ps3_volume(volume)
     total = sum(size for _, size, _ in entries)
     if volume.free_bytes < total + SPARE_BYTES:
         raise UsbExportError(
-            f"На {volume.root} не хватает места: нужно {total / 1048576:.1f} МиБ, "
-            f"свободно {volume.free_bytes / 1048576:.1f} МиБ")
+            tr(f"На {volume.root} не хватает места: нужно {total / 1048576:.1f} МиБ, "
+               f"свободно {volume.free_bytes / 1048576:.1f} МиБ",
+               f"Not enough room on {volume.root}: {total / 1048576:.1f} MiB needed, "
+               f"{volume.free_bytes / 1048576:.1f} MiB free"), no_space=True)
     library = Path(drive).joinpath(*USB_LIBRARY)
     library.mkdir(parents=True, exist_ok=True)
     if any(item.name.casefold() == name.casefold() for item in library.iterdir()):
-        raise UsbExportError(f"Уровень {name} уже есть на флешке; он не заменён")
+        raise UsbExportError(tr(f"Уровень {name} уже есть на флешке; он не заменён",
+                                f"Level {name} is already on the stick; it was not replaced"))
     stage = library / f".movebeat-copy-{name}-{secrets.token_hex(4)}"
     stage.mkdir()
     done = 0
@@ -172,12 +192,14 @@ def export_bundle(directory: Path, drive: Path, *,
         for filename, size, digest in entries:
             target = stage / filename
             if target.stat().st_size != size or _sha256(target) != digest:
-                raise UsbExportError(f"Проверка скопированного файла не прошла: {filename}")
+                raise UsbExportError(tr(f"Проверка скопированного файла не прошла: {filename}",
+                                        f"The copied file failed its check: {filename}"))
             done += size
             if progress is not None:
                 progress(done, total * 2)
         if any(item.name.casefold() == name.casefold() for item in library.iterdir()):
-            raise UsbExportError(f"Уровень {name} появился на флешке во время копирования")
+            raise UsbExportError(tr(f"Уровень {name} появился на флешке во время копирования",
+                                    f"Level {name} appeared on the stick during the copy"))
         destination = library / name
         stage.rename(destination)
         return destination
@@ -198,7 +220,8 @@ def export_bundles(directories: list[Path], drive: Path, *,
                if library.is_dir() else set())
     for index, directory in enumerate(directories):
         if directory.name.casefold() in present:
-            report.skipped.append((directory.name, "уже есть на флешке"))
+            report.skipped.append((directory.name, tr("уже есть на флешке",
+                                                      "already on the stick")))
             continue
         try:
             export_bundle(directory, drive, volume_reader=volume_reader)
@@ -206,7 +229,7 @@ def export_bundles(directories: list[Path], drive: Path, *,
         except UsbExportError as exc:
             report.skipped.append((directory.name, str(exc)))
             # No room or a broken drive stops the rest as well.
-            if "не хватает места" in str(exc):
+            if exc.no_space:
                 break
         if progress is not None:
             progress(index + 1, len(directories))
@@ -239,7 +262,8 @@ def main() -> int:
     except (OSError, UsbExportError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    print(f"Скопировано: {len(report.copied)}; пропущено: {len(report.skipped)}")
+    print(tr(f"Скопировано: {len(report.copied)}; пропущено: {len(report.skipped)}",
+             f"Copied: {len(report.copied)}; skipped: {len(report.skipped)}"))
     for name, reason in report.skipped:
         print(f"  {name}: {reason}")
     return 0 if report.copied or not report.skipped else 1

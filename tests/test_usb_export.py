@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import tools.usb_export as usb
+from tools import ui_language
 from tools.make_bench_library import make_bundle
 from tools.validate_bundle import validate_bundle
 
@@ -17,6 +18,10 @@ def fat32(free: int = 1 << 34):
 
 class UsbExportTests(unittest.TestCase):
     def setUp(self) -> None:
+        # The messages are checked in Russian whatever the system language.
+        language = ui_language.language()
+        ui_language.set_language("ru", save=False)
+        self.addCleanup(ui_language.set_language, language, save=False)
         self.temporary = tempfile.TemporaryDirectory()
         base = Path(self.temporary.name)
         self.library = base / "levels"

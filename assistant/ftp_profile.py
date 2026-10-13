@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+from tools.ui_language import tr
+
 
 def default_profile_path() -> Path:
     root = os.environ.get("APPDATA")
@@ -16,14 +18,16 @@ def default_profile_path() -> Path:
 
 def _validate(host: str, port: int, user: str) -> tuple[str, int, str]:
     if not isinstance(host, str) or not isinstance(user, str):
-        raise ValueError("Укажите корректные адрес и имя пользователя PS3")
+        raise ValueError(tr("Укажите корректные адрес и имя пользователя PS3",
+                            "Enter a valid PS3 address and user name"))
     host = host.strip()
     user = user.strip() or "anonymous"
     if (not host or any(ord(char) < 32 for char in host) or
             not isinstance(port, int) or isinstance(port, bool) or
             not 1 <= port <= 65535 or
             any(ord(char) < 32 for char in user)):
-        raise ValueError("Укажите корректные адрес, порт и имя пользователя PS3")
+        raise ValueError(tr("Укажите корректные адрес, порт и имя пользователя PS3",
+                            "Enter a valid PS3 address, port and user name"))
     return host, port, user
 
 
@@ -47,6 +51,6 @@ def load_ftp_profile(path: Path) -> tuple[str, int, str] | None:
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("format") != 1:
-        raise ValueError("Неизвестный формат профиля PS3")
+        raise ValueError(tr("Неизвестный формат профиля PS3", "Unknown PS3 profile format"))
     return _validate(data.get("host", ""), data.get("port", 0),
                      data.get("user", "anonymous"))

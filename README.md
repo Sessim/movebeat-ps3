@@ -24,11 +24,11 @@ download songs.
 2. Install `movebeat.pkg` on the PS3 (Package Manager → Install Package
    Files, from a USB stick or over FTP). The package only contains the
    built-in tutorial song.
-3. Run the assistant on the PC and press **«Стартовый набор»** (starter set):
-   it downloads six maps and the "MoveBeat Starter" playlist from BeatSaver.
+3. Run the assistant on the PC and press **Starter set**: it downloads six
+   maps and the "MoveBeat Starter" playlist from BeatSaver.
    Any other map can be found by name or by its `!bsr` code.
-4. Plug in the USB stick and press **«Все уровни на флешку»** (all levels to
-   the USB stick); the assistant checks that the stick is FAT32.
+4. Plug in the USB stick and press **All levels to USB**; the assistant
+   checks that the stick is FAT32.
 5. Plug the stick into the PS3 and start MoveBeat: the game copies the levels
    into its library on the hard disk ("USB COPY…" in the top right), after
    which the stick can be removed.
@@ -74,7 +74,8 @@ right; the screen flashes red when the combo breaks. At the bottom are the
 time left and the song progress. A cut is felt as a rumble in that hand;
 touching a wall with a blade rumbles both controllers for as long as the blade
 stays in it, and breaks the combo. While failing on energy is switched off,
-every song plays to its end and no life bar is shown.
+every song plays to its end and no life bar is shown. The results show the
+score, your best score on that difficulty, hits, max combo and misses.
 
 **If the camera loses a Move**, the game pauses and resumes by itself as soon
 as it sees both controllers again. If a sphere stays lost, aim that Move at
@@ -87,16 +88,17 @@ length (50–140 cm) are saved in `USRDIR/settings.ini`.
 
 ### Windows assistant
 
-`MoveBeatTrackAssistant.exe` from Releases (the interface is in Russian):
+`MoveBeatTrackAssistant.exe` from Releases. It speaks English or Russian:
+it follows the Windows display language, and the menu in the top right
+switches it.
 
-- **«Стартовый набор»** (starter set): six maps and the "MoveBeat Starter"
-  playlist.
+- **Starter set**: six maps and the "MoveBeat Starter" playlist.
 - **Search** by name, author, ID (`54851`) or BSR command (`!bsr 54851`),
-  with the cover, difficulties and download size; «Подготовить уровень»
-  (prepare level) downloads the map and checks its SHA-1. An already
-  downloaded ZIP can be opened too.
-- **USB stick:** «Уровень на флешку» (level to USB) and «Все уровни на
-  флешку» (all levels to USB). The assistant refuses drives that are not
+  with the cover, difficulties and download size; **Prepare level**
+  downloads the map and checks its SHA-1. An already downloaded ZIP can be
+  opened too.
+- **USB stick:** **Level to USB** and **All levels to USB**. The assistant
+  refuses drives that are not
   FAT32 (the PS3 only reads FAT32 from USB), copies levels to
   `MOVEBEAT/levels/` and checks every file by SHA-256.
 - **FTP:** sends a level to a PS3 running webMAN MOD or another FTP server.
@@ -140,17 +142,6 @@ Levels can also be built into your own PKG (for personal use only):
 `bash tools/build_ps3.sh --include-imported` takes everything in
 `out/levels`. Without that flag the package only contains the First Steps
 tutorial.
-
-## Scoring
-
-A regular cut is worth up to 115 points: up to 70 for the swing angle before
-contact, up to 30 for the follow-through and up to 15 for hitting near the
-block's centre. Direction, hand and timing decide whether a cut counts. The
-multiplier grows with the combo (×2, ×4, ×8). A chain link is worth 20
-points; arcs are only a visual guide. The 70/30/15 split follows
-[Beat Saber's scoring explanation](https://x.com/BeatSaber/status/1133367585439911937).
-After a song the game shows the score, best score, hits, max combo and
-misses; the best score of each difficulty is kept on the PS3.
 
 ## Building
 
@@ -217,7 +208,7 @@ without third-party recordings.
 
 ## Documentation
 
-Most of the detailed documentation is in Russian:
+The detailed documentation is in Russian:
 
 - [`docs/HARDWARE_TEST_RU.md`](docs/HARDWARE_TEST_RU.md): first run on a
   console, calibration, `run_status.ini` and error codes;

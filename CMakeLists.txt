@@ -152,6 +152,13 @@ if(Python3_Interpreter_FOUND)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     add_test(
+        NAME movebeat_ui_language_tests
+        COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_ui_language -v
+    )
+    set_tests_properties(movebeat_ui_language_tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
         NAME movebeat_library_card_tests
         COMMAND ${Python3_EXECUTABLE} -m unittest tests.test_library_card -v
     )
