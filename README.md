@@ -208,16 +208,14 @@ without third-party recordings.
 
 ## Documentation
 
-The detailed documentation is in Russian:
-
-- [`docs/HARDWARE_TEST_RU.md`](docs/HARDWARE_TEST_RU.md): first run on a
-  console, calibration, `run_status.ini` and error codes;
-- [`docs/CONSOLE_DEBUG_AUTOMATION_RU.md`](docs/CONSOLE_DEBUG_AUTOMATION_RU.md):
-  debugging on the console over the network;
-- [`docs/TRACK_ASSISTANT_PLAN_RU.md`](docs/TRACK_ASSISTANT_PLAN_RU.md): the
-  assistants;
-- [`docs/CHANGELOG_RU.md`](docs/CHANGELOG_RU.md): change log;
-- [`docs/ROADMAP.md`](docs/ROADMAP.md): plan and known risks.
+- [`docs/TROUBLESHOOTING_RU.md`](docs/TROUBLESHOOTING_RU.md) (Russian):
+  camera setup, on-screen messages, startup error codes and what to send in
+  a bug report;
+- [`ps3/README.md`](ps3/README.md): how the PS3 game is built and works, and
+  the files it keeps in USRDIR;
+- [`docs/MOVEBEAT_BUNDLE_FORMAT.md`](docs/MOVEBEAT_BUNDLE_FORMAT.md): the level
+  folder format;
+- [`CHANGELOG.md`](CHANGELOG.md): changes by version.
 
 To record raw `gemState` data, hold both T triggers and press Start in the
 track list: 30 seconds are written to `USRDIR/gem_capture.csv`.

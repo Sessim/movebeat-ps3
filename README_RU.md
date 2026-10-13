@@ -202,13 +202,13 @@ A,2500,3200,0,0,3,2,L
 
 ## Документация
 
-- [`docs/HARDWARE_TEST_RU.md`](docs/HARDWARE_TEST_RU.md) — первый запуск на
-  консоли, калибровка, расшифровка `run_status.ini` и кодов ошибок;
-- [`docs/CONSOLE_DEBUG_AUTOMATION_RU.md`](docs/CONSOLE_DEBUG_AUTOMATION_RU.md) —
-  отладка на консоли по сети;
-- [`docs/TRACK_ASSISTANT_PLAN_RU.md`](docs/TRACK_ASSISTANT_PLAN_RU.md) — ассистенты;
-- [`docs/CHANGELOG_RU.md`](docs/CHANGELOG_RU.md) — журнал изменений;
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — план и известные риски.
+- [`docs/TROUBLESHOOTING_RU.md`](docs/TROUBLESHOOTING_RU.md) — расстановка
+  камеры, сообщения игры, коды ошибок запуска и что прислать в Issue;
+- [`ps3/README.md`](ps3/README.md) (англ.) — как устроена и собирается игра,
+  файлы в USRDIR;
+- [`docs/MOVEBEAT_BUNDLE_FORMAT.md`](docs/MOVEBEAT_BUNDLE_FORMAT.md) (англ.) —
+  формат папки уровня;
+- [`CHANGELOG.md`](CHANGELOG.md) (англ.) — изменения по версиям.
 
 Для записи сырых данных `gemState` удерживайте оба T и нажмите Start в списке
 треков: 30 секунд пишутся в `USRDIR/gem_capture.csv`.

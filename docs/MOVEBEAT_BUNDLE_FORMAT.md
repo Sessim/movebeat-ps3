@@ -1,7 +1,8 @@
 # MoveBeat Level Bundle format 1
 
-This is the interchange contract between the command-line importer, MoveBeat
-Track Assistant for PC, the planned Android client, and the PS3 package build.
+This is the interchange contract between the command-line importer, the
+MoveBeat Track Assistant for Windows and Android, the USB export, the PS3
+package build and the game.
 It applies to imported levels; the built-in tutorial may remain a minimal
 hand-authored bundle.
 
@@ -80,6 +81,25 @@ data file is inserted after `Info.dat`, and each separate lightshow file follows
 its beatmap file. Repeated references are hashed repeatedly. This value is the
 version identity published by BeatSaver; `archiveSha1` detects changes to the
 downloaded container itself.
+
+## Playlist bundles
+
+A playlist is a bundle of its own, `playlist-<id>/`, next to the levels:
+
+```text
+playlist-<id>/
+  playlist.ini
+  conversion-report.json    # "kind": "playlist"
+  library.mblc              # shelf card
+  cover.png or cover.jpg    # optional playlist image
+```
+
+`playlist.ini` holds `format=1`, `title`, `author`, `song_count` and, for each
+song `N` in playlist order, `songN_hash` (the BeatSaver content SHA-1) and/or
+`songN_key`, an optional `songN_title`, and optionally `songN_characteristic`
+with `songN_difficulty`. The PS3 matches songs to level bundles by content
+hash first, then by key; songs not in the library are skipped, and a
+playlist with none of its songs is not shown.
 
 ## Compatibility rules
 
