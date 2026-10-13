@@ -49,7 +49,7 @@ void resetFakes() {
 } // namespace
 
 #if defined(_MSC_VER)
-void* memalign(std::size_t, std::size_t size) {
+extern "C" void* memalign(std::size_t, std::size_t size) {
     return std::malloc(size);
 }
 #endif
