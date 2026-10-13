@@ -28,6 +28,7 @@ if ($LASTEXITCODE -ne 0) {
     --hidden-import tools.beatsaver_import `
     --hidden-import tools.ftp_upload `
     --hidden-import tools.validate_bundle `
+    --hidden-import tools.starter_set `
     --distpath $Output `
     --workpath (Join-Path $Work 'work') `
     --specpath $Work `

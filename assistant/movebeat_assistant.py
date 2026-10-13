@@ -39,6 +39,7 @@ from tools.beatsaver_import import (
     read_archive_cover_preview,
     search_maps,
 )
+from tools.starter_set import import_starter_set
 from tools.validate_bundle import validate_bundle
 from tools.ftp_upload import TransferError, upload_bundle
 from tools.usb_export import (
@@ -50,7 +51,7 @@ from assistant.ftp_profile import (
 )
 
 
-APP_VERSION = "0.2.6"
+APP_VERSION = "0.3.0"
 APP_NAME = f"MoveBeat Track Assistant {APP_VERSION}"
 MAX_PREVIEW_PIXELS = 16_000_000
 
@@ -281,6 +282,9 @@ class AssistantApp(tk.Tk):
         self.import_button.pack(side="left")
         self.cancel_button = ttk.Button(actions, text="Отмена", command=self.cancel, state="disabled")
         self.cancel_button.pack(side="left", padx=8)
+        self.starter_button = ttk.Button(actions, text="Стартовый набор",
+                                         command=self.start_starter_set)
+        self.starter_button.pack(side="left", padx=(0, 8))
         self.pkg_button = ttk.Button(actions, text="Собрать персональный PKG", command=self.start_pkg_build)
         self.pkg_button.pack(side="left")
         ttk.Button(actions, text="Открыть каталог", command=self.open_output).pack(side="right")
@@ -314,6 +318,7 @@ class AssistantApp(tk.Tk):
         self.ftp_button.configure(state=state)
         self.usb_button.configure(state=state)
         self.usb_all_button.configure(state=state)
+        self.starter_button.configure(state=state)
         if self.project_root is not None and shutil.which("wsl.exe") is not None:
             self.pkg_button.configure(state=state)
         self.cancel_button.configure(
@@ -347,7 +352,8 @@ class AssistantApp(tk.Tk):
             while True:
                 kind, payload = self.events.get_nowait()
                 terminal_event = kind in (
-                    "search", "imported", "package", "uploaded", "exported", "result", "error")
+                    "search", "imported", "package", "uploaded", "exported", "starter",
+                    "result", "error")
                 if kind == "progress":
                     done, total = payload
                     if total:
@@ -357,6 +363,18 @@ class AssistantApp(tk.Tk):
                         self.status_var.set(f"Загрузка: {done / 1048576:.1f} / {total / 1048576:.1f} МиБ")
                     else:
                         self.status_var.set(f"Загрузка: {done / 1048576:.1f} МиБ")
+                elif kind == "log":
+                    self._append_log(str(payload) + "\n")
+                elif kind == "starter":
+                    destination, report = payload
+                    self.refresh_bundles(select=destination.name)
+                    lines = [f"Стартовый набор: скачано {len(report.imported)}, "
+                             f"уже было {len(report.existing)}, ошибок {len(report.failed)}"]
+                    lines += [f"  {label}: {reason}" for label, reason in report.failed]
+                    self._append_log("\n".join(lines) + "\n")
+                    messagebox.showinfo(
+                        APP_NAME, "\n".join(lines) + "\n\nТеперь «Все уровни на флешку» — "
+                        "и вставьте флешку в PS3.")
                 elif kind == "search":
                     self._show_search_results(payload)
                 elif kind == "cover_preview":
@@ -390,7 +408,8 @@ class AssistantApp(tk.Tk):
                     self._append_log(str(payload) + "\n")
                     self._show_usb_status()
                     messagebox.showinfo(
-                        APP_NAME, str(payload) + "\n\nВставьте флешку в PS3 до запуска игры.")
+                        APP_NAME, str(payload) + "\n\nВставьте флешку в PS3: игра скопирует "
+                        "уровни в библиотеку (можно при открытом списке треков).")
                 elif kind == "uploaded":
                     self._append_log(f"Уровень отправлен: {payload}\n")
                     messagebox.showinfo(
@@ -670,7 +689,7 @@ class AssistantApp(tk.Tk):
         present = len(library_bundles(library))
         self.usb_status_var.set(
             f"{volume.filesystem}: PS3 прочитает. Уровни кладутся в {library}"
-            f" (сейчас там {present}). Флешку вставьте в PS3 до запуска игры.")
+            f" (сейчас там {present}). В PS3 игра сама скопирует их в библиотеку.")
 
     def _usb_target(self) -> Path | None:
         root = self.usb_drives.get(self.usb_drive_var.get())
@@ -720,6 +739,16 @@ class AssistantApp(tk.Tk):
             self.events.put(("exported", "\n".join(lines)))
 
         self._run("Копирование уровней на флешку…", operation)
+
+    def start_starter_set(self) -> None:
+        output_root = Path(self.output_var.get()).expanduser()
+
+        def operation() -> None:
+            destination, report = import_starter_set(
+                output_root, log=lambda line: self.events.put(("log", line)))
+            self.events.put(("starter", (destination, report)))
+
+        self._run("Скачивание стартового набора…", operation)
 
     def save_ftp_connection(self) -> None:
         try:
