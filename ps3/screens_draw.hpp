@@ -91,10 +91,12 @@ struct CalibrationView {
 
 void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view);
 void drawCaptureIndicator(Framebuffer& screen);
+// USB bundles being copied to the hard disk (`copied` of `total`), or,
+// with `total` 0, how many the finished copy added.
+void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total);
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
                    std::size_t selected_chart);
 void drawHandMode(Framebuffer& screen, bool invert_hands);
-void drawRunStateIndicator(Framebuffer& screen, u32 color);
 
 } // namespace ps3
 } // namespace movebeat

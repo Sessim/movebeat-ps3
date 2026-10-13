@@ -160,6 +160,12 @@ public:
             total += results_[index].hits;
         return total;
     }
+    unsigned int maxCombo() const {
+        unsigned int best = 0;
+        for (std::size_t index = 0; index < results_.size(); ++index)
+            if (results_[index].max_combo > best) best = results_[index].max_combo;
+        return best;
+    }
     unsigned int totalMisses() const {
         unsigned int total = 0;
         for (std::size_t index = 0; index < results_.size(); ++index)

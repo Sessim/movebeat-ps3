@@ -212,6 +212,19 @@ private:
     AudioCache audio_cache_;
     // Starts copying the music at `path` if it lives on a USB drive.
     void cacheUsbAudio(const std::string& path);
+    // USB bundles copied into the hard-disk library in the menus; a drive
+    // plugged in later is noticed by polling its MOVEBEAT/levels folder.
+    UsbImport usb_import_;
+    unsigned int usb_mask_ = 0;
+    unsigned int usb_poll_frames_ = 0;
+    // A drive was plugged in: rescan the library once its copy is done.
+    bool usb_rescan_pending_ = false;
+    // Bundles the last import added, shown for a few seconds.
+    unsigned int usb_added_ = 0;
+    unsigned int usb_added_ms_ = 0;
+    void queueUsbImport(unsigned int mask);
+    void updateUsbImport();
+    void reloadLibrary();
     bool audio_clock_;
     int audio_start_error_;
     movebeat::HighScore best_score_;
@@ -249,6 +262,8 @@ private:
     unsigned int selection_changed_ms_;
     bool preview_active_;
     unsigned int halo_flash_ms_;
+    // When the last combo broke (wall clock, 0 = none): the red flash.
+    unsigned int combo_break_ms_;
     bool paused_;
     // The player paused the song (Start) and sees the pause menu.
     bool user_paused_;

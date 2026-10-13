@@ -31,8 +31,11 @@ void drawSaber(Framebuffer& screen, const movebeat::SaberPose& saber,
                u32 core, u32 glow);
 void drawSaberTrail(Framebuffer& screen, const SaberTrail& trail,
                     unsigned int now_ms, u32 color);
+// `combo_flash` (1 → 0) fades the red flash of a just broken combo. The
+// energy bar is shown only when running out of energy fails the level.
 void drawHud(Framebuffer& screen, const movebeat::ScoreState& score,
-             unsigned int elapsed_ms, unsigned int duration_ms);
+             unsigned int elapsed_ms, unsigned int duration_ms,
+             float combo_flash = 0.0f, bool show_energy = true);
 
 } // namespace ps3
 } // namespace movebeat

@@ -4,6 +4,7 @@
 #include "hand_assignment.hpp"
 #include "imu_pose.hpp"
 #include "audio_cache.hpp"
+#include "usb_import.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -439,6 +440,82 @@ void testAudioCache() {
     remove(target.c_str());
 }
 
+namespace {
+
+void writeTestFile(const std::string& path, const std::string& data) {
+    FILE* file = fopen(path.c_str(), "wb");
+    fwrite(data.data(), 1, data.size(), file);
+    fclose(file);
+}
+
+std::string readTestFile(const std::string& path) {
+    std::string data;
+    FILE* file = fopen(path.c_str(), "rb");
+    if (!file) return data;
+    char buffer[4096];
+    size_t count;
+    while ((count = fread(buffer, 1, sizeof(buffer), file)) > 0) data.append(buffer, count);
+    fclose(file);
+    return data;
+}
+
+} // namespace
+
+void testUsbImport() {
+    using movebeat::ps3::UsbImport;
+    using movebeat::ps3::UsbImportJob;
+    const std::string source = "movebeat_usb_source.tmp";
+    const std::string target = "movebeat_usb_target.tmp";
+    movebeat::ps3::makeDirectory(source);
+    remove((target + "/audio.egg").c_str());
+    remove((target + "/level.ini").c_str());
+    std::string audio;
+    for (int index = 0; index < 200000; ++index)
+        audio.push_back(static_cast<char>((index * 13 + 5) & 0xff));
+    writeTestFile(source + "/audio.egg", audio);
+    writeTestFile(source + "/level.ini", "format=1\n");
+
+    UsbImportJob job;
+    job.source = source;
+    job.target = target;
+    job.files.push_back("audio.egg");
+    job.files.push_back("level.ini");
+    UsbImport import;
+    import.add(job);
+    import.add(job);
+    expect(import.busy() && import.total() == 1, "a bundle is queued once");
+    std::string from, to;
+    int steps = 0;
+    bool completed = false;
+    while (import.busy() && steps < 100) {
+        if (import.step(64 * 1024, from, to)) completed = true;
+        ++steps;
+        if (steps == 2)
+            expect(readTestFile(target + "/level.ini").empty(),
+                   "the manifest is not there while the bundle is copied");
+    }
+    expect(completed && from == source && to == target && steps >= 4 &&
+           import.done() == 1 && import.failed() == 0,
+           "the bundle is copied a piece per step and reported once");
+    expect(readTestFile(target + "/audio.egg") == audio &&
+           readTestFile(target + "/level.ini") == "format=1\n" &&
+           readTestFile(target + "/audio.egg.part").empty(),
+           "the copy is exact, without leftover parts");
+    import.clearFinished();
+    expect(import.total() == 0 && import.done() == 0, "finished jobs are forgotten when idle");
+
+    UsbImportJob missing = job;
+    missing.source = "movebeat_usb_missing.tmp";
+    import.add(missing);
+    while (import.busy()) import.step(64 * 1024, from, to);
+    expect(import.failed() == 1 && import.done() == 0, "a missing bundle fails without a result");
+
+    remove((source + "/audio.egg").c_str());
+    remove((source + "/level.ini").c_str());
+    remove((target + "/audio.egg").c_str());
+    remove((target + "/level.ini").c_str());
+}
+
 void testMoveButtonChord() {
     using movebeat::ps3::MoveButtonChord;
     using movebeat::ps3::MoveChordEvents;
@@ -513,6 +590,7 @@ int main() {
     testMoveButtonChord();
     testImuHold();
     testAudioCache();
+    testUsbImport();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();

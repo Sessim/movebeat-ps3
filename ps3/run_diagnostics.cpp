@@ -30,7 +30,7 @@ RunStatus::RunStatus()
       gem_slot1_flags(0), tracking_pause_slot0_result(-1),
       tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
       tracking_pause_slot1_flags(0), tracking_quit_count(0), pause_menu_opens(0), level_restarts(0),
-      pause_quits(0), pause_calibrations(0), results_replays(0), depth_range_cm(30), imu_held_frames(0), camera_depth(0), camera_exposure(128), camera_quality_pct(50),
+      pause_quits(0), pause_calibrations(0), results_replays(0), combo_breaks(0), wall_rumbles(0), depth_range_cm(30), imu_held_frames(0), camera_depth(0), camera_exposure(128), camera_quality_pct(50),
       imu_slot0_variant(0), imu_slot1_variant(0), imu_slot0_error_deg(0),
       imu_slot1_error_deg(0), imu_slot0_scored(0), imu_slot1_scored(0),
       calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
@@ -38,7 +38,7 @@ RunStatus::RunStatus()
       body_span_cm(0), body_drop_cm(0),
       body_turn_deg(0), body_turn_applied(0), body_flip_depth(0), body_scale_pct(100), sound_effects(0),
       error_stage(0), error_code(0), level_count(0), usb_level_count(0), usb_audio_cached(0),
-      usb_audio_cache_failures(0), usb_audio_wait_ms(0),
+      usb_audio_cache_failures(0), usb_audio_wait_ms(0), usb_imported(0), usb_import_failures(0),
       library_cards_loaded(0), library_card_bytes(0),
       imported_level(0), level_id(""), chart_difficulty(""),
       left_connected(0), right_connected(0),
@@ -95,7 +95,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
             "tracking_quit_count=%u\n"
             "pause_menu_opens=%u\nlevel_restarts=%u\npause_quits=%u\n"
-            "pause_calibrations=%u\nresults_replays=%u\ndepth_range_cm=%d\n"
+            "pause_calibrations=%u\nresults_replays=%u\ncombo_breaks=%u\nwall_rumbles=%u\ndepth_range_cm=%d\n"
             "imu_held_frames=%u\ncamera_depth=%d\ncamera_exposure=%d\ncamera_quality_pct=%d\n"
             "imu_slot0_variant=%d\nimu_slot1_variant=%d\n"
             "imu_slot0_error_deg=%d\nimu_slot1_error_deg=%d\n"
@@ -109,6 +109,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "sound_effects=%u\n"
             "error_stage=%u\nerror_code=0x%08X\nlevel_count=%d\nusb_level_count=%u\nusb_audio_cached=%u\n"
             "usb_audio_cache_failures=%u\nusb_audio_wait_ms=%u\n"
+            "usb_imported=%u\nusb_import_failures=%u\n"
             "library_cards_loaded=%u\nlibrary_card_bytes=%u\n"
             "imported_level=%d\nlevel_id=%s\nchart_difficulty=%s\n"
             "left_connected=%d\nright_connected=%d\n"
@@ -162,7 +163,8 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
             status.tracking_quit_count, status.pause_menu_opens,
             status.level_restarts, status.pause_quits, status.pause_calibrations,
-            status.results_replays, status.depth_range_cm, status.imu_held_frames,
+            status.results_replays, status.combo_breaks, status.wall_rumbles,
+            status.depth_range_cm, status.imu_held_frames,
             status.camera_depth, status.camera_exposure, status.camera_quality_pct,
             status.imu_slot0_variant, status.imu_slot1_variant,
             status.imu_slot0_error_deg, status.imu_slot1_error_deg,
@@ -177,6 +179,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.error_stage, status.error_code,
             status.level_count, status.usb_level_count, status.usb_audio_cached,
             status.usb_audio_cache_failures, status.usb_audio_wait_ms,
+            status.usb_imported, status.usb_import_failures,
             status.library_cards_loaded,
             status.library_card_bytes, status.imported_level,
             status.level_id.c_str(), status.chart_difficulty.c_str(),

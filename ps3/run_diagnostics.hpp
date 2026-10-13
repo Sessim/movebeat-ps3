@@ -82,6 +82,9 @@ struct RunStatus {
     unsigned int pause_calibrations;
     // Songs played again from their results (Triangle).
     unsigned int results_replays;
+    // Combos lost (red flash) and walls touched (long rumble).
+    unsigned int combo_breaks;
+    unsigned int wall_rumbles;
     // renderer.ini depth_range_cm in use.
     int depth_range_cm;
     // Inertial hold: frames a pose was held by the Move's sensors, and per
@@ -125,6 +128,9 @@ struct RunStatus {
     unsigned int usb_audio_cached;
     unsigned int usb_audio_cache_failures;
     unsigned int usb_audio_wait_ms;
+    // USB bundles copied into the hard-disk library, and copies that failed.
+    unsigned int usb_imported;
+    unsigned int usb_import_failures;
     unsigned int library_cards_loaded;
     unsigned int library_card_bytes;
     int imported_level;

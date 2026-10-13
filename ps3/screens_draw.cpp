@@ -1,6 +1,7 @@
 #include "screens_draw.hpp"
 
 #include <algorithm>
+#include <stdio.h>
 #include <string.h>
 
 #include <cmath>
@@ -284,15 +285,24 @@ void drawResults(Framebuffer& screen,
                screen.height() / 4, large, score_color);
     drawNumber(screen, best.score, screen.width() / 2,
                screen.height() / 10, small, 0xffa080ffu);
-    drawNumber(screen, score.hits, screen.width() / 3,
-               screen.height() * 3 / 5, small, 0xff40c8ffu);
-    drawNumber(screen, score.misses, screen.width() * 2 / 3,
-               screen.height() * 3 / 5, small, 0xffff5060u);
-    const int underline_y = screen.height() * 3 / 5 + small * 6;
-    screen.rectangle(screen.width() / 4, underline_y,
-                     screen.width() / 6, small / 2 + 1, 0xff40c8ffu);
-    screen.rectangle(screen.width() * 7 / 12, underline_y,
-                     screen.width() / 6, small / 2 + 1, 0xffff5060u);
+    const int row_y = screen.height() * 3 / 5;
+    const int label_scale = std::max(2, small / 3);
+    const int label_y = row_y - label_scale * 7 - small;
+    const int columns[3] = { screen.width() / 4, screen.width() / 2,
+                             screen.width() * 3 / 4 };
+    const char* labels[3] = { "HITS", "MAX COMBO", "MISSES" };
+    const unsigned int values[3] = { score.hits, score.max_combo, score.misses };
+    const u32 colors[3] = { 0xff40c8ffu, 0xfff0f0f0u, 0xffff5060u };
+    for (int column = 0; column < 3; ++column) {
+        const int label_width = static_cast<int>(strlen(labels[column])) * label_scale * 6;
+        drawMenuText(screen, labels[column], columns[column] - label_width / 2,
+                     label_y, label_scale, 0xff9cb3d3u);
+        drawNumber(screen, values[column], columns[column], row_y, small, colors[column]);
+        screen.rectangle(columns[column] - screen.width() / 12, row_y + small * 6,
+                         screen.width() / 6, small / 2 + 1, colors[column]);
+    }
+    drawCenteredMenuText(screen, "BEST", screen.height() / 10 - label_scale * 7 - small,
+                         label_scale, 0xffa080ffu);
 }
 
 void drawResultsHint(Framebuffer& screen) {
@@ -334,8 +344,12 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
     }
     drawCenteredMenuText(screen, "PLAYLIST COMPLETE", 116, 3, 0xff70e0a0u);
     drawNumber(screen, run.totalScore(), width / 2, 150, 8, 0xfff0d050u);
-    drawNumber(screen, run.totalHits(), width / 3, 210, 4, 0xff40c8ffu);
-    drawNumber(screen, run.totalMisses(), width * 2 / 3, 210, 4, 0xffff5060u);
+    drawNumber(screen, run.totalHits(), width / 4, 222, 4, 0xff40c8ffu);
+    drawNumber(screen, run.maxCombo(), width / 2, 222, 4, 0xfff0f0f0u);
+    drawNumber(screen, run.totalMisses(), width * 3 / 4, 222, 4, 0xffff5060u);
+    drawMenuText(screen, "HITS", width / 4 - 24, 200, 2, 0xff9cb3d3u);
+    drawMenuText(screen, "MAX COMBO", width / 2 - 54, 200, 2, 0xff9cb3d3u);
+    drawMenuText(screen, "MISSES", width * 3 / 4 - 36, 200, 2, 0xff9cb3d3u);
     // The latest songs, one row each: number, card, score.
     const std::vector<PlaylistSongResult>& results = run.results();
     const std::size_t rows = std::min<std::size_t>(results.size(), 7);
@@ -574,6 +588,27 @@ void drawCaptureIndicator(Framebuffer& screen) {
                      0xffe040d0u);
 }
 
+void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total) {
+    char text[40];
+    if (total) snprintf(text, sizeof(text), "USB COPY %u OF %u", copied, total);
+    else snprintf(text, sizeof(text), "USB ADDED %u", copied);
+    // Digits are drawn by drawMenuText as blank advances: draw them apart.
+    const int scale = 2;
+    const int width = static_cast<int>(strlen(text)) * scale * 6;
+    const int x = screen.width() - width - screen.width() / 40;
+    const int y = screen.height() / 30;
+    int cursor = x;
+    for (const char* letter = text; *letter; ++letter, cursor += scale * 6) {
+        if (*letter >= '0' && *letter <= '9')
+            drawDigit(screen, static_cast<unsigned int>(*letter - '0'), cursor, y + scale,
+                      scale, 0xff70e0a0u);
+        else if (*letter != ' ') {
+            const char one[2] = { *letter, 0 };
+            drawMenuText(screen, one, cursor, y, scale, 0xff70e0a0u);
+        }
+    }
+}
+
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
                    std::size_t selected_chart) {
     const int pip = screen.height() / 70 + 4;
@@ -592,11 +627,6 @@ void drawHandMode(Framebuffer& screen, bool invert_hands) {
     drawMenuText(screen, invert_hands ? "HANDS FLIPPED" :
                  "HANDS AUTO", 24, screen.height() - 30, 2,
                  invert_hands ? 0xffffb068u : 0xff80d8c0u);
-}
-
-void drawRunStateIndicator(Framebuffer& screen, u32 color) {
-    screen.rectangle(screen.width() - screen.width() / 20, screen.height() / 30,
-                     screen.width() / 40, screen.height() / 30, color);
 }
 
 } // namespace ps3

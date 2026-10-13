@@ -694,7 +694,39 @@ void drawCutFeedback(Framebuffer& screen,
 
 void drawHud(Framebuffer& screen,
              const movebeat::ScoreState& score,
-             unsigned int elapsed_ms, unsigned int duration_ms) {
+             unsigned int elapsed_ms, unsigned int duration_ms,
+             float combo_flash, bool show_energy) {
+    if (combo_flash > 0.0f) {
+        // A red glow from the screen edges, fading inward.
+        const u32 red = withAlpha(0xffff2030u, 0.55f * combo_flash);
+        const u32 none = 0x00ff2030u;
+        const float w = static_cast<float>(screen.width());
+        const float h = static_cast<float>(screen.height());
+        const float band = h / 6.0f;
+        if (screen.effectsEnabled()) {
+            const float top_x[4] = {0.0f, w, w, 0.0f};
+            const float top_y[4] = {0.0f, 0.0f, band, band};
+            const u32 top_c[4] = {red, red, none, none};
+            screen.blendQuad(top_x, top_y, top_c, false);
+            const float bottom_y[4] = {h - band, h - band, h, h};
+            const u32 bottom_c[4] = {none, none, red, red};
+            screen.blendQuad(top_x, bottom_y, bottom_c, false);
+            const float left_x[4] = {0.0f, band, band, 0.0f};
+            const float side_y[4] = {0.0f, 0.0f, h, h};
+            const u32 left_c[4] = {red, none, none, red};
+            screen.blendQuad(left_x, side_y, left_c, false);
+            const float right_x[4] = {w - band, w, w, w - band};
+            const u32 right_c[4] = {none, red, red, none};
+            screen.blendQuad(right_x, side_y, right_c, false);
+        } else {
+            const int edge = std::max(4, static_cast<int>(band / 8.0f));
+            const u32 solid = 0xffe02838u;
+            screen.rectangle(0, 0, screen.width(), edge, solid);
+            screen.rectangle(0, screen.height() - edge, screen.width(), edge, solid);
+            screen.rectangle(0, 0, edge, screen.height(), solid);
+            screen.rectangle(screen.width() - edge, 0, edge, screen.height(), solid);
+        }
+    }
     const int panel_width = screen.width() / 4;
     const int panel_height = screen.height() / 10;
     const int panel_y = screen.height() / 11;
@@ -739,24 +771,27 @@ void drawHud(Framebuffer& screen,
     drawMenuText(screen, "COMBO", combo_x + screen.width() / 80,
                  label_y, label_scale, label);
     drawNumber(screen, score.combo, combo_x + panel_width / 2,
-               value_y, value_scale, 0xff70d8ffu);
+               value_y, value_scale,
+               combo_flash > 0.0f ? 0xffff5060u : 0xff70d8ffu);
 
     const int bar_x = screen.width() / 4;
     const int bar_width = screen.width() / 2;
     const int bar_height = std::max(12, screen.height() / 60);
     const int bar_y = screen.height() - screen.height() / 28;
     const int energy_y = bar_y - std::max(8, screen.height() / 90);
-    screen.rectangle(bar_x, energy_y, bar_width,
-                     std::max(4, screen.height() / 180), 0xff202838u);
-    const u32 energy_color = score.energy > 50 ? 0xff40d870u :
-        (score.energy > 20 ? 0xffffb030u : 0xffe83848u);
-    screen.rectangle(bar_x,
-                     energy_y,
-                     bar_width * static_cast<int>(score.energy) / 100,
-                     std::max(4, screen.height() / 180), energy_color);
-    drawMenuText(screen, "LIFE", bar_x + bar_width + screen.width() / 96,
-                 energy_y - label_scale * 7 - screen.height() / 180,
-                 label_scale, label);
+    if (show_energy) {
+        screen.rectangle(bar_x, energy_y, bar_width,
+                         std::max(4, screen.height() / 180), 0xff202838u);
+        const u32 energy_color = score.energy > 50 ? 0xff40d870u :
+            (score.energy > 20 ? 0xffffb030u : 0xffe83848u);
+        screen.rectangle(bar_x,
+                         energy_y,
+                         bar_width * static_cast<int>(score.energy) / 100,
+                         std::max(4, screen.height() / 180), energy_color);
+        drawMenuText(screen, "LIFE", bar_x + bar_width + screen.width() / 96,
+                     energy_y - label_scale * 7 - screen.height() / 180,
+                     label_scale, label);
+    }
 
     screen.rectangle(bar_x, bar_y, bar_width, bar_height, 0xff202838u);
     if (duration_ms > 0) {

@@ -54,7 +54,7 @@ STOR/RETR сверка SHA-256, атомарный RNFR/RNTO и очистка �
 
 Проект настроен на Android Gradle Plugin 9.4.0, Gradle 9.6.0, `compileSdk=36`,
 `minSdk=26`. Для сборки необходимы JDK 17+, Android SDK Platform 36 и Build Tools
-36.1.0. В `C:\Users\Nikpo\AppData\Local\Android\Sdk` установлены Platform 36,
+36.1.0. В `%LOCALAPPDATA%\Android\Sdk` установлены Platform 36,
 Build Tools 36.1.0, platform-tools и Android 36 Google APIs x86_64 emulator;
 SDK-лицензии приняты.
 

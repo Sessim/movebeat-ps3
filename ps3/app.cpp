@@ -99,7 +99,7 @@ App::App()
       calibrating_(false), pose_calibrated_(false), left_rumble_frames_(0), right_rumble_frames_(0),
       left_rumble_power_(0), right_rumble_power_(0), gesture_hand_(-1),
       randomizer_spinning_(false), last_motion_ms_(0), last_tick_row_(0.0f),
-      selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0),
+      selection_changed_ms_(0), preview_active_(false), halo_flash_ms_(0), combo_break_ms_(0),
       paused_(false), user_paused_(false), tracking_paused_(false), tracking_recalibrating_(false),
       resume_since_ms_(0),
       pause_started_us_(0), diagnostic_frame_(0),
@@ -288,7 +288,95 @@ bool App::selectInitialLevel(int& exit_code) {
     last_tick_row_ = carousel_.nearestRow();
     selection_changed_ms_ = nowMilliseconds();
     random_.seed(static_cast<std::uint32_t>(nowMicroseconds()));
+    // USB levels found now are listed already; copying them to the hard
+    // disk keeps them after the drive is gone. The emulator tests play
+    // their USB levels from the drive unless asked to import.
+    usb_mask_ = usbLibraryMask();
+    if (!demo_mode_ || demo_options_.usb_import) queueUsbImport(usb_mask_);
     return true;
+}
+
+void App::queueUsbImport(unsigned int mask) {
+    const std::vector<UsbImportJob> jobs = usbImportJobs(mask);
+    for (std::size_t index = 0; index < jobs.size(); ++index) usb_import_.add(jobs[index]);
+    if (!jobs.empty())
+        printf("USB import: %u bundles queued\n", static_cast<unsigned int>(jobs.size()));
+}
+
+void App::updateUsbImport() {
+    const bool in_menu = run_state_ == RUN_SELECT && !calibrating_ &&
+                         !playlist_run_.active();
+    // A drive plugged in while the library is open (every two seconds).
+    if (in_menu && (!demo_mode_ || demo_options_.usb_import) &&
+        ++usb_poll_frames_ >= 120u) {
+        usb_poll_frames_ = 0;
+        const unsigned int mask = usbLibraryMask();
+        const unsigned int added = mask & ~usb_mask_;
+        usb_mask_ = mask;
+        if (added) {
+            const unsigned int before = usb_import_.total();
+            queueUsbImport(added);
+            if (usb_import_.total() > before) usb_rescan_pending_ = true;
+        }
+    }
+    // Copies run in the library and on results screens only (the PS Eye
+    // shares the USB bus during calibration and play), after the music of
+    // a level about to play is cached.
+    const bool quiet = (run_state_ == RUN_SELECT && !calibrating_) ||
+                       run_state_ == RUN_RESULTS;
+    if (usb_import_.busy() && quiet && !audio_cache_.busy()) {
+        std::string source, target;
+        if (usb_import_.step(128u * 1024u, source, target)) {
+            ++diagnostic_.usb_imported;
+            printf("USB import: %s -> %s\n", source.c_str(), target.c_str());
+            // Listed levels and playlists now read from the disk copy.
+            for (std::size_t index = 0; index < level_choices_.size(); ++index)
+                if (level_choices_[index].directory == source)
+                    level_choices_[index].directory = target;
+            for (std::size_t index = 0; index < playlists_.size(); ++index)
+                if (playlists_[index].directory == source)
+                    playlists_[index].directory = target;
+            if (level_directory_ == source) {
+                level_directory_ = target;
+                audio_path_ = level_directory_ + "/" + selected_level_.audio;
+            }
+        }
+        if (!usb_import_.busy()) {
+            diagnostic_.usb_import_failures += usb_import_.failed();
+            usb_added_ = usb_import_.done();
+            usb_added_ms_ = nowMilliseconds() | 1u;
+            printf("USB import finished: %u copied, %u failed\n",
+                   usb_import_.done(), usb_import_.failed());
+        }
+    }
+    if (usb_rescan_pending_ && !usb_import_.busy() && in_menu) {
+        usb_rescan_pending_ = false;
+        reloadLibrary();
+    }
+    if (!usb_import_.busy()) usb_import_.clearFinished();
+}
+
+void App::reloadLibrary() {
+    const std::string selected = level_directory_.substr(level_directory_.find_last_of('/') + 1);
+    std::vector<PlaylistChoice> playlists;
+    std::vector<LevelChoice> levels = discoverLibrary(playlists, &diagnostic_.usb_level_count);
+    if (levels.empty()) return;
+    level_choices_.swap(levels);
+    playlists_.swap(playlists);
+    diagnostic_.playlist_count = static_cast<unsigned int>(playlists_.size());
+    selected_level_index_ = 0;
+    for (std::size_t index = 0; index < level_choices_.size(); ++index) {
+        const std::string& path = level_choices_[index].directory;
+        if (path.substr(path.find_last_of('/') + 1) == selected) {
+            selected_level_index_ = index;
+            break;
+        }
+    }
+    shelf_ = 0;
+    showShelf(0);
+    printf("Library reloaded: %u levels, %u playlists\n",
+           static_cast<unsigned int>(level_choices_.size()),
+           static_cast<unsigned int>(playlists_.size()));
 }
 
 void App::loadSettings() {
@@ -361,6 +449,7 @@ void App::runFrame() {
     // A piece of a USB level's music per frame (128 KiB: well under 1 ms
     // of a frame on the disk, done within a calibration).
     if (audio_cache_.busy() && run_state_ != RUN_PLAY) audio_cache_.step(128u * 1024u);
+    updateUsbImport();
     updatePlaylistRun();
     updateGameplay(input);
     renderFrame(input, frame_work_start_us);
@@ -1537,6 +1626,20 @@ void App::updateGameplay(FrameInput& input) {
         // A cut is felt in the cutting hand.
         if (events.left_hit) pulseRumble(0, 3, 160);
         if (events.right_hit) pulseRumble(1, 3, 160);
+        if (events.combo_broken) {
+            combo_break_ms_ = nowMilliseconds() | 1u;
+            ++diagnostic_.combo_breaks;
+        }
+        // A wall is felt long and in both hands, for as long as a blade
+        // stays in it.
+        if (events.obstacle_hit) {
+            pulseRumble(0, 30, 255);
+            pulseRumble(1, 30, 255);
+            ++diagnostic_.wall_rumbles;
+        } else if (events.in_obstacle) {
+            pulseRumble(0, 8, 220);
+            pulseRumble(1, 8, 220);
+        }
         if (events.bomb_hit) {
             pulseRumble(0, 6, 230);
             pulseRumble(1, 6, 230);
@@ -1715,6 +1818,13 @@ void App::renderOverlays(const FrameInput& input) {
     if (gem_.captureActive()) drawCaptureIndicator(screen_);
     if (run_state_ == RUN_PLAY && imported_level_ && !selected_level_.charts.empty())
         drawChartPips(screen_, selected_level_.charts.size(), selected_chart_index_);
+    if (run_state_ == RUN_SELECT && !calibrating_) {
+        if (usb_import_.busy())
+            drawUsbImport(screen_, usb_import_.done() + usb_import_.failed(),
+                          usb_import_.total());
+        else if (usb_added_ && nowMilliseconds() - usb_added_ms_ < 5000u)
+            drawUsbImport(screen_, usb_added_, 0);
+    }
     if (run_state_ == RUN_SELECT) {
         drawHandMode(screen_, settings_.invert_hands);
         if (input.blade_modifier)
@@ -1722,13 +1832,14 @@ void App::renderOverlays(const FrameInput& input) {
         else if (input.timing_modifier)
             drawTimingOffset(screen_, settings_.timing_offset_ms);
     }
-    drawRunStateIndicator(screen_,
-                          run_state_ == RUN_PLAY ? 0xff40e070u :
-                          (run_state_ == RUN_RESULTS ? 0xff8060d0u : 0xffffa020u));
     if (run_state_ == RUN_PLAY) {
         const unsigned int song_duration_ms = audio_clock_
             ? audio_.durationMs() : chart_duration_ms_;
-        drawHud(screen_, game_.score(), input.level_time_ms, song_duration_ms);
+        const unsigned int since_break = nowMilliseconds() - combo_break_ms_;
+        const float combo_flash = combo_break_ms_ && since_break < 450u
+            ? 1.0f - since_break / 450.0f : 0.0f;
+        drawHud(screen_, game_.score(), input.level_time_ms, song_duration_ms,
+                combo_flash, game_config_.energy_failure);
     }
 }
 

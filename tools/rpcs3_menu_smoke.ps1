@@ -11,7 +11,10 @@ param(
     [ValidateRange(1, 32)]
     [int]$Shelf = 1,
     # Pause, restart and leave the demo song (demo_mode.ini pause_test=1).
-    [switch]$PauseTest
+    [switch]$PauseTest,
+    # Let the game copy USB bundles (dev_usb000/MOVEBEAT/levels) into the
+    # hard-disk library (demo_mode.ini usb_import=1).
+    [switch]$UsbImport
 )
 
 # Runs the game's scripted library navigation (demo_mode.ini menu_test=1)
@@ -52,7 +55,9 @@ $baseline = if (Test-Path -LiteralPath $statusPath) {
 } else { [datetime]::MinValue }
 $hadDemo = Test-Path -LiteralPath $demo -PathType Leaf
 if ($hadDemo) { Move-Item -LiteralPath $demo -Destination $demoBackup }
-Set-Content -LiteralPath $demo -Encoding Ascii -Value @('enabled=1', "$mode=1", "playlist_shelf=$Shelf")
+$demoLines = @('enabled=1', "$mode=1", "playlist_shelf=$Shelf")
+if ($UsbImport) { $demoLines += 'usb_import=1' }
+Set-Content -LiteralPath $demo -Encoding Ascii -Value $demoLines
 
 $process = $null
 $status = @{}
@@ -145,6 +150,11 @@ $report = [pscustomobject]@{
     pause_quits = [int]$status['pause_quits']
     pause_calibrations = [int]$status['pause_calibrations']
     results_replays = [int]$status['results_replays']
+    combo_breaks = [int]$status['combo_breaks']
+    usb_level_count = [int]$status['usb_level_count']
+    usb_imported = [int]$status['usb_imported']
+    usb_import_failures = [int]$status['usb_import_failures']
+    wall_rumbles = [int]$status['wall_rumbles']
     sound_effects = [int]$status['sound_effects']
 }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $reportDir 'report.json') -Encoding Ascii

@@ -6,6 +6,7 @@
 
 #include "library_card.hpp"
 #include "run_diagnostics.hpp"
+#include "usb_import.hpp"
 #include "movebeat/chart.hpp"
 #include "movebeat/level.hpp"
 
@@ -53,6 +54,14 @@ const std::size_t kLibraryCardWindow = 3;
 // levels came from USB.
 std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists,
                                          unsigned int* usb_levels = 0);
+const int kUsbDriveCount = 8;
+// MOVEBEAT/levels on USB drive `drive` (/dev_usb000 ...).
+std::string usbLibraryRoot(int drive);
+// Bit N set: drive N has a MOVEBEAT/levels folder.
+unsigned int usbLibraryMask();
+// Copies into the hard-disk library of the USB bundles (drives in `mask`)
+// whose folder name the library does not have yet.
+std::vector<UsbImportJob> usbImportJobs(unsigned int mask);
 // Unloads cards outside the window around `position` of `order` (library
 // indices as the carousel shows them) and loads at most `max_loads`
 // missing ones, nearest first. Returns the number loaded, so scrolling

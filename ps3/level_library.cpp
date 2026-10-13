@@ -123,6 +123,81 @@ unsigned int scanLibraryRoot(const std::string& root, std::vector<LevelChoice>& 
 
 } // namespace
 
+namespace {
+
+bool fileExists(const std::string& path) {
+    FILE* file = fopen(path.c_str(), "rb");
+    if (!file) return false;
+    fclose(file);
+    return true;
+}
+
+// The manifest of a bundle folder ("" when it has none).
+std::string bundleManifest(const std::string& directory) {
+    if (fileExists(directory + "/level.ini")) return "level.ini";
+    if (fileExists(directory + "/playlist.ini")) return "playlist.ini";
+    return std::string();
+}
+
+// Bundle folder names in `root`: ones with a manifest, or all of them.
+std::vector<std::string> bundleNames(const std::string& root, bool with_manifest) {
+    std::vector<std::string> names;
+    DIR* directory = opendir(root.c_str());
+    if (!directory) return names;
+    for (dirent* entry = readdir(directory); entry; entry = readdir(directory)) {
+        const std::string name(entry->d_name);
+        if (name.empty() || name[0] == '.') continue;
+        if (with_manifest && bundleManifest(root + "/" + name).empty()) continue;
+        names.push_back(name);
+    }
+    closedir(directory);
+    return names;
+}
+
+} // namespace
+
+std::string usbLibraryRoot(int drive) {
+    char root[48];
+    snprintf(root, sizeof(root), kUsbLevelRootFormat, drive);
+    return root;
+}
+
+unsigned int usbLibraryMask() {
+    unsigned int mask = 0;
+    for (int drive = 0; drive < kUsbDriveCount; ++drive) {
+        DIR* directory = opendir(usbLibraryRoot(drive).c_str());
+        if (!directory) continue;
+        closedir(directory);
+        mask |= 1u << drive;
+    }
+    return mask;
+}
+
+std::vector<UsbImportJob> usbImportJobs(unsigned int mask) {
+    std::vector<UsbImportJob> jobs;
+    std::vector<std::string> taken = bundleNames(kLevelRoot, true);
+    for (int drive = 0; drive < kUsbDriveCount; ++drive) {
+        if ((mask & (1u << drive)) == 0) continue;
+        const std::string root = usbLibraryRoot(drive);
+        const std::vector<std::string> names = bundleNames(root, true);
+        for (std::size_t index = 0; index < names.size(); ++index) {
+            if (std::find(taken.begin(), taken.end(), names[index]) != taken.end())
+                continue;
+            UsbImportJob job;
+            job.source = root + "/" + names[index];
+            job.target = std::string(kLevelRoot) + "/" + names[index];
+            const std::string manifest = bundleManifest(job.source);
+            const std::vector<std::string> files = bundleNames(job.source, false);
+            for (std::size_t file = 0; file < files.size(); ++file)
+                if (files[file] != manifest) job.files.push_back(files[file]);
+            job.files.push_back(manifest);
+            jobs.push_back(job);
+            taken.push_back(names[index]);
+        }
+    }
+    return jobs;
+}
+
 std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists,
                                          unsigned int* usb_levels) {
     std::vector<LevelChoice> choices;
@@ -131,11 +206,8 @@ std::vector<LevelChoice> discoverLibrary(std::vector<PlaylistChoice>& playlists,
     scanLibraryRoot(kLevelRoot, choices, playlists, names);
     // Bundles copied to a USB drive play from there: no FTP needed.
     unsigned int from_usb = 0;
-    for (int drive = 0; drive < 8; ++drive) {
-        char root[48];
-        snprintf(root, sizeof(root), kUsbLevelRootFormat, drive);
-        from_usb += scanLibraryRoot(root, choices, playlists, names);
-    }
+    for (int drive = 0; drive < kUsbDriveCount; ++drive)
+        from_usb += scanLibraryRoot(usbLibraryRoot(drive), choices, playlists, names);
     if (usb_levels) *usb_levels = from_usb;
     std::sort(choices.begin(), choices.end(), levelChoiceLess);
 

@@ -74,12 +74,18 @@ struct FrameEvents {
     bool miss;
     bool bomb_hit;
     bool obstacle_hit;
+    // A blade tip is inside a wall this frame (each wall scores once, but
+    // touching it is felt for as long as it lasts).
+    bool in_obstacle;
+    // A running combo of at least one was lost this frame.
+    bool combo_broken;
     unsigned int cut_visual_count;
     CutVisual cut_visuals[MAX_CUT_VISUALS];
 
     FrameEvents()
         : left_hit(false), right_hit(false), miss(false), bomb_hit(false),
-          obstacle_hit(false), cut_visual_count(0) {}
+          obstacle_hit(false), in_obstacle(false), combo_broken(false),
+          cut_visual_count(0) {}
 };
 
 class Game {

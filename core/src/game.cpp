@@ -400,6 +400,7 @@ unsigned int Game::registerHit(unsigned int quality) {
 
 void Game::registerMiss(unsigned int penalty) {
     ++score_.misses;
+    if (score_.combo > 0) events_.combo_broken = true;
     score_.combo = 0;
     score_.energy = penalty >= score_.energy ? 0u : score_.energy - penalty;
     score_.failed = config_.energy_failure && score_.energy == 0;
@@ -500,13 +501,13 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
     updatePendingCuts(now_ms, left_angle_delta, right_angle_delta);
 
     for (std::size_t i = 0; i < chart_.obstacles.size(); ++i) {
-        if (obstacle_states_[i] != NOTE_PENDING) continue;
+        if (obstacle_states_[i] == NOTE_MISSED) continue;
         const Obstacle& obstacle = chart_.obstacles[i];
         const unsigned long long end_ms = static_cast<unsigned long long>(
             obstacle.time_ms) + obstacle.duration_ms;
         if (static_cast<unsigned long long>(now_ms) > end_ms) {
+            if (obstacle_states_[i] == NOTE_PENDING) ++score_.obstacles_avoided;
             obstacle_states_[i] = NOTE_MISSED;
-            ++score_.obstacles_avoided;
             continue;
         }
         if (now_ms < obstacle.time_ms) continue;
@@ -518,7 +519,8 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
         const bool right_inside = right.tracked &&
             right.tip.x >= minimum.x && right.tip.x <= maximum.x &&
             right.tip.y >= minimum.y && right.tip.y <= maximum.y;
-        if (left_inside || right_inside) {
+        if (left_inside || right_inside) events_.in_obstacle = true;
+        if ((left_inside || right_inside) && obstacle_states_[i] == NOTE_PENDING) {
             obstacle_states_[i] = NOTE_HIT;
             ++score_.obstacles_hit;
             registerMiss(12);

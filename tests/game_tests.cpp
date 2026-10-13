@@ -492,6 +492,7 @@ void testWrongDirectionAndMiss() {
     expect(game.score().misses == 1, "expired note becomes a miss");
     expect(game.events().miss, "expired note reports miss feedback");
     expect(game.score().combo == 0, "miss resets combo");
+    expect(!game.events().combo_broken, "a miss with no combo breaks nothing");
 }
 
 void testAngleOffsetDirection() {
@@ -565,6 +566,22 @@ void testMultiplier() {
     expect(game.score().hits == 5, "five sequential notes are hit");
     expect(game.score().max_combo == 5, "combo reaches five");
     expect(game.score().score == 90, "fifth centered note receives x2 multiplier");
+}
+
+void testComboBreak() {
+    movebeat::Chart chart;
+    chart.notes.push_back(makeNote(1000, 1, 1, movebeat::HAND_LEFT, movebeat::CUT_RIGHT));
+    chart.notes.push_back(makeNote(1500, 1, 1, movebeat::HAND_LEFT, movebeat::CUT_RIGHT));
+    movebeat::Game game;
+    game.load(chart);
+    const movebeat::SaberPose parked = pose(10.0f, 10.0f, 0.0f);
+    const movebeat::Vec3 center = game.notePosition(chart.notes[0], 1000);
+    game.update(984, pose(center.x - 0.4f, center.y, 0.0f), parked);
+    game.update(1000, pose(center.x, center.y, 0.0f), parked);
+    expect(game.score().combo == 1 && !game.events().combo_broken, "first note starts a combo");
+    game.update(1800, parked, parked);
+    expect(game.events().combo_broken && game.score().max_combo == 1,
+           "missing the next note reports the broken combo");
 }
 
 void testFrameRateIndependentSwingAndStacks() {
@@ -737,6 +754,16 @@ void testObstacles() {
     expect(hit_game.score().energy == 38 && hit_game.score().misses == 1,
            "wall contact drains energy and breaks combo");
     expect(!hit_game.obstaclePending(0), "touched wall is consumed once");
+    expect(hit_game.events().in_obstacle, "the blade is felt inside the wall");
+    hit_game.update(1100, pose(0.0f, 0.0f, 0.0f), parked);
+    expect(hit_game.score().obstacles_hit == 1 && hit_game.score().misses == 1,
+           "staying inside the wall scores it once");
+    expect(hit_game.events().in_obstacle, "a touched wall keeps being felt");
+    hit_game.update(1200, parked, parked);
+    expect(!hit_game.events().in_obstacle, "leaving the wall stops the contact");
+    hit_game.update(1501, parked, parked);
+    expect(!hit_game.events().in_obstacle && hit_game.score().obstacles_avoided == 0,
+           "a touched wall passes without counting as avoided");
 
     movebeat::Game avoid_game;
     avoid_game.load(chart);
@@ -1591,6 +1618,7 @@ int main() {
     checkpoint("tracking sample gap"); testLongTrackingGapCannotCut();
     checkpoint("wrong hand"); testWrongHand();
     checkpoint("multiplier"); testMultiplier();
+    checkpoint("combo break"); testComboBreak();
     checkpoint("frame-rate independence"); testFrameRateIndependentSwingAndStacks();
     checkpoint("swing quality"); testPreAndPostSwingQuality();
     checkpoint("follow-through deadline"); testFollowThroughDeadline();

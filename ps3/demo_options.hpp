@@ -25,12 +25,16 @@ struct EmulatorDemoOptions {
     // During the demo song: pause (Start), restart (Circle), pause again
     // and leave for the track list (Triangle).
     bool pause_test;
+    // Copy USB bundles into the hard-disk library as on hardware (off in
+    // the emulator by default: its tests play USB levels from the drive).
+    bool usb_import;
 
     EmulatorDemoOptions() : enabled(false), automatic_cuts(true),
                             tracking_loss_test(false),
                             chart_index(0), capture_at_ms(0),
                             menu_test(false), playlist_test(false),
-                            playlist_shelf(1), pause_test(false) {}
+                            playlist_shelf(1), pause_test(false),
+                            usb_import(false) {}
 };
 
 EmulatorDemoOptions readEmulatorDemoOptions();
