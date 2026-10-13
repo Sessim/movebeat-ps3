@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Install Tk for the assistant tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
       - name: Install importer dependencies
         run: python -m pip install -r tools/requirements-import.txt
       - name: Configure
