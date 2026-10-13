@@ -1,128 +1,161 @@
 # MoveBeat
 
-Экспериментальная свободная ритм-игра для PlayStation 3 с двумя контроллерами
-PlayStation Move и камерой PlayStation Eye. Проект воспроизводит общий жанр
-ритмического разрубания блоков, но **не содержит код, музыку, карты, модели,
-название или другие материалы Beat Saber**.
+**English** · [Русский](README_RU.md)
 
-*English:* a homebrew rhythm game for the PS3 played with two PS Move
-controllers and the PS Eye. It plays maps from BeatSaver, which you download
-yourself with the Windows assistant and bring to the console on a USB stick.
-The UI is in English, the documentation in Russian.
+An experimental free rhythm game for the PlayStation 3, played with two
+PlayStation Move controllers and the PlayStation Eye camera. You slash flying
+blocks to the music with two blades; maps come from BeatSaver. The project
+follows the general genre but **contains no code, music, maps, models, name or
+other material from Beat Saber**.
 
-## Быстрый старт
+This is an early version: it has been played on one console (HEN, PS Eye
+under the TV, about 2 m from the player) and tested in the RPCS3 emulator.
+Tracking depends a lot on lighting and camera placement. Bug reports with the
+`run_status.ini` from `/dev_hdd0/game/MOVEBEAT1/USRDIR/` are welcome in Issues.
 
-**Нужно:** PS3 с HEN или CFW (установка неподписанных PKG), два PS Move,
-камера PS Eye, флешка FAT32 и Windows-ПК для скачивания песен.
+## Quick start
 
-1. Скачайте из [Releases](../../releases) `movebeat.pkg` и
-   `MoveBeatTrackAssistant.zip`.
-2. Установите `movebeat.pkg` на PS3 (Package Manager → Install Package Files,
-   с флешки или по FTP). В пакете только встроенная обучающая мелодия.
-3. Запустите ассистент на ПК, нажмите **«Стартовый набор»**: он скачает с
-   BeatSaver шесть карт и плей-лист «MoveBeat Starter». Любую другую карту
-   можно найти по названию или по `!bsr`-коду.
-4. Вставьте флешку и нажмите **«Все уровни на флешку»** (ассистент проверит,
-   что флешка в FAT32).
-5. Вставьте флешку в PS3 и запустите MoveBeat: игра скопирует уровни в свою
-   библиотеку на жёстком диске («USB COPY…» справа вверху), после этого
-   флешку можно вынуть.
-6. Встаньте примерно в двух метрах от камеры. Выберите трек, нажмите Move,
-   пройдите калибровку из трёх поз (руки вперёд, в стороны, вниз; каждую позу
-   подтверждайте кнопкой Move на обоих контроллерах) и играйте.
+**You need:** a PS3 with HEN or CFW (able to install unsigned PKGs), two PS
+Move controllers, a PS Eye camera, a FAT32 USB stick and a Windows PC to
+download songs.
 
-Кнопки — в разделе [«Управление (PS Move)»](#управление-ps-move). Музыка карт
-принадлежит её правообладателям: скачивайте и используйте их по правилам
-BeatSaver и с разрешения авторов, не выкладывайте готовые наборы с музыкой.
+1. Download `movebeat.pkg` and `MoveBeatTrackAssistant.zip` from
+   [Releases](../../releases).
+2. Install `movebeat.pkg` on the PS3 (Package Manager → Install Package
+   Files, from a USB stick or over FTP). The package only contains the
+   built-in tutorial song.
+3. Run the assistant on the PC and press **«Стартовый набор»** (starter set):
+   it downloads six maps and the "MoveBeat Starter" playlist from BeatSaver.
+   Any other map can be found by name or by its `!bsr` code.
+4. Plug in the USB stick and press **«Все уровни на флешку»** (all levels to
+   the USB stick); the assistant checks that the stick is FAT32.
+5. Plug the stick into the PS3 and start MoveBeat: the game copies the levels
+   into its library on the hard disk ("USB COPY…" in the top right), after
+   which the stick can be removed.
+6. Stand about two metres from the camera. Pick a track, press Move, go
+   through the calibration and play.
 
-Игра проверялась на одной консоли и в эмуляторе RPCS3; трекинг сильно
-зависит от освещения и положения камеры. Сообщения об ошибках и
-`run_status.ini` из `/dev_hdd0/game/MOVEBEAT1/USRDIR/` приветствуются в Issues.
+The music of the maps belongs to its rightsholders: download and use maps
+under BeatSaver's rules and with the authors' permission, and do not publish
+ready-made sets with music.
 
-## Текущий статус
+## Controls
 
-Сейчас готов играбельный прототип для PS3: отдельное игровое ядро, PS3-приложение
-и устанавливаемая `.pkg`. В нём есть 4×3 поле, объёмные 3D-ноты, чтение двух
-контроллеров через `libgem`/PlayStation Eye, Ogg-аудио, меню уровней, счёт,
-серии, бомбы, стены и поддержка карт BeatSaver. Также собраны Windows- и
-Android-ассистенты для подготовки карт и передачи bundle по FTP.
+| Screen | Button | Action |
+|---|---|---|
+| Track list | Triangle / Circle | previous / next track (hold to scroll) |
+| | Cross | next difficulty |
+| | Square | shelves: all tracks, then playlists |
+| | Move (single press) or Start | start through calibration |
+| | Move on both, hold | randomizer |
+| | T + motion | up-down scrolls with inertia, sideways changes difficulty |
+| | T + Circle / Square | timing offset +10 / −10 ms |
+| | both T + Circle / Square | blade length +5 / −5 cm |
+| | both T + Select | swap hands |
+| Calibration | Move on each controller | "I'm in the pose" |
+| | Triangle | start over from the first pose |
+| | Cross | leave (to the track list or the pause menu) |
+| Song | Start | pause |
+| Pause | Cross / Circle / Square / Triangle | continue / restart / calibrate / track list |
+| Tracking lost | Move on the lost controller (aimed at the camera) / Triangle | recalibrate its sphere / track list |
+| Results | Cross, Circle or Move / Triangle | continue / replay |
+| Between playlist songs | Cross, Circle or Move / Triangle / Square | next song now / replay the last one / stop |
+| Playlist summary | Cross, Circle or Move | track list |
 
-Диагностические `.pkg` и `.self` собраны PS3DEV/PSL1GHT в Ubuntu/WSL2 и находятся
-в `out/ps3`. Отдельный тестовый PKG установлен в RPCS3 с прошивкой 4.93; весь
-набор PPU-тестов игрового ядра, парсеров, проекции, стартовой калибровки и
-преобразования координат Move прошёл.
-Игровой PKG устанавливается и проходит автоматический прогон в RPCS3 с Vulkan:
-импортированный уровень, Ogg-аудио, попадания и отрисовка всей сцены на RSX
-(с программным PPU-рендером как запасным вариантом) работают, приложение
-штатно выходит. Отдельный синтетический
-тест проверяет паузу и повторную калибровку при потере трекинга.
-С октября 2026 игра проходит песни на настоящей PS3 (HEN, PS Eye под
-телевизором, около 2 м до игрока): трекинг двух Move, калибровка из трёх поз,
-глубина рук, пауза, плей-листы и уровни с флешки. Это всё ещё ранняя версия,
-проверенная на одной консоли.
+**Calibration** has three poses: both Moves on outstretched arms forward
+(blades towards the camera), out to the sides, then down. Confirm each pose
+with the Move button on both controllers. From the poses the game works out
+which hand is which (the red sphere is the right hand, the blue one the left),
+your arm span and the depth of the play area. You can calibrate again from
+the pause menu.
 
-Пошаговый протокол первого запуска и расшифровка диагностических кодов находятся
-в [`docs/HARDWARE_TEST_RU.md`](docs/HARDWARE_TEST_RU.md).
+**During a song** the score is in the top left and the combo in the top
+right; the screen flashes red when the combo breaks. At the bottom are the
+time left and the song progress. A cut is felt as a rumble in that hand;
+touching a wall with a blade rumbles both controllers for as long as the blade
+stays in it, and breaks the combo. While failing on energy is switched off,
+every song plays to its end and no life bar is shown.
 
-Сопутствующие приложения — [`MoveBeat Track Assistant`](docs/TRACK_ASSISTANT_PLAN_RU.md):
-Windows-сборка готовит карты BeatSaver/локальные ZIP, Android-клиент переносит
-их в тот же формат bundle; оба могут отправлять уровни по FTP.
+**If the camera loses a Move**, the game pauses and resumes by itself as soon
+as it sees both controllers again. If a sphere stays lost, aim that Move at
+the camera and press its Move button.
 
-Windows-сборка 0.3.0 выкладывается в Releases (локально её собирает
-`tools/build_assistant.ps1` в `out/assistant/MoveBeatTrackAssistant.exe`).
-Он умеет искать карты BeatSaver с предпросмотром обложки и оценкой размера ZIP,
-выбирать сложность,
-загружать с индикатором прогресса и проверкой content SHA-1, импортировать
-локальный ZIP с его обложкой, проверять готовый bundle, отправлять его на PS3
-по FTP и запускать персональную сборку PKG через WSL/PS3DEV. Перед сохранением
-набора ассистент показывает состав
-сложностей и предупреждения конвертера; подтверждённый bundle становится
-доступен для FTP и включения в PKG. Карты по
-умолчанию сохраняются в `out/levels`; существующий bundle не перезаписывается.
-Адрес, порт и имя пользователя PS3 можно сохранить в локальном профиле
-`%APPDATA%/MoveBeat/ftp-profile.json`; пароль в него не записывается. Обычный
-FTP не шифрует передачу, поэтому используйте только доверенную локальную сеть.
-Поле поиска принимает обычный текст, чистый ID (`54851`) и BSR-команду
-(`!bsr 54851`); ID разрешается напрямую через `/maps/id/...`.
+The timing offset (−500…+500 ms; positive shows notes earlier) and the blade
+length (50–140 cm) are saved in `USRDIR/settings.ini`.
 
-Повторная сборка приложения:
+## Importing songs
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_assistant.ps1
-```
+### Windows assistant
 
-Скрипт создаёт изолированное `.venv-assistant`, использует зафиксированный
-PyInstaller и записывает SHA-256 рядом с EXE. Сведения о встроенных компонентах
-находятся в `assistant/THIRD_PARTY_NOTICES.md`.
+`MoveBeatTrackAssistant.exe` from Releases (the interface is in Russian):
 
-В каталоге [`android`](android/README_RU.md) находится Kotlin feasibility-
-прототип мобильного клиента и Gradle wrapper 9.6.0. Он ищет/загружает карты,
-преобразует BeatSaver ZIP или локальный ZIP в MoveBeat bundle и сохраняет его
-через системный выбор файла. Подготовленный bundle можно отправить на PS3 по
-FTP: приложение предупреждает о незашифрованной передаче, не сохраняет пароль,
-публикует файлы только после обратного чтения и проверки SHA-256 и не заменяет
-существующий ID. Debug APK собран и проверен в Android 36 эмуляторе; три теста
-FTP-протокола проходят. Реальная PS3/FTP и физический Android пока не проверены.
+- **«Стартовый набор»** (starter set): six maps and the "MoveBeat Starter"
+  playlist.
+- **Search** by name, author, ID (`54851`) or BSR command (`!bsr 54851`),
+  with the cover, difficulties and download size; «Подготовить уровень»
+  (prepare level) downloads the map and checks its SHA-1. An already
+  downloaded ZIP can be opened too.
+- **USB stick:** «Уровень на флешку» (level to USB) and «Все уровни на
+  флешку» (all levels to USB). The assistant refuses drives that are not
+  FAT32 (the PS3 only reads FAT32 from USB), copies levels to
+  `MOVEBEAT/levels/` and checks every file by SHA-256.
+- **FTP:** sends a level to a PS3 running webMAN MOD or another FTP server.
+  Plain FTP is unencrypted, use it on a trusted network only; the password is
+  not saved. Large files may fail over Wi-Fi; a USB stick is more reliable.
 
-Пакет включает оригинальный учебный уровень First Steps: 18 секунд при 120 BPM,
-четыре вступительных удара и 32 ноты для двух рук. Музыка синтезирована из
-осцилляторов без сторонних записей; исходный генератор —
-`tools/generate_tutorial.py` (Python и FFmpeg нужны только для регенерации).
-Готовый Ogg и карта находятся в `ps3/package/USRDIR/levels/movebeat_first_steps`.
+### USB stick → PS3
 
-## Быстрый запуск на ПК
+Plug the stick into the PS3 before starting the game or while the track list
+is open. The game looks at `/dev_usb000`–`/dev_usb007` and copies new folders
+from `MOVEBEAT/levels/` into its library on the hard disk ("USB COPY 3 OF
+12", then "USB ADDED 12"). Copying only happens in the menus: during
+calibration and play the camera needs the USB bus. A folder whose name is
+already on the hard disk is skipped.
 
-Нужны CMake 3.16+ и компилятор C++11 (Visual Studio Build Tools, GCC или Clang).
-Для Windows рекомендуется генератор Visual Studio: MSBuild надёжно отслеживает
-изменения C++-заголовков независимо от языка вывода компилятора.
+### Command line
 
 ```sh
-cmake -S . -B build-vs -G "Visual Studio 17 2022" -A x64
-cmake --build build-vs --config Debug
-ctest --test-dir build-vs -C Debug --output-on-failure
+python tools/starter_set.py --output out/levels
+python tools/beatsaver_import.py --search "title or artist" --limit 10
+python tools/beatsaver_import.py --key 3b31 --output out/levels
+python tools/beatsaver_import.py --zip path/to/map.zip --output out/levels
+python tools/playlist_import.py https://beatsaver.com/playlists/1176968
+python tools/usb_export.py E: --all out/levels
 ```
 
-Для GCC, Clang или одноконфигурационного генератора:
+The importer takes the newest version of a map, checks the archive against
+the SHA-1 from the BeatSaver API and writes a level folder: `level.ini`, an
+`.mbchart` per difficulty, the original audio and cover, and a `library.mblc`
+card for the PS3 menu. Beatmap v2, v3 and v4, `Standard` and `NoArrows`,
+bombs, walls, chains and arcs, all difficulties and BPM changes are
+supported. The audio must be Ogg Vorbis (checked by content, so `.egg` works).
+
+`playlist_import.py` takes a `.bplist` file, a BeatSaver playlist link or its
+number, downloads the missing maps and writes a `playlist-<id>` folder. On the
+PS3, Square switches shelves: all tracks, then the playlists. Starting from a
+playlist shelf plays it from the selected song to the end, with results and
+an 8-second countdown between songs and a summary at the end.
+
+Levels can also be built into your own PKG (for personal use only):
+`bash tools/build_ps3.sh --include-imported` takes everything in
+`out/levels`. Without that flag the package only contains the First Steps
+tutorial.
+
+## Scoring
+
+A regular cut is worth up to 115 points: up to 70 for the swing angle before
+contact, up to 30 for the follow-through and up to 15 for hitting near the
+block's centre. Direction, hand and timing decide whether a cut counts. The
+multiplier grows with the combo (×2, ×4, ×8). A chain link is worth 20
+points; arcs are only a visual guide. The 70/30/15 split follows
+[Beat Saber's scoring explanation](https://x.com/BeatSaber/status/1133367585439911937).
+After a song the game shows the score, best score, hits, max combo and
+misses; the best score of each difficulty is kept on the PS3.
+
+## Building
+
+You need CMake 3.16+ and a C++11 compiler. The game core and its tests on a
+PC:
 
 ```sh
 cmake -S . -B build
@@ -130,32 +163,34 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Запуск демонстрации:
-
-```sh
-./build/movebeat_demo assets/charts/tutorial.mbchart
-```
-
-Симулятор принимает и каталог импортированного уровня (с `level.ini`), поэтому
-пакет BeatSaver можно проверить на ПК до копирования на приставку:
+On Windows, `-G "Visual Studio 17 2022" -A x64` with `--config Debug` works
+best. `movebeat_demo` is a console simulator that plays a map with perfect
+swings, to check that the core behaves the same on the PC and the PS3:
 
 ```sh
 ./build/movebeat_demo out/levels/<BeatSaver-ID>
 ```
 
-В приведённой Windows-конфигурации исполняемый файл лежит в
-`build-vs/Debug/movebeat_demo.exe`.
+The PS3 package is built with PS3DEV/PSL1GHT (on Linux or WSL2):
 
-## Управление симулятором
+```sh
+bash tools/build_ps3.sh
+```
 
-Симулятор не является графической игрой. Он проигрывает заранее заданные
-идеальные взмахи и печатает итог матча. Его задача — проверять одинаковое
-поведение ядра на ПК и PS3. Интерактивный графический стенд появится после
-подключения SDL2 либо собственного простого рендера.
+It produces `out/ps3/movebeat.pkg` and a separate package with the PPU tests.
+CI (`.github/workflows/build.yml`) builds the core, the tests and the PKG on
+every push. Automated RPCS3 runs: `tools/rpcs3_pkg_install_smoke.ps1`,
+`tools/rpcs3_menu_smoke.ps1` (menu, playlist, pause, USB import),
+`tools/rpcs3_ppu_tests.ps1`.
 
-## Карты
+Windows assistant: `tools/build_assistant.ps1` (PyInstaller in its own
+`.venv-assistant`, SHA-256 next to the EXE; bundled components are listed in
+`assistant/THIRD_PARTY_NOTICES.md`). The Android client (Kotlin, an early
+prototype: map search and conversion, FTP) is in [`android`](android/README_RU.md).
 
-Формат `.mbchart` — UTF-8 текст:
+## Map format
+
+`.mbchart` is UTF-8 text:
 
 ```text
 # time_ms,lane,row,hand,direction
@@ -169,213 +204,38 @@ C,2200,2,1,R
 A,2500,3200,0,0,3,2,L
 ```
 
-- `lane`: `0..3` слева направо;
-- `row`: `0..2` снизу вверх;
-- `hand`: `L`, `R` или `B` для бомбы;
-- `direction`: `U`, `D`, `L`, `R`, `UL`, `UR`, `DL`, `DR` или `A`
-  (любое направление).
-- запись `W` задаёт стену: начало и длительность в миллисекундах, затем
-  прямоугольник на сетке 4×3. В PS3-адаптации нужно убрать оба клинка из этого
-  прямоугольника; касание снимает энергию и сбрасывает серию.
-- запись `C` задаёт уменьшенное звено chain для нужной руки. Оно требует
-  продолжения взмаха, даёт 20 базовых очков и имеет уменьшенный штраф за промах.
-- запись `A` задаёт визуальную дугу между начальной и конечной ячейками. Она
-  помогает вести нужный клинок по траектории, но сама не влияет на счёт.
+- `lane`: `0..3` left to right; `row`: `0..2` bottom to top;
+- `hand`: `L`, `R` or `B` (bomb);
+- `direction`: `U`, `D`, `L`, `R`, `UL`, `UR`, `DL`, `DR` or `A` (any);
+- `W` is a wall: start, duration and a rectangle on the 4×3 grid;
+- `C` is a chain link; `A` is a visual arc.
 
-Обычный разрез даёт до 115 базовых очков: до 70 за угол замаха перед контактом,
-до 30 за продолжение после него и до 15 за близость разреза к центру блока.
-Направление, рука и тайминг определяют, засчитан ли разрез, но не добавляют
-отдельных очков. Для двух углов используется ориентация виртуального клинка за
-окно 200 мс. Поэтому
-после последнего блока результат может уточняться ещё не более 200 мс; полный
-взмах завершает оценку сразу. Потеря tracking очищает историю угла и не создаёт
-ложный бонус. Распределение 70/30/15 и пороги 100°/60° повторяют
-[объяснение системы счёта официальным аккаунтом Beat Saber](https://x.com/BeatSaber/status/1133367585439911937).
+The level folder format is described in
+[`docs/MOVEBEAT_BUNDLE_FORMAT.md`](docs/MOVEBEAT_BUNDLE_FORMAT.md). The First
+Steps tutorial (18 s, 120 BPM) is synthesized by `tools/generate_tutorial.py`
+without third-party recordings.
 
-## Управление (PS Move)
+## Documentation
 
-| Экран | Кнопка | Действие |
-|---|---|---|
-| Список треков | Triangle / Circle | трек выше / ниже (удержание — прокрутка) |
-| | Cross | следующая сложность |
-| | Square | полки: все треки, затем плей-листы |
-| | Move (одно нажатие) или Start | старт через калибровку |
-| | Move на обоих, удерживать | рандомайзер |
-| | T + движение | вверх-вниз — прокрутка с инерцией, вбок — сложность |
-| | T + Circle / Square | смещение тайминга +10 / −10 мс |
-| | оба T + Circle / Square | длина клинка +5 / −5 см |
-| | оба T + Select | поменять руки местами |
-| Калибровка | Move на каждом контроллере | «я в позе» |
-| | Triangle | начать заново с первой позы |
-| | Cross | выйти (к треку или в меню паузы) |
-| Песня | Start | пауза |
-| Пауза | Cross / Circle / Square / Triangle | продолжить / заново / калибровка / к трекам |
-| Потеря трекинга | Move на потерянном Move (в камеру) / Triangle | перекалибровать сферу / к трекам |
-| Результаты | Cross, Circle или Move / Triangle | продолжить / переиграть |
-| Между песнями плей-листа | Cross, Circle или Move / Triangle / Square | следующая сразу / переиграть последнюю / стоп |
-| Итоги плей-листа | Cross, Circle или Move | к трекам |
+Most of the detailed documentation is in Russian:
 
-## Импорт уровней с BeatSaver
+- [`docs/HARDWARE_TEST_RU.md`](docs/HARDWARE_TEST_RU.md): first run on a
+  console, calibration, `run_status.ini` and error codes;
+- [`docs/CONSOLE_DEBUG_AUTOMATION_RU.md`](docs/CONSOLE_DEBUG_AUTOMATION_RU.md):
+  debugging on the console over the network;
+- [`docs/TRACK_ASSISTANT_PLAN_RU.md`](docs/TRACK_ASSISTANT_PLAN_RU.md): the
+  assistants;
+- [`docs/CHANGELOG_RU.md`](docs/CHANGELOG_RU.md): change log;
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): plan and known risks.
 
-Сетевой доступ выполняется на ПК, а не на PS3. Импортёр обращается к официальной
-BeatSaver API, выбирает новейшую опубликованную версию карты, проверяет архив по
-указанному API SHA-1 и создаёт каталог, который позже
-можно перенести на приставку:
+To record raw `gemState` data, hold both T triggers and press Start in the
+track list: 30 seconds are written to `USRDIR/gem_capture.csv`.
 
-```sh
-python tools/beatsaver_import.py --search "название или автор" --limit 10
-python tools/beatsaver_import.py --search "!bsr 54851"
-python tools/beatsaver_import.py --key <BeatSaver-ID> --output out/levels
-```
+## Legal
 
-Поиск печатает ключ, название, маппера и доступные сложности. Полученный ключ
-передаётся в `--key`; сама PS3 в интернет для этого не выходит.
-
-### Плей-листы BeatSaver
-
-```sh
-python tools/playlist_import.py https://beatsaver.com/playlists/1176968
-python tools/playlist_import.py my_maps.bplist --no-download
-```
-
-Импортёр читает `.bplist` (файлом, ссылкой на страницу плей-листа или его
-номером), скачивает недостающие карты (ровно ту версию, что названа в
-плей-листе, если BeatSaver её ещё отдаёт) и пишет рядом с уровнями бандл
-`playlist-<id>`: `playlist.ini` с порядком песен и подсказанными сложностями
-и карточку `library.mblc` с обложкой плей-листа. Карты, уже лежащие в
-библиотеке, повторно не качаются; карта, которую не удалось получить,
-в плей-лист не попадает. Бандл плей-листа проходит `validate_bundle.py`,
-`build_ps3.sh --include-imported` и FTP-загрузку так же, как уровни.
-
-На PS3 Square переключает полки: «все треки», затем каждый плей-лист (по
-названию). На полке плей-листа карусель идёт в его порядке, а старт (Move
-или Start, через калибровку) запускает прохождение с выбранной песни до
-конца: после каждой песни результаты и 8-секундный отсчёт до следующей
-(Cross, Circle или Move — сразу, Triangle — переиграть, Square — стоп), в
-конце — итоги плей-листа. Сложность каждой
-песни — та, что названа в плей-листе, иначе ближайшая к выбранной для первой
-песни.
-
-Для библиотеки из нескольких карт скопируйте содержимое `out/levels` в
-`/dev_hdd0/game/MOVEBEAT1/USRDIR/levels/`. Оболочка сканирует каталоги карт при
-запуске; до калибровки Cross/Triangle выбирают карту, а Circle/Square — её
-сложность. В списке отображаются уменьшенная обложка, название, исполнитель,
-маппер и подпись текущей сложности;
-ПК-импортёр заранее готовит их в `library.mblc` (512×96 RGB565), сохраняя
-исходную обложку без изменений.
-
-Без сети уровни можно принести на флешке: папки уровней (и плей-листов)
-из `out/levels` или из распакованного bundle ZIP скопируйте в
-`MOVEBEAT/levels/` на USB-накопителе (FAT32) (это делает и Windows-ассистент:
-«Уровень на флешку») и вставьте его в PS3 — до запуска игры или прямо в
-списке треков. Игра просматривает `/dev_usb000`–`/dev_usb007` и копирует
-новые папки в библиотеку на жёстком диске («USB COPY 3 OF 12» справа вверху,
-затем «USB ADDED 12»); после этого флешку можно вынуть. Копирование идёт
-только в меню (во время калибровки и игры шина USB нужна камере); папка с
-тем же именем, что уже есть на жёстком диске, пропускается. В
-`run_status.ini`: `usb_level_count`, `usb_imported`, `usb_import_failures`.
-
-Если FTP пока неудобен, импортированные уровни можно явно вложить в новый PKG:
-
-```sh
-wsl.exe -d Ubuntu -- bash tools/build_ps3.sh --include-imported
-```
-
-Команда берёт все каталоги из `out/levels`, проверяет наличие `level.ini`,
-запрещает симлинки и конфликты имён, а затем добавляет карты в игровой пакет.
-Без `--include-imported` сборка по-прежнему содержит только оригинальный First
-Steps, поэтому сторонняя музыка никогда не включается случайно.
-Для проверенных копий в другой папке можно задать `MOVEBEAT_LEVELS_DIR` перед
-командой сборки; исходная библиотека при этом не меняется.
-
-Текущий персональный пакет `out/ps3/movebeat.pkg` содержит First Steps и
-четыре уровня из `out/levels` (`132ce`, `369b4`, `3e798`, `54851`). SHA-256
-пакета: `6DA917C31E200997AD9DEF30B6B96313B632F2FD46802D017AF73A5974281160`.
-Последняя чистая установка и 12-секундный RPCS3-smoke первых чартов всех
-четырёх BeatSaver-карт прошли с аудио и попаданиями (24/31/36/17), отчёт
-`out/rpcs3-smoke/20261001-011653/report.json`. Это короткий прогон, не полное
-прохождение песен; пакет всё ещё требует проверки на PS3.
-
-ПК-ассистент может отправить выбранный каталог из `out/levels` прямо на PS3:
-введите адрес FTP-сервера приставки, выберите ID уровня и нажмите «Отправить
-на PS3». Ассистент заранее проверяет bundle, загружает файлы во временный
-скрытый каталог и читает их обратно для сверки SHA-256, после чего публикует
-уровень. Если каталог с таким ID уже есть на приставке, передача прекращается
-без замены. Игра сканирует библиотеку при запуске, поэтому после передачи её
-нужно перезапустить. Обычный FTP не шифрует пароль и данные — используйте
-только доверенную локальную сеть; пароль ассистент не сохраняет.
-
-После песни показываются текущий и лучший счёт, попадания и промахи. Start
-повторяет карту с сохранённым центром игровой зоны, Triangle возвращает к
-библиотеке; лучшие результаты каждой сложности сохраняются локально на PS3.
-
-Во время раунда текущий счёт находится в левом верхнем углу, комбо — в правом.
-Внизу показаны оставшееся время и прогресс аудиодорожки; тонкая отдельная
-полоса `LIFE` показывает запас энергии и не подменяет прогресс песни.
-
-Первый Start запускает калибровку: держите оба Move перед собой, слева и справа,
-направив клинки вперёд, и сохраняйте позу одну секунду до заполнения зелёной
-полосы. Средняя точка между концами клинков становится центром игровой зоны.
-Движение или потеря трекинга начинают измерение заново. Это настройка центра;
-правильность осей камеры и комфорт порогов ещё нужно проверить на приставке.
-
-На экране выбора можно удерживать любой курок T и нажимать Circle/Square, чтобы
-менять поправку синхронизации на +10/-10 мс в диапазоне от -500 до +500 мс.
-Положительная поправка выводит ноты раньше относительно музыки. Значение
-сохраняется в `USRDIR/settings.ini` и восстанавливается после перезапуска.
-Если удерживать оба курка T, те же Circle/Square меняют длину виртуального
-клинка на 5 см в диапазоне 50–140 см; голубое число показывает выбранную длину.
-Эта настройка также сохраняется в `settings.ini`.
-
-Для будущей аппаратной калибровки предусмотрена 30-секундная запись исходных
-данных `gemState`: на экране выбора нужно удерживать оба T и нажать Start.
-Пурпурный индикатор означает активную запись; результат сохраняется как
-`USRDIR/gem_capture.csv` и может быть скопирован с приставки по FTP.
-
-Уже скачанный архив можно преобразовать без сети:
-
-```sh
-python tools/beatsaver_import.py --zip path/to/map.zip --output out/levels
-```
-
-Поддерживаются форматы beatmap v2, v3 и v4, восемь направлений, `Standard` и
-`NoArrows`, бомбы, стены, chains, arcs, все обычные сложности и BPM-события v2/v3.
-В пакет входят:
-
-- `level.ini` с метаданными и идентификатором BeatSaver;
-- отдельный `.mbchart` для каждой выбранной сложности;
-- исходные аудиофайл и обложка.
-- подготовленная карточка `library.mblc` для меню PS3.
-
-Можно выбрать сложность (`--difficulty Expert`) или импортировать все
-характеристики (`--characteristic '*'`). Стены v2/v3/v4 преобразуются в зоны
-для избегания клинками, chains v3/v4 — в последовательность уменьшенных целей
-вдоль исходной траектории, а arcs v2/v3/v4 — в цветные визуальные направляющие
-между головной и хвостовой точками. Дуги не добавляют отдельных очков и промахов.
-Импортёр проверяет сигнатуру содержимого Ogg/Vorbis, а не расширение файла.
-Поэтому карта BeatSaver `54851` с именем `audio.egg` принимается: её содержимое
-начинается с `OggS` и содержит заголовок Vorbis. Защищённые EGG и другие кодеки,
-не содержащие Ogg/Vorbis, пока нужно преобразовать перед импортом.
-PS3-оболочка содержит потоковый декодер libvorbis, линейный ресемплер в
-48 кГц и использует число проигранных аудиосэмплов как игровой таймер. Поток
-и синхронизация проверены в RPCS3; на физической PS3 вывод звука ещё нужно
-проверить.
-
-BeatSaver требует, чтобы загрузивший карту обладал правами на её распространение,
-однако повторная публикация или создание производных работ без разрешения автора
-запрещены правилами сервиса. Импорт предназначен для личного использования;
-пользователь отвечает за соблюдение прав на конкретную музыку и карту.
-
-## Дорожная карта
-
-Подробный план и известные аппаратные риски находятся в
-[`docs/ROADMAP.md`](docs/ROADMAP.md). В план также входят интерфейс библиотеки,
-полностью адаптированный под Move (карусель, миниатюры обложек и управление
-кнопками/указателем), и отправка подготовленных треков на PS3 по FTP прямо из
-ПК- и Android-ассистента.
-
-## Правовой статус
-
-MoveBeat не связан с Beat Games, Meta, Sony или правообладателями сторонней
-музыки. Для распространения следует использовать только собственные или
-совместимо лицензированные название, музыку, карты и графику.
+The code is released under the MIT license ([`LICENSE`](LICENSE)). MoveBeat
+is not affiliated with Beat Games, Meta, Sony or any music rightsholders.
+BeatSaver requires uploaders to hold the rights to distribute their maps and
+forbids republishing them without the author's permission: importing is meant
+for personal use, and the user is responsible for the rights to each song and
+map.

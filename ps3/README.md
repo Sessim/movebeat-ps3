@@ -257,7 +257,7 @@ the command; the default remains `out/levels`, and builds never rewrite bundles.
    GEM or inertial button sample in the latest frame (bit 0 left, bit 1 right).
 9. Face the camera and hold the Move controllers comfortably in front of you,
    separated left/right by at least 15 cm, with both blades pointing forward.
-   (Controls changed since: see "Управление" in the top-level README. A
+   (Controls changed since: see "Controls" in the top-level README. A
    single Move tap or Start always starts through the guided calibration;
    holding both Move buttons spins the randomizer.)
    Press both Move buttons together (within 300 ms): the controller that is
