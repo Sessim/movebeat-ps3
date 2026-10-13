@@ -8,7 +8,7 @@ PlayStation Move и камерой PlayStation Eye. Вы рубите летящ
 жанр, но **не содержит код, музыку, карты, модели, название или другие
 материалы Beat Saber**.
 
-[![MoveBeat на YouTube: игра на настоящей PS3](https://img.youtube.com/vi/wMVJnFPkHqQ/maxresdefault.jpg)](https://youtu.be/wMVJnFPkHqQ)
+[![MoveBeat на настоящей PS3: нарезка блоков и финты клинками](docs/media/movebeat.gif)](https://youtu.be/wMVJnFPkHqQ)
 
 ▶ [Смотреть 30-секундный ролик](https://youtu.be/wMVJnFPkHqQ)
 
