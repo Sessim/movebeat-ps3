@@ -810,6 +810,27 @@ void testCutPieces() {
     check(!cutPieces(burst, 1450, 0.32f, end) && !cutPieces(burst, 999, 0.32f, end),
           "no halves outside their life");
 
+    // Cuts made together do not fly in step, yet replay the same way.
+    movebeat::FrameEvents events;
+    events.cut_visual_count = 2;
+    for (int cut = 0; cut < 2; ++cut) {
+        events.cut_visuals[cut].position = Vec3(0.0f, 0.0f, 0.0f);
+        events.cut_visuals[cut].swing = Vec3(1.0f, 0.0f, 0.0f);
+    }
+    CutFeedback first, second;
+    first.add(events, 5000);
+    second.add(events, 5000);
+    CutPiece a[2], b[2], again[2];
+    cutPieces(first.burst(0), 5300, 0.32f, a);
+    cutPieces(first.burst(1), 5300, 0.32f, b);
+    cutPieces(second.burst(0), 5300, 0.32f, again);
+    const Vec3 apart = a[0].center - b[0].center;
+    check(movebeat::lengthSquared(apart) > 0.0004f &&
+          std::fabs(a[0].center.y - a[1].center.y) > 0.005f,
+          "halves of simultaneous cuts take different paths");
+    check(movebeat::lengthSquared(a[0].center - again[0].center) == 0.0f,
+          "the paths are the same on every run");
+
     // A piece that is the whole cube shows the same faces as the note.
     const int width = 320, height = 180;
     const Vec3 centers[] = {
