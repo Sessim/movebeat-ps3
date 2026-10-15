@@ -79,7 +79,7 @@ bool writePpmPixels(const char* path, const u32* source, int width, int height) 
 Framebuffer::Framebuffer()
     : context_(0), host_memory_(0), current_(0), width_(0), height_(0),
       pitch_(0), clear_color_(0xff050510u), initialized_(false), flip_submitted_(false),
-      software_depth_(0), note_depth_active_(false), last_solid_note_count_(0),
+      software_depth_(0), note_depth_active_(false), last_solid_note_count_(0), last_cut_piece_count_(0),
       rsx_(false), effects_(true), frame_submitted_(false),
       last_batch_vertices_(0),
       last_batch_dropped_(0) {
@@ -233,8 +233,29 @@ void Framebuffer::submitFrame() {
     frame_submitted_ = true;
 }
 
-bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms) {
+namespace {
+
+// Routes rounded-piece triangles to the translucent depth-tested mode.
+struct FadingSolidSink {
+    DrawBatch& batch;
+    void operator()(const ProjectedSolidVertex& a, const ProjectedSolidVertex& b,
+                    const ProjectedSolidVertex& c, std::uint32_t color_a,
+                    std::uint32_t color_b, std::uint32_t color_c) {
+        batch.fadingSolidTriangle(a, b, c, color_a, color_b, color_c);
+    }
+};
+
+// The glowing inside of a cut: the hand's saber colour, a little paler.
+u32 cutFaceColor(Hand hand) {
+    return hand == HAND_LEFT ? 0xffa8ecffu : 0xffffa0aau;
+}
+
+} // namespace
+
+bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms,
+                                 const CutFeedback* cuts) {
     last_solid_note_count_ = 0;
+    last_cut_piece_count_ = 0;
     if (!initialized_) return false;
     SoftwareNoteTarget target = {0, 0, width_, height_};
     if (!rsx_) {
@@ -266,6 +287,28 @@ bool Framebuffer::drawSolidNotes(const movebeat::Game& game, unsigned int now_ms
         else
             rasterizeRoundedNote(target, position, side, depth, color);
         ++last_solid_note_count_;
+    }
+    for (unsigned int index = 0; cuts && index < CutFeedback::MAX_BURSTS; ++index) {
+        if (!cuts->piecesVisible(index, now_ms)) continue;
+        const CutBurst& burst = cuts->burst(index);
+        CutPiece pieces[2];
+        const float side = burst.kind == NOTE_CHAIN ? 0.16f : 0.32f;
+        if (!cutPieces(burst, now_ms, side, pieces)) continue;
+        const u32 color = burst.hand == HAND_LEFT ? 0xff2098e8u : 0xffe83048u;
+        const u32 inside = cutFaceColor(burst.hand);
+        for (int half = 0; half < 2; ++half) {
+            const CutPiece& piece = pieces[half];
+            const int cut_face = piece.cut_face_positive ? 1 : 0;
+            if (rsx_) {
+                FadingSolidSink sink = {batch_};
+                forEachRoundedPieceTriangle(piece.center, piece.axis, color, cut_face,
+                                            inside, width_, height_, sink, piece.opacity);
+            }
+            else
+                rasterizeRoundedPiece(target, piece.center, piece.axis, color,
+                                      cut_face, inside);
+            ++last_cut_piece_count_;
+        }
     }
     return true;
 }

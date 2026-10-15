@@ -315,6 +315,22 @@ void DrawBatch::solidTriangle(const ProjectedSolidVertex& a,
     pushColoredTriangle(BATCH_NOTE_SOLID, BLEND_OPAQUE, -1, x, y, z, colors, 0);
 }
 
+void DrawBatch::fadingSolidTriangle(const ProjectedSolidVertex& a,
+                                    const ProjectedSolidVertex& b,
+                                    const ProjectedSolidVertex& c,
+                                    std::uint32_t color_a, std::uint32_t color_b,
+                                    std::uint32_t color_c) {
+    const float x[3] = {a.x, b.x, c.x};
+    const float y[3] = {a.y, b.y, c.y};
+    const float z[3] = {
+        batchDepthFromInverse(a.inverse_depth),
+        batchDepthFromInverse(b.inverse_depth),
+        batchDepthFromInverse(c.inverse_depth)
+    };
+    const std::uint32_t colors[3] = {color_a, color_b, color_c};
+    pushColoredTriangle(BATCH_NOTE_FADE, BLEND_ALPHA, -1, x, y, z, colors, 0);
+}
+
 void DrawBatch::image(int x, int y, int width, int height,
                       const std::uint32_t* argb, unsigned int cache_key) {
     imageRegion(static_cast<float>(x), static_cast<float>(y),

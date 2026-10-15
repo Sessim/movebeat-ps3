@@ -29,7 +29,10 @@ enum BatchMode {
     // matching paintNoteInverseDepthPixel's small tolerance.
     BATCH_NOTE_GLYPH,
     // Library cards: one textured quad each, painter's order.
-    BATCH_TEXTURED
+    BATCH_TEXTURED,
+    // Fading solids (halves of cut cubes): depth test LEQUAL against the
+    // cubes without writing depth, alpha blended.
+    BATCH_NOTE_FADE
 };
 
 // Color blending. Effects use translucent geometry instead of extra
@@ -141,6 +144,13 @@ public:
     // Additive radial fade from color at the center to zero at radius.
     void glowDisc(float center_x, float center_y, float radius,
                   std::uint32_t color, int segments);
+
+    // A note-body triangle like solidTriangle, but translucent (the colors'
+    // alpha) and leaving the depth buffer alone.
+    void fadingSolidTriangle(const ProjectedSolidVertex& a,
+                             const ProjectedSolidVertex& b,
+                             const ProjectedSolidVertex& c, std::uint32_t color_a,
+                             std::uint32_t color_b, std::uint32_t color_c);
 
     // Functor form of solidTriangle for forEachRoundedNoteTriangle.
     void operator()(const ProjectedSolidVertex& a,

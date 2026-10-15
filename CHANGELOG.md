@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Cut cubes split along the blade's swing into two halves that fly apart,
+  tumble and fall, then fade out; the cut faces glow with a neon rim and a
+  slash streak marks the cut. Switched off with `effects=off`.
+
 ## 0.1.0 — 2026-10-13
 
 First public release.

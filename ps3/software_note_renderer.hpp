@@ -366,6 +366,94 @@ void forEachRoundedNoteTriangle(const Vec3& center, float side, float depth,
     }
 }
 
+// Every other grid line: a cut half is small and moving, so 3x3 cells per
+// face (18 triangles) are plenty.
+const int kRoundedPieceGridStep = 2;
+
+// Emits a rounded box with arbitrary half-extent axes (a tumbling half of a
+// cut cube): the same superellipsoid table as a note, transformed by
+// `axes`, on a coarser grid, front faces only. The face on the `cut_axis`
+// side (0..5 as axis * 2 + positive) glows: it is drawn in `cut_color`
+// without shading.
+template <typename TriangleSink>
+void forEachRoundedPieceTriangle(const Vec3& center, const Vec3 (&axes)[3],
+                                 std::uint32_t color, int cut_face,
+                                 std::uint32_t cut_color, int width, int height,
+                                 TriangleSink& sink, float opacity = 1.0f) {
+    const std::uint32_t alpha = static_cast<std::uint32_t>(
+        (opacity < 0.0f ? 0.0f : opacity > 1.0f ? 1.0f : opacity) * 255.0f + 0.5f) << 24;
+    const CameraPoint origin = toNoteCameraSpace(center);
+    float basis[3][3];
+    for (int axis = 0; axis < 3; ++axis) {
+        const CameraPoint end = toNoteCameraSpace(center + axes[axis]);
+        basis[axis][0] = end.x - origin.x;
+        basis[axis][1] = end.y - origin.y;
+        basis[axis][2] = end.depth - origin.depth;
+    }
+    const float focal = height * kProjectionFocalHeight * kProjectionDepth;
+    const float center_x = width * 0.5f;
+    const float center_y = height * 0.5f + projectionVerticalCenterOffset(height);
+    const RoundedNoteTable& table = roundedNoteTable();
+    const int points = (kRoundedNoteGridPoints - 1) / kRoundedPieceGridStep + 1;
+    ProjectedSolidVertex projected[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    std::uint32_t shaded[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    bool valid[kRoundedNoteGridPoints][kRoundedNoteGridPoints];
+    for (int face = 0; face < 6; ++face) {
+        const int axis = face / 2;
+        const float sign = face % 2 ? 1.0f : -1.0f;
+        // A face is drawn when its outward normal points back at the eye
+        // (the camera-space origin). The box stays convex, so this hides
+        // exactly the far faces; depth testing sorts the rest.
+        const float face_x = origin.x + sign * basis[axis][0];
+        const float face_y = origin.y + sign * basis[axis][1];
+        const float face_depth = origin.depth + sign * basis[axis][2];
+        if (face_x * sign * basis[axis][0] + face_y * sign * basis[axis][1] +
+                face_depth * sign * basis[axis][2] >= 0.0f)
+            continue;
+        const std::uint32_t face_color = face == cut_face ? cut_color : color;
+        for (int row = 0; row < points; ++row) {
+            for (int column = 0; column < points; ++column) {
+                const int table_row = row * kRoundedPieceGridStep;
+                const int table_column = column * kRoundedPieceGridStep;
+                const Vec3& q = table.point[face][table_row][table_column];
+                const float camera_x = origin.x + q.x * basis[0][0] +
+                    q.y * basis[1][0] + q.z * basis[2][0];
+                const float camera_y = origin.y + q.x * basis[0][1] +
+                    q.y * basis[1][1] + q.z * basis[2][1];
+                const float camera_depth = origin.depth + q.x * basis[0][2] +
+                    q.y * basis[1][2] + q.z * basis[2][2];
+                ProjectedSolidVertex& out = projected[row][column];
+                valid[row][column] = camera_depth > 0.1f;
+                if (valid[row][column]) {
+                    out.inverse_depth = 1.0f / camera_depth;
+                    out.x = center_x + camera_x * focal * out.inverse_depth;
+                    out.y = center_y - camera_y * focal * out.inverse_depth;
+                    valid[row][column] = std::isfinite(out.x) &&
+                                         std::isfinite(out.y);
+                }
+                shaded[row][column] = ((face == cut_face ? cut_color :
+                    applyRoundedNoteLight(
+                        face_color, table.light[face][table_row][table_column],
+                        table.specular[face][table_row][table_column])) &
+                    0x00ffffffu) | alpha;
+            }
+        }
+        for (int row = 0; row + 1 < points; ++row) {
+            for (int column = 0; column + 1 < points; ++column) {
+                if (!valid[row][column] || !valid[row][column + 1] ||
+                    !valid[row + 1][column] || !valid[row + 1][column + 1])
+                    continue;
+                sink(projected[row][column], projected[row][column + 1],
+                     projected[row + 1][column + 1], shaded[row][column],
+                     shaded[row][column + 1], shaded[row + 1][column + 1]);
+                sink(projected[row][column], projected[row + 1][column + 1],
+                     projected[row + 1][column], shaded[row][column],
+                     shaded[row + 1][column + 1], shaded[row + 1][column]);
+            }
+        }
+    }
+}
+
 inline std::uint32_t averageColor(std::uint32_t a, std::uint32_t b,
                                   std::uint32_t c) {
     std::uint32_t result = 0xff000000u;
@@ -394,6 +482,15 @@ inline void rasterizeRoundedNote(const SoftwareNoteTarget& target,
     SoftwareTriangleSink sink = {target};
     forEachRoundedNoteTriangle(center, side, depth, color, target.width,
                                target.height, sink);
+}
+
+inline void rasterizeRoundedPiece(const SoftwareNoteTarget& target,
+                                  const Vec3& center, const Vec3 (&axes)[3],
+                                  std::uint32_t color, int cut_face,
+                                  std::uint32_t cut_color) {
+    SoftwareTriangleSink sink = {target};
+    forEachRoundedPieceTriangle(center, axes, color, cut_face, cut_color,
+                                target.width, target.height, sink);
 }
 
 } // namespace ps3

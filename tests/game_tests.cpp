@@ -579,6 +579,9 @@ void testComboBreak() {
     game.update(984, pose(center.x - 0.4f, center.y, 0.0f), parked);
     game.update(1000, pose(center.x, center.y, 0.0f), parked);
     expect(game.score().combo == 1 && !game.events().combo_broken, "first note starts a combo");
+    expect(game.events().cut_visual_count == 1 &&
+           game.events().cut_visuals[0].swing.x > 0.99f,
+           "a cut records the blade's swing direction");
     game.update(1800, parked, parked);
     expect(game.events().combo_broken && game.score().max_combo == 1,
            "missing the next note reports the broken combo");

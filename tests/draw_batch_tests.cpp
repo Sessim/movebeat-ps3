@@ -16,6 +16,7 @@
 #include "saber_trail.hpp"
 #include "stage_layout.hpp"
 #include "software_note_renderer.hpp"
+#include "cut_feedback.hpp"
 
 using movebeat::Vec3;
 using namespace movebeat::ps3;
@@ -116,7 +117,7 @@ void replay(const DrawBatch& batch, Image& image) {
                     if (run.mode == BATCH_NOTE_SOLID) {
                         if (!(z < image.depth[index])) continue;
                         image.depth[index] = z;
-                    } else if (run.mode == BATCH_NOTE_GLYPH) {
+                    } else if (run.mode == BATCH_NOTE_GLYPH || run.mode == BATCH_NOTE_FADE) {
                         if (!(z <= image.depth[index])) continue;
                     } else if (run.mode == BATCH_TEXTURED) {
                         const BatchTexture& texture =
@@ -763,6 +764,132 @@ void testStageLayout() {
 
 // Also linked into the PPU test package (see game_tests.cpp), so the batch
 // is checked with the Cell's big-endian floats as well as on the host.
+struct TriangleCounter {
+    int triangles;
+    bool finite;
+    TriangleCounter() : triangles(0), finite(true) {}
+    void operator()(const ProjectedSolidVertex& a, const ProjectedSolidVertex& b,
+                    const ProjectedSolidVertex& c, std::uint32_t, std::uint32_t,
+                    std::uint32_t) {
+        ++triangles;
+        const ProjectedSolidVertex* vertices[3] = {&a, &b, &c};
+        for (int index = 0; index < 3; ++index)
+            finite = finite && std::isfinite(vertices[index]->x) &&
+                     std::isfinite(vertices[index]->y) &&
+                     vertices[index]->inverse_depth > 0.0f;
+    }
+};
+
+void testCutPieces() {
+    CutBurst burst;
+    burst.position = Vec3(0.2f, 0.1f, 0.0f);
+    burst.swing = Vec3(0.0f, -3.0f, 0.0f);  // a downward cut, not normalized
+    burst.started_ms = 1000;
+    burst.active = true;
+    CutPiece start[2], later[2], end[2];
+    check(cutPieces(burst, 1000, 0.32f, start), "halves exist right after the cut");
+    // A downward swing splits the cube into a left and a right half.
+    check(std::fabs(start[0].center.y - start[1].center.y) < 1e-5f &&
+          std::fabs((start[1].center.x - start[0].center.x) - 0.16f) < 1e-4f,
+          "the halves sit side by side across a vertical cut");
+    check(std::fabs(start[0].axis[0].x) > 0.079f && std::fabs(start[0].axis[1].y) > 0.159f,
+          "each half is half as thick across the cut");
+    check(start[0].cut_face_positive != start[1].cut_face_positive,
+          "the cut faces look at each other");
+    check(cutPieces(burst, 1200, 0.32f, later), "halves still fly after 200 ms");
+    check(later[1].center.x - later[0].center.x > 0.5f &&
+          later[0].center.y < start[0].center.y && later[0].center.z < start[0].center.z,
+          "halves drift apart, fall and keep coming toward the player");
+    const bool near_end = cutPieces(burst, 1440, 0.32f, end);
+    const float end_size = std::sqrt(end[0].axis[1].x * end[0].axis[1].x +
+                                     end[0].axis[1].y * end[0].axis[1].y);
+    check(near_end && end[0].opacity < 0.05f && end_size > 0.12f && end_size < 0.14f,
+          "halves fade out while shrinking only a little");
+    check(start[0].opacity == 1.0f && later[0].opacity < 1.0f && later[0].opacity > 0.5f,
+          "halves start opaque and fade over their flight");
+    check(!cutPieces(burst, 1450, 0.32f, end) && !cutPieces(burst, 999, 0.32f, end),
+          "no halves outside their life");
+
+    // A piece that is the whole cube shows the same faces as the note.
+    const int width = 320, height = 180;
+    const Vec3 centers[] = {
+        Vec3(-0.3f, 0.0f, 1.4f), Vec3(0.4f, -0.3f, 0.6f),
+        Vec3(0.2f, 0.35f, 2.2f), Vec3(-0.6f, 0.3f, 0.2f)
+    };
+    bool same_faces = true, finite = true, coarse = true;
+    for (int n = 0; n < 4; ++n) {
+        TriangleCounter note, piece;
+        forEachRoundedNoteTriangle(centers[n], 0.32f, 0.32f, 0xff2098e8u, width, height, note);
+        const Vec3 axes[3] = {Vec3(0.16f, 0.0f, 0.0f), Vec3(0.0f, 0.16f, 0.0f),
+                              Vec3(0.0f, 0.0f, 0.16f)};
+        forEachRoundedPieceTriangle(centers[n], axes, 0xff2098e8u, 0, 0xffffffffu,
+                                    width, height, piece);
+        same_faces = same_faces && note.triangles / 72 == piece.triangles / 18 &&
+                     piece.triangles % 18 == 0;
+        finite = finite && piece.finite;
+        coarse = coarse && piece.triangles <= 3 * 18;
+    }
+    check(same_faces, "a whole-cube piece draws the note's visible faces");
+    check(finite && coarse, "pieces are finite and at most 54 triangles");
+    TriangleCounter tumbling;
+    for (unsigned int ms = 1000; ms < 1450; ms += 30) {
+        if (!cutPieces(burst, ms, 0.32f, later)) continue;
+        for (int half = 0; half < 2; ++half)
+            forEachRoundedPieceTriangle(later[half].center, later[half].axis, 0xffe83048u,
+                                        later[half].cut_face_positive ? 1 : 0, 0xffffffffu,
+                                        width, height, tumbling);
+    }
+    check(tumbling.finite && tumbling.triangles > 0, "tumbling halves stay finite");
+}
+
+struct FadeSink {
+    DrawBatch& batch;
+    void operator()(const ProjectedSolidVertex& a, const ProjectedSolidVertex& b,
+                    const ProjectedSolidVertex& c, std::uint32_t color_a,
+                    std::uint32_t color_b, std::uint32_t color_c) {
+        batch.fadingSolidTriangle(a, b, c, color_a, color_b, color_c);
+    }
+};
+
+void testFadingPieces() {
+    const int width = 160, height = 90;
+    const Vec3 axes[3] = {Vec3(0.16f, 0.0f, 0.0f), Vec3(0.0f, 0.16f, 0.0f),
+                          Vec3(0.0f, 0.0f, 0.16f)};
+    // A half-transparent piece in the open blends with the background and
+    // leaves the depth buffer alone.
+    DrawBatch open = makeBatch(width, height);
+    FadeSink open_sink = {open};
+    forEachRoundedPieceTriangle(Vec3(0.0f, 0.0f, 0.6f), axes, 0xffe83048u, -1,
+                                0xffffffffu, width, height, open_sink, 0.5f);
+    Image open_image(width, height);
+    replay(open, open_image);
+    std::size_t blended = 0, wrote_depth = 0;
+    for (std::size_t index = 0; index < open_image.pixels.size(); ++index) {
+        const std::uint32_t red = (open_image.pixels[index] >> 16) & 255u;
+        if (red > 40u && red < 200u) ++blended;
+        if (open_image.depth[index] < 1.0f) ++wrote_depth;
+    }
+    if (verbose) std::printf("fade: blended %u, depth %u, runs %u, vertices %u\n",
+                             static_cast<unsigned int>(blended),
+                             static_cast<unsigned int>(wrote_depth),
+                             static_cast<unsigned int>(open.runs().size()),
+                             static_cast<unsigned int>(open.vertices().size()));
+    check(blended >= 30 && wrote_depth == 0, "a fading piece blends without writing depth");
+    // Behind a nearer cube it is hidden by the cube's depth.
+    DrawBatch hidden = makeBatch(width, height);
+    forEachRoundedNoteTriangle(Vec3(0.0f, 0.0f, 0.3f), 0.5f, 0.5f, 0xff2098e8u,
+                               width, height, hidden);
+    FadeSink hidden_sink = {hidden};
+    forEachRoundedPieceTriangle(Vec3(0.0f, 0.0f, 1.2f), axes, 0xffe83048u, -1,
+                                0xffffffffu, width, height, hidden_sink, 1.0f);
+    Image hidden_image(width, height);
+    replay(hidden, hidden_image);
+    const std::uint32_t center = hidden_image.pixels[
+        static_cast<std::size_t>(height / 2 + 2) * width + width / 2];
+    check(((center >> 16) & 255u) < ((center) & 255u),
+          "a piece behind a nearer cube stays hidden");
+}
+
 int runDrawBatchTests() {
     testRectangleIsExact();
     testTriangleMatchesSoftware();
@@ -770,6 +897,8 @@ int runDrawBatchTests() {
     testCirclesMatchSoftware();
     testDepthMapping();
     testNoteCubesMatchSoftware();
+    testCutPieces();
+    testFadingPieces();
     testGlyphHiddenBehindNearerCube();
     testGlyphFullyVisibleOnTiltedFace();
     testImageIsOneToOne();

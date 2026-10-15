@@ -301,6 +301,7 @@ void RsxBatchRenderer::submit(const DrawBatch& batch, u32 color_offset,
                 rsxSetDepthWriteEnable(context_, GCM_TRUE);
                 break;
             case BATCH_NOTE_GLYPH:
+            case BATCH_NOTE_FADE:
                 rsxSetDepthTestEnable(context_, GCM_TRUE);
                 rsxSetDepthFunc(context_, GCM_LEQUAL);
                 rsxSetDepthWriteEnable(context_, GCM_FALSE);

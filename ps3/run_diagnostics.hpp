@@ -84,6 +84,8 @@ struct RunStatus {
     unsigned int results_replays;
     // Combos lost (red flash) and walls touched (long rumble).
     unsigned int combo_breaks;
+    // Most halves of cut cubes drawn in one frame.
+    unsigned int cut_pieces_max;
     unsigned int wall_rumbles;
     // renderer.ini depth_range_cm in use.
     int depth_range_cm;

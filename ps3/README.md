@@ -164,6 +164,13 @@ missing manifests, unsafe names and collisions with bundled levels.
   both controllers for as long as a blade stays inside. **Chains** are
   smaller ring-marked targets along the swing; **arcs** are guides the
   matching blade should follow for 60% of their length.
+- **Cut halves.** A cut cube splits along the blade's swing into two
+  rounded halves (`cutPieces` in `cut_feedback.hpp`) that drift apart, fall,
+  tumble and fade over 450 ms. They use the note mesh on a coarser grid
+  (at most 54 triangles each) in a translucent depth-tested batch mode
+  (`BATCH_NOTE_FADE`); the glowing cut face, its neon rim and the slash
+  streak are drawn in the effects pass. `cut_pieces_max` in
+  `run_status.ini` counts the halves drawn in one frame.
 - **Energy.** Failing on energy is switched off for now
   (`GameConfig::energy_failure`): energy is still tracked but not shown, and
   every song plays to its end.

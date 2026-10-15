@@ -592,6 +592,14 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
                 visual.position = notePosition(note, now_ms);
                 visual.hand = note.hand;
                 visual.kind = note.kind;
+                // The blade's own motion; a still blade (an "any direction"
+                // note touched slowly) falls back to the note's arrow.
+                Vec3 swing = current.tip - previous.tip;
+                swing.z = 0.0f;
+                if (lengthSquared(swing) < 1e-6f)
+                    swing = rotatedDirection(note.direction, note.angle_offset_degrees);
+                visual.swing = lengthSquared(swing) < 1e-6f
+                    ? Vec3(1.0f, 0.0f, 0.0f) : normalized(swing);
             }
         }
     }

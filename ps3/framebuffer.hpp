@@ -4,6 +4,7 @@
 #include <ppu-types.h>
 #include <rsx/rsx.h>
 
+#include "cut_feedback.hpp"
 #include "draw_batch.hpp"
 #include "rsx_batch_renderer.hpp"
 #include "movebeat/game.hpp"
@@ -66,10 +67,13 @@ public:
     // is at +0.5), as for the effect primitives.
     void noteTriangle(const float (&x)[3], const float (&y)[3], u32 color,
                       float plane_z);
-    // Draw cuttable notes as 3D mesh triangles with perspective and a Z-buffer.
+    // Draw cuttable notes as 3D mesh triangles with perspective and a Z-buffer,
+    // and with `cuts` the two flying halves of every recently cut cube.
     // Returns false if the software depth buffer cannot be allocated.
-    bool drawSolidNotes(const movebeat::Game& game, unsigned int now_ms);
+    bool drawSolidNotes(const movebeat::Game& game, unsigned int now_ms,
+                        const CutFeedback* cuts = 0);
     unsigned int lastSolidNoteCount() const { return last_solid_note_count_; }
+    unsigned int lastCutPieceCount() const { return last_cut_piece_count_; }
 
     // Translucent and additive effects. They exist only on the RSX path:
     // blending on the PPU would read video memory back, which is far too
@@ -121,6 +125,7 @@ private:
     float* software_depth_;
     bool note_depth_active_;
     unsigned int last_solid_note_count_;
+    unsigned int last_cut_piece_count_;
     bool rsx_;
     bool effects_;
     bool frame_submitted_;

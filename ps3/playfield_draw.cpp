@@ -7,6 +7,7 @@
 #include "note_spawn.hpp"
 #include "projection.hpp"
 #include "saber_model.hpp"
+#include "software_note_renderer.hpp"
 #include "stage_layout.hpp"
 #include "text_draw.hpp"
 
@@ -633,6 +634,71 @@ void drawCutFeedback(Framebuffer& screen,
         {1, 0}, {1, 1}, {0, 1}, {-1, 1},
         {-1, 0}, {-1, -1}, {0, -1}, {1, -1}
     };
+    // Glow where the blade went through: a slash streak along the swing at
+    // the cut, and a halo on each half's cut face while the halves fly.
+    for (unsigned int index = 0;
+         screen.effectsEnabled() && index < CutFeedback::MAX_BURSTS; ++index) {
+        if (!feedback.piecesVisible(index, now_ms)) continue;
+        const CutBurst& burst = feedback.burst(index);
+        const unsigned int age = now_ms - burst.started_ms;
+        const u32 base = burst.hand == movebeat::HAND_LEFT
+            ? 0xff70d8ffu : 0xffff6878u;
+        const float side = burst.kind == movebeat::NOTE_CHAIN ? 0.16f : 0.32f;
+        const float slash_ms = 250.0f;
+        if (age < slash_ms) {
+            const float fade = 1.0f - age / slash_ms;
+            const movebeat::Vec3 reach = burst.swing * (side * (0.9f + 0.6f * (1.0f - fade)));
+            float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+            projectFloat(burst.position - reach, screen, x0, y0);
+            projectFloat(burst.position + reach, screen, x1, y1);
+            const float scale = pixelsPerMeter(burst.position, screen);
+            screen.glowLine(x0, y0, x1, y1, scale * 0.07f * fade + 3.0f,
+                            withAlpha(base, fade));
+            if (age < 160u)
+                screen.glowLine(x0, y0, x1, y1, scale * 0.018f + 1.5f,
+                                withAlpha(0xffffffffu, 1.0f - age / 160.0f));
+        }
+        CutPiece pieces[2];
+        if (!cutPieces(burst, now_ms, side, pieces)) continue;
+        const RoundedNoteTable& table = roundedNoteTable();
+        const int last = kRoundedNoteGridPoints - 1;
+        for (int half = 0; half < 2; ++half) {
+            const CutPiece& piece = pieces[half];
+            const int face = piece.cut_face_positive ? 1 : 0;
+            const movebeat::Vec3 face_center = piece.center +
+                piece.axis[0] * (piece.cut_face_positive ? 1.0f : -1.0f);
+            float x = 0.0f, y = 0.0f;
+            projectFloat(face_center, screen, x, y);
+            const float scale = pixelsPerMeter(face_center, screen);
+            const float extent = std::sqrt(movebeat::lengthSquared(piece.axis[1]));
+            screen.glowDisc(x, y, extent * scale * 1.6f + 4.0f,
+                            withAlpha(base, 0.4f * piece.opacity));
+            // Neon along the rim of the cut: the border of the cut face's
+            // grid, walked once around.
+            float rim_x[4 * kRoundedNoteGridPoints], rim_y[4 * kRoundedNoteGridPoints];
+            int rim = 0;
+            for (int step = 0; step < 4 * last; ++step) {
+                int row = 0, column = 0;
+                if (step < last) { row = 0; column = step; }
+                else if (step < 2 * last) { row = step - last; column = last; }
+                else if (step < 3 * last) { row = last; column = 3 * last - step; }
+                else { row = 4 * last - step; column = 0; }
+                const movebeat::Vec3& q = table.point[face][row][column];
+                projectFloat(piece.center + piece.axis[0] * q.x + piece.axis[1] * q.y +
+                             piece.axis[2] * q.z, screen, rim_x[rim], rim_y[rim]);
+                ++rim;
+            }
+            const u32 neon = withAlpha(base, piece.opacity);
+            const u32 core = withAlpha(0xffffffffu, 0.8f * piece.opacity);
+            for (int point = 0; point < rim; ++point) {
+                const int next = (point + 1) % rim;
+                screen.glowLine(rim_x[point], rim_y[point], rim_x[next], rim_y[next],
+                                scale * 0.014f + 1.5f, neon);
+                screen.glowLine(rim_x[point], rim_y[point], rim_x[next], rim_y[next],
+                                scale * 0.004f + 0.8f, core);
+            }
+        }
+    }
     for (unsigned int index = 0;
          index < CutFeedback::MAX_BURSTS; ++index) {
         if (!feedback.visible(index, now_ms)) continue;

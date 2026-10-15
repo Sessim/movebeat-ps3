@@ -1749,7 +1749,12 @@ void App::renderPlayfield(const FrameInput& input) {
     const unsigned long long frame_scene_end_us = nowMicroseconds();
     frame_scene_timing_.add(static_cast<unsigned int>(
         frame_scene_end_us - frame_scene_start_us));
-    const bool solid_notes_drawn = screen_.drawSolidNotes(game_, level_time_ms);
+    // Cut cubes split into two halves that fly apart (an effect: off with
+    // "effects=off" and on the software fallback).
+    const bool solid_notes_drawn = screen_.drawSolidNotes(
+        game_, level_time_ms, screen_.effectsEnabled() ? &cut_feedback_ : 0);
+    diagnostic_.cut_pieces_max = std::max(diagnostic_.cut_pieces_max,
+                                          screen_.lastCutPieceCount());
     frame_gpu_notes_timing_.add(static_cast<unsigned int>(
         nowMicroseconds() - frame_scene_end_us));
     if (solid_notes_drawn) {

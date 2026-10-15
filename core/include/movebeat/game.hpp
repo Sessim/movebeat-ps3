@@ -62,10 +62,13 @@ struct ScoreState {
 struct FrameEvents {
     struct CutVisual {
         Vec3 position;
+        // Unit swing direction across the screen (z = 0): the cube is
+        // split along it.
+        Vec3 swing;
         Hand hand;
         NoteKind kind;
 
-        CutVisual() : hand(HAND_LEFT), kind(NOTE_CUT) {}
+        CutVisual() : swing(1.0f, 0.0f, 0.0f), hand(HAND_LEFT), kind(NOTE_CUT) {}
     };
     enum { MAX_CUT_VISUALS = 16 };
 
