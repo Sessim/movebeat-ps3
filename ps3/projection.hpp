@@ -36,12 +36,21 @@ struct CameraPoint {
     float depth;
 };
 
-inline CameraPoint toCameraSpaceFrom(const Vec3& point, float camera_x,
-                                     float pitch_offset) {
-    const float dx = point.x - camera_x;
+// Where the camera stands relative to its home position, in world meters
+// (+x right, +y up, +z into the screen). It follows the player's head;
+// the camera keeps its orientation, so moving it shows the scene from the
+// side (parallax). Zero leaves the classic fixed view.
+inline Vec3& cameraOffset() {
+    static Vec3 offset(0.0f, 0.0f, 0.0f);
+    return offset;
+}
+
+inline CameraPoint toCameraSpaceWithOffset(const Vec3& point, float camera_x,
+                                           float pitch_offset, const Vec3& offset) {
+    const float dx = point.x - camera_x - offset.x;
     const float dy = point.y -
-        (kProjectionEyeHeight + kProjectionCameraHeight);
-    const float dz = point.z + kProjectionDepth;
+        (kProjectionEyeHeight + kProjectionCameraHeight) - offset.y;
+    const float dz = point.z + kProjectionDepth - offset.z;
     const float target_distance = kProjectionDepth + kProjectionTargetDepth;
     const float camera_distance = std::sqrt(
         target_distance * target_distance +
@@ -66,6 +75,17 @@ inline CameraPoint toCameraSpaceFrom(const Vec3& point, float camera_x,
     return result;
 }
 
+inline CameraPoint toCameraSpaceFrom(const Vec3& point, float camera_x,
+                                     float pitch_offset) {
+    return toCameraSpaceWithOffset(point, camera_x, pitch_offset, cameraOffset());
+}
+
+// The note camera's world position, for choosing which cube faces it sees.
+inline float noteCameraX() { return kNoteCameraX + cameraOffset().x; }
+inline float noteCameraEyeY() {
+    return kProjectionEyeHeight + kNoteCameraHeight + cameraOffset().y;
+}
+
 inline CameraPoint toCameraSpace(const Vec3& point) {
     return toCameraSpaceFrom(point, kProjectionCameraX,
                              kProjectionPitchOffset);
@@ -79,7 +99,11 @@ inline CameraPoint toNoteCameraSpace(const Vec3& point) {
 // Offset the principal point so the player's strike plane (z=0, y=0) remains
 // centered even though the camera looks down enough to show real cube depth.
 inline float projectionVerticalCenterOffset(int height) {
-    const CameraPoint strike = toCameraSpace(Vec3(0.0f, 0.0f, 0.0f));
+    // From the home position: the frame must not re-center as the camera
+    // moves, or vertical parallax would cancel out.
+    const CameraPoint strike = toCameraSpaceWithOffset(
+        Vec3(0.0f, 0.0f, 0.0f), kProjectionCameraX, kProjectionPitchOffset,
+        Vec3(0.0f, 0.0f, 0.0f));
     const float focal_pixels = height * kProjectionFocalHeight *
                                kProjectionDepth;
     return strike.y * focal_pixels / strike.depth;
@@ -111,7 +135,7 @@ inline float cameraDepthAtScreenPointOnWorldZ(float x, float y, int width,
         ray_y * pitch_sine * yaw_cosine +
         pitch_cosine * yaw_cosine;
     if (world_z_per_depth <= 0.0001f) return 0.0f;
-    return (world_z + kProjectionDepth) / world_z_per_depth;
+    return (world_z + kProjectionDepth - cameraOffset().z) / world_z_per_depth;
 }
 
 // A pinhole camera shared by world geometry and software note rendering.

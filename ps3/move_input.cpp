@@ -75,7 +75,15 @@ void applyGemSample(unsigned int index, const gemState& state, int result,
         frame.right_buttons = buttons;
         frame.right_trigger = trigger;
     }
-    if (index < 2) frame.partial[index] = partial;
+    if (index < 2) {
+        frame.partial[index] = partial;
+        const bool seen = result == 0 &&
+            (state.tracking & (GEM_TRACKING_POSITION_TRACKED | GEM_TRACKING_VISIBLE)) != 0;
+        const Vec3 sphere = gemPointToGame(state.pos);
+        frame.sphere_seen[index] = seen && std::isfinite(sphere.x) &&
+                                   std::isfinite(sphere.y) && std::isfinite(sphere.z);
+        frame.sphere[index] = frame.sphere_seen[index] ? sphere : Vec3();
+    }
 }
 
 void applyInertialSample(unsigned int index, const gemInertialState& state,

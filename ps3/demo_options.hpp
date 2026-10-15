@@ -28,13 +28,15 @@ struct EmulatorDemoOptions {
     // Copy USB bundles into the hard-disk library as on hardware (off in
     // the emulator by default: its tests play USB levels from the drive).
     bool usb_import;
+    // A synthetic head that sways and ducks drives the camera view.
+    bool head_test;
 
     EmulatorDemoOptions() : enabled(false), automatic_cuts(true),
                             tracking_loss_test(false),
                             chart_index(0), capture_at_ms(0),
                             menu_test(false), playlist_test(false),
                             playlist_shelf(1), pause_test(false),
-                            usb_import(false) {}
+                            usb_import(false), head_test(false) {}
 };
 
 EmulatorDemoOptions readEmulatorDemoOptions();
@@ -68,11 +70,15 @@ struct RenderOptions {
     // "depth_range_cm=N": how far a hand may move toward the chest or
     // forward of the forward calibration pose (default 30).
     int depth_range_cm;
+    // Head-camera preview (head-tracking branch): a Move worn on the head
+    // moves the view, the hands are not used. On by default in this
+    // branch; "head_preview=off" plays as usual.
+    bool head_preview;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
-                      camera_depth(true), depth_range_cm(30) {}
+                      camera_depth(true), depth_range_cm(30), head_preview(true) {}
 };
 
 RenderOptions readRenderOptions();

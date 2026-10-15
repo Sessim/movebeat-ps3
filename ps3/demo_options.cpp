@@ -49,6 +49,8 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.pause_test = true;
         else if (strcmp(line, "usb_import=1") == 0)
             options.usb_import = true;
+        else if (strcmp(line, "head_test=1") == 0)
+            options.head_test = true;
         else if (strncmp(line, "playlist_shelf=", 15) == 0)
             options.playlist_shelf = static_cast<unsigned int>(strtoul(line + 15, 0, 10));
         else if (strncmp(line, "level_id=", 9) == 0 &&
@@ -97,6 +99,10 @@ RenderOptions readRenderOptions() {
             options.camera_depth = false;
         else if (strcmp(line, "camera_depth=on") == 0)
             options.camera_depth = true;
+        else if (strcmp(line, "head_preview=off") == 0)
+            options.head_preview = false;
+        else if (strcmp(line, "head_preview=on") == 0)
+            options.head_preview = true;
         else if (strncmp(line, "left_hue=", 9) == 0)
             options.left_hue = atoi(line + 9);
         else if (strncmp(line, "right_hue=", 10) == 0)

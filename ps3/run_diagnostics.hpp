@@ -86,6 +86,20 @@ struct RunStatus {
     unsigned int combo_breaks;
     // Most halves of cut cubes drawn in one frame.
     unsigned int cut_pieces_max;
+    // Head-camera preview: the head Move's slot, how often its home was
+    // taken, frames it was seen or lost in play, the camera offset (mm) and
+    // the settings.
+    int head_preview;
+    int head_slot;
+    unsigned int head_recenters;
+    unsigned int head_seen_frames;
+    unsigned int head_lost_frames;
+    int head_offset_x_mm;
+    int head_offset_y_mm;
+    int head_offset_z_mm;
+    int head_gain_pct;
+    int head_mirror_x;
+    int head_flip_z;
     unsigned int wall_rumbles;
     // renderer.ini depth_range_cm in use.
     int depth_range_cm;

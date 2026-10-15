@@ -94,6 +94,13 @@ void drawCaptureIndicator(Framebuffer& screen);
 // USB bundles being copied to the hard disk (`copied` of `total`), or,
 // with `total` 0, how many the finished copy added.
 void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total);
+// Head-camera setup: 0 = press Move on the head Move, 1 = its sphere is
+// being calibrated (not seen yet), 2 = hold still while it is measured.
+void drawHeadSetup(Framebuffer& screen, int state);
+// During a song: the head camera's settings (with the button help when
+// `show_help`) and a warning while the camera does not see the head.
+void drawHeadCameraStatus(Framebuffer& screen, unsigned int gain_percent,
+                          bool mirror_x, bool flip_z, bool head_seen, bool show_help);
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
                    std::size_t selected_chart);
 void drawHandMode(Framebuffer& screen, bool invert_hands);

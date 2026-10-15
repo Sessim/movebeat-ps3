@@ -5,6 +5,7 @@ param(
     [ValidateRange(5, 600)][int]$DurationSeconds = 35,
     [ValidateRange(30, 600)][int]$StartupTimeoutSeconds = 120,
     [switch]$TrackingRecovery,
+    [switch]$HeadTest,
     [ValidateRange(0, 600000)][int]$CaptureAtMs = 0,
     [string]$AppPath = '',
     [switch]$UseInstalledEboot
@@ -237,6 +238,7 @@ try {
         Write-Output "$id chart $chartIndex first note: $($case.first_note_ms) ms; gameplay window: ${caseDurationSeconds}s"
         $demoLines = @('enabled=1', "level_id=$id", "chart_index=$chartIndex")
         if ($TrackingRecovery) { $demoLines += 'tracking_loss_test=1' }
+        if ($HeadTest) { $demoLines += 'head_test=1' }
         # Optional extra frame at a chosen song time, e.g. when a wall passes.
         $timed = Join-Path $usrdir 'demo_timed_frame.ppm'
         if (Test-Path -LiteralPath $timed) { Remove-Item -LiteralPath $timed }
@@ -419,9 +421,10 @@ try {
         $gpuFallbackFrames = [int]$final['gpu_note_fallback_frames']
         $softwareDrawCalls = [int]$final['software_note_draw_calls']
         $softwareMaxCubes = [int]$final['software_note_max_cubes']
+        # The head-camera preview plays without blades: nothing is hit.
         $passed = $final['state'] -eq 'clean_exit' -and $audioSeen -and
-            $highestHits -gt 0 -and $trackingPassed -and
-            $scoredCaptured -and
+            ($HeadTest -or ($highestHits -gt 0 -and $scoredCaptured)) -and
+            $trackingPassed -and
             (($gpuDrawCalls -gt 0 -and $gpuMaxCubes -gt 0) -or
              ($softwareDrawCalls -gt 0 -and $softwareMaxCubes -gt 0)) -and
             $gpuFallbackFrames -eq 0

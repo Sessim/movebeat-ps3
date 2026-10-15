@@ -36,10 +36,10 @@ inline float gameplayNoteDepth(float side) {
 // on depth testing.
 inline NoteCubeVisibleFaces visibleNoteCubeFaces(const NoteCubeMesh& cube) {
     NoteCubeVisibleFaces faces;
-    faces.left = kNoteCameraX < cube.world[0].x;
-    faces.right = kNoteCameraX > cube.world[1].x;
-    faces.top = kProjectionEyeHeight + kNoteCameraHeight > cube.world[0].y;
-    faces.bottom = kProjectionEyeHeight + kNoteCameraHeight < cube.world[3].y;
+    faces.left = noteCameraX() < cube.world[0].x;
+    faces.right = noteCameraX() > cube.world[1].x;
+    faces.top = noteCameraEyeY() > cube.world[0].y;
+    faces.bottom = noteCameraEyeY() < cube.world[3].y;
     return faces;
 }
 

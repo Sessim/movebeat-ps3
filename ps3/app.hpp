@@ -11,6 +11,7 @@
 #include "frame_timing.hpp"
 #include "framebuffer.hpp"
 #include "gem_runtime.hpp"
+#include "head_camera.hpp"
 #include "level_library.hpp"
 #include "library_shelf.hpp"
 #include "menu_buttons.hpp"
@@ -222,6 +223,22 @@ private:
     // Bundles the last import added, shown for a few seconds.
     unsigned int usb_added_ = 0;
     unsigned int usb_added_ms_ = 0;
+    // Head-camera preview (head-tracking branch): a Move on the head moves
+    // the view and the hands are not used.
+    bool head_preview_ = false;
+    // Waiting for the head Move before a song: its slot once pressed, and
+    // the steady-sphere measurement that becomes the camera's home.
+    bool head_setup_ = false;
+    int head_slot_ = -1;
+    unsigned int head_steady_since_ms_ = 0;
+    Vec3 head_sum_;
+    unsigned int head_samples_ = 0;
+    HeadCamera head_camera_;
+    // The settings line shows for a few seconds after a start or a change.
+    unsigned int head_help_ms_ = 0;
+    void beginHeadSetup();
+    void updateHeadSetup(FrameInput& input);
+    void updateHeadCamera(const FrameInput& input, bool paused_at_frame_start);
     void queueUsbImport(unsigned int mask);
     void updateUsbImport();
     void reloadLibrary();

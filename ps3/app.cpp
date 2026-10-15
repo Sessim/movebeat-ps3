@@ -175,6 +175,9 @@ bool App::initializeSystems(int& exit_code) {
     demo_mode_ = demo_options_.enabled;
     diagnostic_.phase = "gem_initializing";
     writeRunStatus(kRunStatusPath, diagnostic_);
+    head_preview_ = demo_mode_ ? demo_options_.head_test : render_options.head_preview;
+    if (head_preview_) printf("Head-camera preview: the head Move moves the view\n");
+    diagnostic_.head_preview = head_preview_ ? 1 : 0;
     gem_.setHandHuesEnabled(render_options.hand_colors);
     gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
     gem_.setStateFilter(render_options.gem_filter);
@@ -400,6 +403,12 @@ void App::startDemo() {
     cut_feedback_.clear();
     level_start_us_ = nowMicroseconds();
     if (imported_level_) startLevelAudio("Demo audio start failed", false);
+    if (demo_options_.head_test) {
+        head_slot_ = 0;
+        diagnostic_.head_slot = 0;
+        head_camera_.recenter(Vec3(0.0f, 0.0f, 2.0f));
+        head_help_ms_ = nowMilliseconds() | 1u;
+    }
     printf("Emulator demo enabled; Move poses are synthetic\n");
 }
 
@@ -423,7 +432,9 @@ void App::runFrame() {
     synchronizePause();
     checkAudioStream();
     FrameInput input;
+    const bool paused_at_frame_start = paused_;
     readInput(input);
+    updateHeadSetup(input);
     handleHandToggle(input);
     handleShelfSwitch(input);
     handleCalibrationCancel(input);
@@ -452,6 +463,7 @@ void App::runFrame() {
     updateUsbImport();
     updatePlaylistRun();
     updateGameplay(input);
+    updateHeadCamera(input, paused_at_frame_start);
     renderFrame(input, frame_work_start_us);
     if (demo_mode_ && demo_options_.menu_test) recordMenuTest(input);
     publishDiagnostics(input);
@@ -680,6 +692,16 @@ void App::readDemoInput(FrameInput& input) {
         game_, adjustedTime(audio_clock_ ? audio_.timeMs() : elapsed_ms,
                             settings_.timing_offset_ms),
         demo_options_.automatic_cuts);
+    if (demo_options_.head_test) {
+        // A head 2 m from the camera sways 15 cm each way every 3 s and
+        // ducks 12 cm every 4 s (camera coordinates: +z away from it).
+        const float t = (audio_clock_ ? audio_.timeMs() : elapsed_ms) * 0.001f;
+        const float two_pi = 6.2831853f;
+        input.moves.sphere[0] = Vec3(0.15f * std::sin(two_pi * t / 3.0f),
+                                     -0.06f * (1.0f - std::cos(two_pi * t / 4.0f)),
+                                     2.0f);
+        input.moves.sphere_seen[0] = true;
+    }
     if (!demo_options_.tracking_loss_test || demo_loss_finished_) return;
     if (!demo_loss_started_us_ && elapsed_ms >= 1200u)
         demo_loss_started_us_ = nowMicroseconds();
@@ -1218,6 +1240,7 @@ void App::scriptCalibrationPose(FrameInput& input, bool crossed) const {
 }
 
 void App::updateTrackingPause(FrameInput& input) {
+    if (head_preview_) return;
     if (run_state_ == RUN_PLAY &&
         (!demo_mode_ || demo_options_.tracking_loss_test) && !paused_ &&
         tracking_gate_.observe(nowMilliseconds(), input.both_moves_tracked)) {
@@ -1472,6 +1495,12 @@ bool App::startLevelAudio(const char* failure_message, bool clear_error_on_succe
 }
 
 void App::handleStart(const FrameInput& input) {
+    // A finished calibration (or head setup) starts the song first, so a
+    // tap in the same frame cannot open a new one.
+    if (input.calibrated_start) {
+        startOrContinue();
+        return;
+    }
     if (input.start_pressed && run_state_ == RUN_SELECT &&
         !input.cancel_calibration && !input.hand_toggle && input.blade_modifier) {
         calibrating_ = false;
@@ -1484,18 +1513,119 @@ void App::handleStart(const FrameInput& input) {
             printf("GEM capture could not open: %s\n", kCapturePath);
         }
     } else if ((input.start_pressed || input.move_tap_slot >= 0) &&
-               run_state_ == RUN_SELECT && !paused_ && !calibrating_ &&
+               run_state_ == RUN_SELECT && !paused_ && !calibrating_ && !head_setup_ &&
                !input.cancel_calibration && !input.hand_toggle) {
         // A single Move tap (or Start): always through the calibration,
         // which also parses the chart unnoticed.
         if (!ensureSelectedChart()) return;
         ++diagnostic_.menu_chord_starts;
+        if (head_preview_) {
+            beginHeadSetup();
+            return;
+        }
         pulseRumble(0, 4, 180);
         pulseRumble(1, 4, 180);
         beginBodyCalibration();
-    } else if (input.calibrated_start) {
-        startOrContinue();
     }
+}
+
+void App::beginHeadSetup() {
+    stopPreview(250);
+    if (run_state_ == RUN_SELECT) cacheUsbAudio(audio_path_);
+    audio_.playEffect(SFX_LAND, 0.6f, 0.0f);
+    head_setup_ = true;
+    head_slot_ = -1;
+    head_steady_since_ms_ = 0;
+    printf("Head camera: press Move on the head Move\n");
+}
+
+void App::updateHeadSetup(FrameInput& input) {
+    if (!head_setup_) return;
+    if (input.buttons.pressed & kButtonCross) {
+        head_setup_ = false;
+        printf("Head camera setup cancelled\n");
+    } else {
+        const unsigned short pressed[2] = {input.buttons.left_pressed,
+                                           input.buttons.right_pressed};
+        for (int slot = 0; slot < 2; ++slot) {
+            if ((pressed[slot] & GEM_BUTTON_MOVE) == 0) continue;
+            // Facing the camera, as libgem wants it: recalibrate the sphere.
+            head_slot_ = slot;
+            head_steady_since_ms_ = 0;
+            if (gem_.calibrateSlot(static_cast<unsigned int>(slot)))
+                printf("Head camera: sphere %d recalibrating\n", slot);
+        }
+        if (head_slot_ >= 0 && input.moves.sphere_seen[head_slot_]) {
+            const unsigned int now_ms = nowMilliseconds();
+            if (!head_steady_since_ms_) {
+                head_steady_since_ms_ = now_ms | 1u;
+                head_sum_ = Vec3();
+                head_samples_ = 0;
+            }
+            head_sum_ = head_sum_ + input.moves.sphere[head_slot_];
+            ++head_samples_;
+            // The average of 0.7 s in view is the camera's home.
+            if (now_ms - head_steady_since_ms_ >= 700u) {
+                head_camera_.recenter(head_sum_ * (1.0f / head_samples_));
+                head_setup_ = false;
+                head_help_ms_ = now_ms | 1u;
+                input.calibrated_start = true;
+                ++diagnostic_.head_recenters;
+                diagnostic_.head_slot = head_slot_;
+                printf("Head camera: home taken from slot %d\n", head_slot_);
+            }
+        } else if (head_slot_ >= 0) {
+            head_steady_since_ms_ = 0;
+        }
+    }
+    // The setup panel takes every press: nothing reaches the track list.
+    input.buttons.pressed = 0;
+    input.buttons.left_pressed = input.buttons.right_pressed = 0;
+    input.level_pressed = input.selection_pressed = 0;
+    input.start_pressed = false;
+    input.move_tap_slot = -1;
+    input.move_long_chord = false;
+}
+
+void App::updateHeadCamera(const FrameInput& input, bool paused_at_frame_start) {
+    if (!head_preview_) return;
+    if (run_state_ != RUN_PLAY) {
+        movebeat::ps3::cameraOffset() = Vec3();
+        return;
+    }
+    const bool seen = head_slot_ >= 0 && input.moves.sphere_seen[head_slot_];
+    movebeat::ps3::cameraOffset() =
+        head_camera_.update(seen, seen ? input.moves.sphere[head_slot_] : Vec3());
+    if (seen) ++diagnostic_.head_seen_frames;
+    else ++diagnostic_.head_lost_frames;
+    const Vec3& offset = head_camera_.offset();
+    diagnostic_.head_offset_x_mm = static_cast<int>(offset.x * 1000.0f);
+    diagnostic_.head_offset_y_mm = static_cast<int>(offset.y * 1000.0f);
+    diagnostic_.head_offset_z_mm = static_cast<int>(offset.z * 1000.0f);
+    // Settings while the song plays; never with a press that just closed
+    // the pause menu.
+    if (paused_ || paused_at_frame_start) return;
+    const unsigned short pressed = input.buttons.pressed;
+    bool changed = true;
+    if (pressed & kButtonTriangle) head_camera_.changeGain(0.25f);
+    else if (pressed & kButtonCircle) head_camera_.changeGain(-0.25f);
+    else if (pressed & kButtonSquare) head_camera_.toggleMirrorX();
+    else if (pressed & kButtonCross) head_camera_.toggleFlipZ();
+    else if (((input.buttons.left_pressed | input.buttons.right_pressed) & GEM_BUTTON_MOVE) &&
+             seen) {
+        head_camera_.recenter(input.moves.sphere[head_slot_]);
+        ++diagnostic_.head_recenters;
+    } else {
+        changed = false;
+    }
+    if (!changed) return;
+    head_help_ms_ = nowMilliseconds() | 1u;
+    diagnostic_.head_gain_pct = static_cast<int>(head_camera_.gain() * 100.0f + 0.5f);
+    diagnostic_.head_mirror_x = head_camera_.mirrorX() ? 1 : 0;
+    diagnostic_.head_flip_z = head_camera_.flipZ() ? 1 : 0;
+    printf("Head camera: gain %d%%, x %s, depth %s\n", diagnostic_.head_gain_pct,
+           head_camera_.mirrorX() ? "mirrored" : "normal",
+           head_camera_.flipZ() ? "flipped" : "normal");
 }
 
 void App::startOrContinue() {
@@ -1588,7 +1718,12 @@ void App::beginLevel() {
 void App::updateGameplay(FrameInput& input) {
     MoveFrame& moves = input.moves;
     if (hand_slots_swapped_) swapMoveFrameHands(moves);
-    if (run_state_ == RUN_PLAY) {
+    if (head_preview_) {
+        // The view only: no blades, the cubes fly past.
+        moves.left = movebeat::SaberPose();
+        moves.right = movebeat::SaberPose();
+    }
+    if (run_state_ == RUN_PLAY && !head_preview_) {
         moves.left = body_frame_.apply(moves.left);
         moves.right = body_frame_.apply(moves.right);
         // Physical reach limits for real controllers (the emulator's
@@ -1648,6 +1783,8 @@ void App::updateGameplay(FrameInput& input) {
             pulseRumble(1, 3, 70);
         }
     }
+    // A Move worn on the head must not buzz at every passing cube.
+    if (head_preview_) left_rumble_frames_ = right_rumble_frames_ = 0;
     applyRumble();
     const bool audio_tail_finished = !audio_clock_ || audio_.finished() ||
                                      game_.score().failed;
@@ -1823,7 +1960,18 @@ void App::renderOverlays(const FrameInput& input) {
     if (gem_.captureActive()) drawCaptureIndicator(screen_);
     if (run_state_ == RUN_PLAY && imported_level_ && !selected_level_.charts.empty())
         drawChartPips(screen_, selected_level_.charts.size(), selected_chart_index_);
-    if (run_state_ == RUN_SELECT && !calibrating_) {
+    if (head_setup_ && run_state_ == RUN_SELECT) {
+        const bool seen = head_slot_ >= 0 && input.moves.sphere_seen[head_slot_];
+        drawHeadSetup(screen_, head_slot_ < 0 ? 0 : (seen ? 2 : 1));
+    }
+    if (head_preview_ && run_state_ == RUN_PLAY && !paused_) {
+        const bool seen = demo_mode_ || (head_slot_ >= 0 && input.moves.sphere_seen[head_slot_]);
+        const bool help = head_help_ms_ && nowMilliseconds() - head_help_ms_ < 4000u;
+        drawHeadCameraStatus(screen_,
+                             static_cast<unsigned int>(head_camera_.gain() * 100.0f + 0.5f),
+                             head_camera_.mirrorX(), head_camera_.flipZ(), seen, help);
+    }
+    if (run_state_ == RUN_SELECT && !calibrating_ && !head_setup_) {
         if (usb_import_.busy())
             drawUsbImport(screen_, usb_import_.done() + usb_import_.failed(),
                           usb_import_.total());

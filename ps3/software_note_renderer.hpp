@@ -304,9 +304,9 @@ void forEachRoundedNoteTriangle(const Vec3& center, float side, float depth,
     const RoundedNoteTable& table = roundedNoteTable();
     // Same face choice as the flat cube: the front plus the side and the
     // top/bottom facing the camera; hidden faces never rely on Z.
-    const bool left = kNoteCameraX < center.x - half_x;
-    const bool right = kNoteCameraX > center.x + half_x;
-    const float eye_y = kProjectionEyeHeight + kNoteCameraHeight;
+    const bool left = noteCameraX() < center.x - half_x;
+    const bool right = noteCameraX() > center.x + half_x;
+    const float eye_y = noteCameraEyeY();
     const bool top = eye_y > center.y + half_y;
     const bool bottom = eye_y < center.y - half_y;
     // Face: fixed axis (0 = x, 1 = y, 2 = z) and its sign.

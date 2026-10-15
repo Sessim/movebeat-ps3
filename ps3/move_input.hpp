@@ -84,12 +84,18 @@ struct MoveFrame {
     // The camera sees the sphere but libgem lacks a full fix (only one of
     // its "position tracked" and "visible" flags): playable, not measured.
     bool partial[2];
+    // The glowing sphere of each physical slot (never swapped with the
+    // hands) as the camera sees it, in meters, with no sensor hold: a Move
+    // worn on the head drives the camera view.
+    Vec3 sphere[2];
+    bool sphere_seen[2];
 
     MoveFrame()
         : left(), right(), left_connected(false), right_connected(false),
           left_buttons(0), right_buttons(0), left_trigger(0), right_trigger(0) {
         held[0] = held[1] = false;
         partial[0] = partial[1] = false;
+        sphere_seen[0] = sphere_seen[1] = false;
     }
 };
 

@@ -911,6 +911,27 @@ void testFadingPieces() {
           "a piece behind a nearer cube stays hidden");
 }
 
+void testCameraOffsetParallax() {
+    const int width = 1280, height = 720;
+    const Vec3 near_point(0.0f, 0.0f, 0.0f), far_point(0.0f, 0.0f, 4.0f);
+    const ScreenPoint near_home = projectWorldPoint(near_point, width, height);
+    const ScreenPoint far_home = projectWorldPoint(far_point, width, height);
+    cameraOffset() = Vec3(0.3f, -0.2f, 0.0f);
+    const ScreenPoint near_moved = projectWorldPoint(near_point, width, height);
+    const ScreenPoint far_moved = projectWorldPoint(far_point, width, height);
+    const float frame_center = projectionVerticalCenterOffset(height);
+    cameraOffset() = Vec3(0.0f, 0.0f, 0.0f);
+    check(near_moved.x < near_home.x && far_moved.x < far_home.x &&
+          near_home.x - near_moved.x > far_home.x - far_moved.x,
+          "a camera moved right shifts near points left more than far ones");
+    check(near_moved.y < near_home.y && near_home.y - near_moved.y > far_home.y - far_moved.y,
+          "a lowered camera lifts near points more than far ones");
+    check(std::fabs(frame_center - projectionVerticalCenterOffset(height)) < 0.001f,
+          "the frame does not re-center as the camera moves");
+    check(projectWorldPoint(near_point, width, height).x == near_home.x,
+          "a zero offset is the classic view");
+}
+
 int runDrawBatchTests() {
     testRectangleIsExact();
     testTriangleMatchesSoftware();
@@ -919,6 +940,7 @@ int runDrawBatchTests() {
     testDepthMapping();
     testNoteCubesMatchSoftware();
     testCutPieces();
+    testCameraOffsetParallax();
     testFadingPieces();
     testGlyphHiddenBehindNearerCube();
     testGlyphFullyVisibleOnTiltedFace();

@@ -609,6 +609,41 @@ void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total)
     }
 }
 
+void drawHeadSetup(Framebuffer& screen, int state) {
+    const int width = 760, height = 250;
+    const int x = (screen.width() - width) / 2;
+    const int y = (screen.height() - height) / 2;
+    screen.rectangle(x, y, width, height, 0xff1a2440u);
+    screen.rectangle(x + 4, y + 4, width - 8, height - 8, 0xff0c1222u);
+    drawMenuText(screen, "HEAD CAMERA", x + 30, y + 26, 4, 0xff70d8ffu);
+    drawMenuText(screen, "PUT A MOVE ON YOUR HEAD  SPHERE FACING THE SCREEN",
+                 x + 30, y + 86, 2, 0xffd9e7ffu);
+    drawMenuText(screen, "STAND WHERE YOU PLAY AND LOOK AT THE SCREEN",
+                 x + 30, y + 112, 2, 0xffd9e7ffu);
+    const char* status = state == 0 ? "PRESS MOVE ON THE HEAD MOVE" :
+        (state == 1 ? "CALIBRATING THE SPHERE  KEEP STILL" : "HOLD STILL");
+    drawMenuText(screen, status, x + 30, y + 160, 3,
+                 state == 2 ? 0xff70e0a0u : 0xfff0d050u);
+    drawMenuText(screen, "CROSS  BACK", x + 30, y + height - 40, 2, 0xff9cb3d3u);
+}
+
+void drawHeadCameraStatus(Framebuffer& screen, unsigned int gain_percent,
+                          bool mirror_x, bool flip_z, bool head_seen, bool show_help) {
+    const int y = screen.height() - 96;
+    if (!head_seen)
+        drawCenteredMenuText(screen, "HEAD NOT SEEN", screen.height() / 5, 3, 0xffff6470u);
+    if (!show_help) return;
+    // Digits are not part of drawMenuText's alphabet: the gain is a number.
+    drawMenuText(screen, "HEAD GAIN", 40, y, 2, 0xff9cb3d3u);
+    drawNumber(screen, gain_percent, 40 + 12 * 10 + 24, y, 2, 0xfff0d050u);
+    drawMenuText(screen, mirror_x ? "X MIRRORED" : "X NORMAL", 230, y, 2,
+                 mirror_x ? 0xffffb068u : 0xffd9e7ffu);
+    drawMenuText(screen, flip_z ? "DEPTH FLIPPED" : "DEPTH NORMAL", 400, y, 2,
+                 flip_z ? 0xffffb068u : 0xffd9e7ffu);
+    drawMenuText(screen, "TRI CIRCLE GAIN   SQUARE MIRROR X   CROSS FLIP DEPTH   MOVE CENTER",
+                 40, y + 26, 2, 0xff9cb3d3u);
+}
+
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
                    std::size_t selected_chart) {
     const int pip = screen.height() / 70 + 4;

@@ -4,6 +4,8 @@ param(
     [ValidateRange(0, 63)][int]$ChartIndex = 0,
     [switch]$AllCharts,
     [switch]$TrackingRecovery,
+    # A scripted head sways and ducks to move the camera (head_test=1).
+    [switch]$HeadTest,
     [ValidateRange(0, 600000)][int]$CaptureAtMs = 0,
     [ValidateRange(5, 600)][int]$DurationSeconds = 12
 )
@@ -97,6 +99,7 @@ if ($AllCharts) {
     $smokeArguments += @('-ChartIndex', [string]$ChartIndex)
 }
 if ($TrackingRecovery) { $smokeArguments += '-TrackingRecovery' }
+if ($HeadTest) { $smokeArguments += '-HeadTest' }
 if ($CaptureAtMs -gt 0) { $smokeArguments += @('-CaptureAtMs', [string]$CaptureAtMs) }
 & powershell -NoProfile -ExecutionPolicy Bypass -File `
     (Join-Path $PSScriptRoot 'rpcs3_smoke.ps1') @smokeArguments

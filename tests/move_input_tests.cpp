@@ -5,6 +5,7 @@
 #include "imu_pose.hpp"
 #include "audio_cache.hpp"
 #include "usb_import.hpp"
+#include "head_camera.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -516,6 +517,40 @@ void testUsbImport() {
     remove((target + "/level.ini").c_str());
 }
 
+void testHeadCamera() {
+    using movebeat::Vec3;
+    using movebeat::ps3::HeadCamera;
+    HeadCamera head;
+    expect(head.update(true, Vec3(0.3f, 0.0f, 2.0f)).x == 0.0f,
+           "no camera offset before the head's home is known");
+    head.recenter(Vec3(0.0f, 1.6f, 2.0f));
+    // Settled: lean 10 cm right, duck 10 cm, step 30 cm toward the camera.
+    Vec3 offset;
+    for (int frame = 0; frame < 200; ++frame)
+        offset = head.update(true, Vec3(0.1f, 1.5f, 1.7f));
+    expect(std::fabs(offset.x - 0.15f) < 0.002f && std::fabs(offset.y + 0.15f) < 0.002f,
+           "small leans and ducks are amplified 1.5 times");
+    expect(std::fabs(offset.z - 0.15f) < 0.002f,
+           "stepping toward the camera moves the view in, at a third of the gain");
+    const Vec3 held = head.update(false, Vec3(5.0f, 5.0f, 5.0f));
+    expect(held.x == offset.x && held.y == offset.y, "a lost sphere holds the view");
+    const Vec3 first = head.update(true, Vec3(0.3f, 1.6f, 2.0f));
+    expect(first.x > offset.x && first.x < 0.45f, "the view follows smoothly, not in one jump");
+    for (int frame = 0; frame < 200; ++frame) offset = head.update(true, Vec3(2.0f, -3.0f, 0.0f));
+    expect(std::fabs(offset.x - HeadCamera::kMaxSide) < 1e-4f &&
+           std::fabs(offset.y + HeadCamera::kMaxDown) < 1e-4f &&
+           std::fabs(offset.z - HeadCamera::kMaxDepth) < 1e-4f, "the offset is limited");
+    head.toggleMirrorX();
+    head.toggleFlipZ();
+    head.recenter(Vec3(0.0f, 0.0f, 2.0f));
+    for (int frame = 0; frame < 200; ++frame) offset = head.update(true, Vec3(0.1f, 0.0f, 1.7f));
+    expect(offset.x < -0.14f && offset.z < -0.14f, "mirror and flip invert the axes");
+    head.changeGain(-10.0f);
+    expect(head.gain() == 0.0f, "the gain stops at zero");
+    head.changeGain(10.0f);
+    expect(head.gain() == HeadCamera::kMaxGain, "and at its maximum");
+}
+
 void testMoveButtonChord() {
     using movebeat::ps3::MoveButtonChord;
     using movebeat::ps3::MoveChordEvents;
@@ -591,6 +626,7 @@ int main() {
     testImuHold();
     testAudioCache();
     testUsbImport();
+    testHeadCamera();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();
