@@ -5,6 +5,7 @@
 #include "imu_pose.hpp"
 #include "audio_cache.hpp"
 #include "usb_import.hpp"
+#include "tracking_loss_log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -516,6 +517,44 @@ void testUsbImport() {
     remove((target + "/level.ini").c_str());
 }
 
+void testTrackingLossLog() {
+    using movebeat::ps3::TrackingLossLog;
+    TrackingLossLog log;
+    // Slot 0 seen near the right edge, then lost for 400 ms.
+    log.update(0, true, 1000, 5000, true, 0.95f, 0.5f, 12.0f, 0, 3, 0);
+    log.update(0, false, 1017, 5017, false, 0, 0, 0, 0, 0, 0x80ull);
+    log.update(0, false, 1200, 5200, false, 0, 0, 0, 0, 0, 0x2000ull);
+    log.update(0, true, 1417, 5417, true, 0.9f, 0.5f, 12.0f, 0, 3, 0);
+    // Slot 1 flickers for 50 ms in the middle of the picture.
+    log.update(1, true, 1000, 5000, true, 0.4f, 0.5f, 10.0f, 0, 3, 0);
+    log.update(1, false, 1050, 5050, false, 0, 0, 0, 0, 2, 0);
+    log.update(1, true, 1100, 5100, true, 0.4f, 0.5f, 10.0f, 0, 3, 0);
+    // Slot 1 lost again until the song ends.
+    log.update(1, false, 2000, 6000, false, 0, 0, 0, 7, 0, 0);
+    log.close(2600);
+    expect(log.count(0) == 1 && log.count(1) == 2, "losses are counted per slot");
+    const std::vector<movebeat::ps3::TrackingLoss>& events = log.events();
+    expect(events.size() == 3 && events[0].duration_ms == 400 && events[0].song_ms == 5017,
+           "a loss keeps its start in the song and its length");
+    expect(events[0].near_edge && events[0].last_x > 0.94f && log.edgeCount() == 1,
+           "a sphere last seen at the frame's edge counts as leaving the view");
+    expect(events[0].status_flags == (0x80ull | 0x2000ull),
+           "libgem flags raised during a loss are kept");
+    expect(log.shortCount() == 1 && log.longestMs() == 600 && log.totalLostMs() == 1050,
+           "flicker, the longest loss and the total are summed");
+    expect(events[2].result == 7, "the libgem result at the loss is kept");
+    const char* path = "movebeat_tracking_log.tmp";
+    expect(log.writeCsv(path), "the log is written as CSV");
+    FILE* file = fopen(path, "r");
+    int lines = 0;
+    for (int c = file ? fgetc(file) : EOF; c != EOF; c = fgetc(file)) if (c == 10) ++lines;
+    if (file) fclose(file);
+    remove(path);
+    expect(lines == 4, "a header and one line per loss");
+    log.reset();
+    expect(log.count(0) == 0 && log.events().empty(), "a new song starts a new log");
+}
+
 void testMoveButtonChord() {
     using movebeat::ps3::MoveButtonChord;
     using movebeat::ps3::MoveChordEvents;
@@ -591,6 +630,7 @@ int main() {
     testImuHold();
     testAudioCache();
     testUsbImport();
+    testTrackingLossLog();
     testMenuNavigationRepeat();
     testPhysicalHandAssignment();
     testRuntimeRecoveryClassification();

@@ -108,6 +108,13 @@ s32 gemTrackHues(const u32* requested, u32* assigned) {
 }
 s32 gemCalibrate(u32) { ++g_calibrate_count; return 0; }
 s32 gemFilterState(u32, u32) { return 0; }
+s32 gemEnableCameraPitchAngleCorrection(s32) { return 0; }
+s32 gemGetStatusFlags(u32, u64* flags) { *flags = 0; return 0; }
+s32 gemClearStatusFlags(u32, u64) { return 0; }
+s32 gemGetCameraState(gemCameraState* state) {
+    std::memset(state, 0, sizeof(*state));
+    return 0;
+}
 s32 gemSetRumble(u32, u8) { return 0; }
 
 s32 cameraInit() { return 0; }

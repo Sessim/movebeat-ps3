@@ -65,8 +65,10 @@ struct MoveFrame {
     struct ImagePoint {
         float x;
         float y;
+        // The sphere's radius in camera pixels (it shrinks with distance).
+        float radius;
         bool valid;
-        ImagePoint() : x(0.0f), y(0.0f), valid(false) {}
+        ImagePoint() : x(0.0f), y(0.0f), radius(0.0f), valid(false) {}
     };
     SaberPose left;
     SaberPose right;

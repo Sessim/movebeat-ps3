@@ -20,6 +20,7 @@
 #include "saber_trail.hpp"
 #include "menu_motion.hpp"
 #include "tracking_pause.hpp"
+#include "tracking_loss_log.hpp"
 #include "movebeat/calibration.hpp"
 #include "movebeat/game.hpp"
 #include "movebeat/level.hpp"
@@ -222,6 +223,11 @@ private:
     // Bundles the last import added, shown for a few seconds.
     unsigned int usb_added_ = 0;
     unsigned int usb_added_ms_ = 0;
+    // When and where the camera lost each Move during the current song;
+    // written to tracking_log.csv when it ends.
+    TrackingLossLog tracking_log_;
+    void recordTracking(const FrameInput& input);
+    void saveTrackingLog();
     void queueUsbImport(unsigned int mask);
     void updateUsbImport();
     void reloadLibrary();

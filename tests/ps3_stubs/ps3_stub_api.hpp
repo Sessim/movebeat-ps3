@@ -39,6 +39,10 @@ struct gemImageState {
     u8 visible, r_valid;
 };
 struct gemInfo { u32 max, connected, status[4], port[4]; };
+struct gemCameraState {
+    s32 exposure;
+    f32 exposure_time, gain, pitch_angle, pitch_angle_estimate;
+};
 struct Spurs {};
 struct SpursAttribute {};
 struct gemAttribute {
@@ -122,6 +126,10 @@ s32 gemUpdateFinish();
 s32 gemTrackHues(const u32*, u32*);
 s32 gemCalibrate(u32);
 s32 gemFilterState(u32, u32);
+s32 gemEnableCameraPitchAngleCorrection(s32);
+s32 gemGetStatusFlags(u32, u64*);
+s32 gemClearStatusFlags(u32, u64);
+s32 gemGetCameraState(gemCameraState*);
 s32 gemSetRumble(u32, u8);
 
 s32 cameraInit();

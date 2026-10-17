@@ -178,6 +178,8 @@ bool App::initializeSystems(int& exit_code) {
     gem_.setHandHuesEnabled(render_options.hand_colors);
     gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
     gem_.setStateFilter(render_options.gem_filter);
+    gem_.setPitchCorrection(render_options.pitch_correction);
+    diagnostic_.pitch_correction = render_options.pitch_correction ? 1 : 0;
     gem_.setHandHueValues(static_cast<unsigned int>(render_options.left_hue < 0 ? 0 : render_options.left_hue),
                           static_cast<unsigned int>(render_options.right_hue < 0 ? 0 : render_options.right_hue));
     diagnostic_.camera_exposure = render_options.camera_exposure;
@@ -404,6 +406,9 @@ void App::startDemo() {
 }
 
 void App::shutdown() {
+    // Leaving mid-song (the XMB, or the emulator test stopping) keeps the
+    // song's tracking log too.
+    if (run_state_ == RUN_PLAY) saveTrackingLog();
     diagnostic_.state = "clean_exit";
     diagnostic_.phase = "shutdown";
     diagnostic_.frame = diagnostic_frame_;
@@ -424,6 +429,7 @@ void App::runFrame() {
     checkAudioStream();
     FrameInput input;
     readInput(input);
+    recordTracking(input);
     handleHandToggle(input);
     handleShelfSwitch(input);
     handleCalibrationCancel(input);
@@ -1350,6 +1356,7 @@ void App::restartLevel() {
 }
 
 void App::quitLevel(bool tracking_lost) {
+    saveTrackingLog();
     audio_.shutdown();
     audio_clock_ = false;
     tracking_paused_ = false;
@@ -1571,7 +1578,53 @@ void App::playNextPlaylistSong() {
     }
 }
 
+void App::recordTracking(const FrameInput& input) {
+    // libgem's view of the camera and the room, for every frame.
+    diagnostic_.pitch_correction_result = gem_.pitchCorrectionResult();
+    diagnostic_.gem_status_flags_seen = gem_.statusFlagsSeen();
+    diagnostic_.gem_status_slot0 = gem_.lastStatusFlags(0);
+    diagnostic_.gem_status_slot1 = gem_.lastStatusFlags(1);
+    int exposure = 0;
+    float exposure_time = 0.0f, gain = 0.0f, pitch = 0.0f, pitch_estimate = 0.0f;
+    if (gem_.cameraState(exposure, exposure_time, gain, pitch, pitch_estimate)) {
+        diagnostic_.camera_exposure_live = exposure;
+        diagnostic_.camera_exposure_time_x1000 = static_cast<int>(exposure_time * 1000.0f);
+        diagnostic_.camera_gain_x1000 = static_cast<int>(gain * 1000.0f);
+        diagnostic_.camera_pitch_x1000 = static_cast<int>(pitch * 1000.0f);
+        diagnostic_.camera_pitch_estimate_x1000 = static_cast<int>(pitch_estimate * 1000.0f);
+    }
+    // A tracking pause is watched too: the log should say when the sphere
+    // came back, not when the song resumed. The pause menu is not.
+    if (run_state_ != RUN_PLAY || user_paused_) return;
+    // Physical slots: the frame is not yet swapped into hands here.
+    const unsigned int now_ms = nowMilliseconds();
+    const unsigned int song_ms = audio_clock_ ? audio_.timeMs() : 0u;
+    const movebeat::SaberPose* optical[2] = {&input.optical.left, &input.optical.right};
+    for (unsigned int slot = 0; slot < 2; ++slot) {
+        const MoveFrame::ImagePoint& image = input.moves.image[slot];
+        tracking_log_.update(slot, optical[slot]->tracked, now_ms, song_ms, image.valid,
+                             image.x, image.y, image.radius, gem_.lastResult(slot),
+                             gem_.lastTrackingFlags(slot), gem_.lastStatusFlags(slot));
+    }
+}
+
+void App::saveTrackingLog() {
+    tracking_log_.close(nowMilliseconds());
+    diagnostic_.loss_slot0 = tracking_log_.count(0);
+    diagnostic_.loss_slot1 = tracking_log_.count(1);
+    diagnostic_.loss_total_ms = tracking_log_.totalLostMs();
+    diagnostic_.loss_longest_ms = tracking_log_.longestMs();
+    diagnostic_.loss_near_edge = tracking_log_.edgeCount();
+    diagnostic_.loss_short = tracking_log_.shortCount();
+    if (!tracking_log_.writeCsv(kTrackingLogPath))
+        printf("Tracking log could not be written: %s\n", kTrackingLogPath);
+    printf("Tracking: %u + %u losses, %u ms lost, longest %u ms, %u at the frame edge\n",
+           tracking_log_.count(0), tracking_log_.count(1), tracking_log_.totalLostMs(),
+           tracking_log_.longestMs(), tracking_log_.edgeCount());
+}
+
 void App::beginLevel() {
+    tracking_log_.reset();
     run_state_ = RUN_PLAY;
     tracking_paused_ = false;
     tracking_recalibrating_ = false;
@@ -1677,6 +1730,7 @@ void App::restartDemoCycle() {
 }
 
 void App::finishLevel() {
+    saveTrackingLog();
     audio_.shutdown();
     audio_clock_ = false;
     left_rumble_frames_ = right_rumble_frames_ = 0;

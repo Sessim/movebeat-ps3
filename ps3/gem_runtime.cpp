@@ -90,6 +90,12 @@ struct GemRuntime::Impl {
     unsigned char rumble[2];
     FILE* capture_file;
     unsigned int capture_frame;
+    bool pitch_correction = true;
+    int pitch_correction_result = 0;
+    unsigned long long status_flags_seen = 0;
+    unsigned long long last_status_flags[2] = {0, 0};
+    gemCameraState camera_state;
+    bool camera_state_valid = false;
 
     Impl()
         : camera_module(false), gem_module(false), container_created(false),
@@ -111,6 +117,7 @@ struct GemRuntime::Impl {
           capture_file(0), capture_frame(0) {
         memset(&camera_info, 0, sizeof(camera_info));
         memset(&camera_read, 0, sizeof(camera_read));
+        memset(&camera_state, 0, sizeof(camera_state));
         previous_buttons[0] = previous_buttons[1] = 0;
         previous_results[0] = previous_results[1] = -1;
         rumble[0] = rumble[1] = 0;
@@ -213,6 +220,10 @@ bool GemRuntime::initialize() {
     // libgem's own state filter smooths positions it reports.
     gemFilterState(0, impl_->gem_filter ? 1u : 0u);
     gemFilterState(1, impl_->gem_filter ? 1u : 0u);
+    // The PS Eye usually sits tilted (under or on top of the TV); without
+    // the correction, raising a hand also moves it in depth.
+    impl_->pitch_correction_result =
+        gemEnableCameraPitchAngleCorrection(impl_->pitch_correction ? 1 : 0);
     cameraReset(0);
     impl_->last_stage = INIT_CAMERA_START;
     if ((impl_->last_error = cameraStart(0)) != 0) return false;
@@ -262,6 +273,22 @@ void GemRuntime::shutdown() {
     impl_->imu[1].reset();
     impl_->last_results[0] = impl_->last_results[1] = -1;
     impl_->last_tracking[0] = impl_->last_tracking[1] = 0;
+}
+
+void GemRuntime::setPitchCorrection(bool enabled) { impl_->pitch_correction = enabled; }
+int GemRuntime::pitchCorrectionResult() const { return impl_->pitch_correction_result; }
+unsigned long long GemRuntime::statusFlagsSeen() const { return impl_->status_flags_seen; }
+unsigned long long GemRuntime::lastStatusFlags(unsigned int slot) const {
+    return slot < 2 ? impl_->last_status_flags[slot] : 0ull;
+}
+bool GemRuntime::cameraState(int& exposure, float& exposure_time, float& gain,
+                             float& pitch, float& pitch_estimate) const {
+    exposure = impl_->camera_state.exposure;
+    exposure_time = impl_->camera_state.exposure_time;
+    gain = impl_->camera_state.gain;
+    pitch = impl_->camera_state.pitch_angle;
+    pitch_estimate = impl_->camera_state.pitch_angle_estimate;
+    return impl_->camera_state_valid;
 }
 
 bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
@@ -338,6 +365,9 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     if ((impl_->last_error = gemUpdateFinish()) != 0) return false;
 
     impl_->last_update_stage = UPDATE_READY;
+    // Exposure, gain and the camera's pitch, once a second.
+    if (impl_->update_count % 60u == 1u)
+        impl_->camera_state_valid = gemGetCameraState(&impl_->camera_state) == 0;
 
     gemState states[2];
     memset(states, 0, sizeof(states));
@@ -369,7 +399,10 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
             frame.held[index] = impl_->imu[index].held();
             if (frame.held[index]) ++impl_->imu_held_frames;
         }
-        if (results[index] == 0 && (read_image || impl_->capture_file)) {
+        // The image position is read every frame: where a sphere was last
+        // seen tells whether it left the frame when tracking fails.
+        (void)read_image;
+        if (results[index] == 0) {
             image_results[index] = gemGetImageState(index, &images[index]);
             const int camera_width = impl_->camera_info.width > 0
                 ? impl_->camera_info.width : 640;
@@ -382,8 +415,17 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
                 image.v >= 0.0f && image.v < camera_height) {
                 frame.image[index].x = image.u / camera_width;
                 frame.image[index].y = image.v / camera_height;
+                frame.image[index].radius = image.r;
                 frame.image[index].valid = true;
             }
+        }
+        // What libgem noticed (lighting, colours, calibration trouble):
+        // collected for the session and cleared once read.
+        u64 status_flags = 0;
+        if (gemGetStatusFlags(index, &status_flags) == 0 && status_flags) {
+            impl_->last_status_flags[index] = status_flags;
+            impl_->status_flags_seen |= status_flags;
+            gemClearStatusFlags(index, status_flags);
         }
         if (results[index] == 0) impl_->last_button_ready_mask |= 1u << index;
         if (results[index] != 0) {

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Tracking diagnostics: every camera loss of a Move during a song goes to
+  `tracking_log.csv` (where the sphere was last seen, how long, what libgem
+  said); `run_status.ini` sums them up and adds libgem's status flags and
+  the camera's exposure, gain and pitch.
+- libgem's camera pitch correction is on, so a tilted PS Eye no longer
+  mixes hand height into depth (`pitch_correction=off` in `renderer.ini`).
 - Cut cubes split along the blade's swing into two halves that fly apart,
   tumble and fall, then fade out; the cut faces glow with a neon rim and a
   slash streak marks the cut. Each half gets its own spread, fall, spin and

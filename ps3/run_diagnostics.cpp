@@ -30,7 +30,12 @@ RunStatus::RunStatus()
       gem_slot1_flags(0), tracking_pause_slot0_result(-1),
       tracking_pause_slot1_result(-1), tracking_pause_slot0_flags(0),
       tracking_pause_slot1_flags(0), tracking_quit_count(0), pause_menu_opens(0), level_restarts(0),
-      pause_quits(0), pause_calibrations(0), results_replays(0), combo_breaks(0), cut_pieces_max(0), wall_rumbles(0), depth_range_cm(30), imu_held_frames(0), camera_depth(0), camera_exposure(128), camera_quality_pct(50),
+      pause_quits(0), pause_calibrations(0), results_replays(0), combo_breaks(0), cut_pieces_max(0), pitch_correction(1), pitch_correction_result(0),
+      gem_status_flags_seen(0), gem_status_slot0(0), gem_status_slot1(0),
+      camera_exposure_live(0), camera_exposure_time_x1000(0), camera_gain_x1000(0),
+      camera_pitch_x1000(0), camera_pitch_estimate_x1000(0), loss_slot0(0),
+      loss_slot1(0), loss_total_ms(0), loss_longest_ms(0), loss_near_edge(0),
+      loss_short(0), wall_rumbles(0), depth_range_cm(30), imu_held_frames(0), camera_depth(0), camera_exposure(128), camera_quality_pct(50),
       imu_slot0_variant(0), imu_slot1_variant(0), imu_slot0_error_deg(0),
       imu_slot1_error_deg(0), imu_slot0_scored(0), imu_slot1_scored(0),
       calibration_step(0), body_up_inverted(0), body_narrow_sides(0),
@@ -95,7 +100,13 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "tracking_pause_slot0_flags=%u\ntracking_pause_slot1_flags=%u\n"
             "tracking_quit_count=%u\n"
             "pause_menu_opens=%u\nlevel_restarts=%u\npause_quits=%u\n"
-            "pause_calibrations=%u\nresults_replays=%u\ncombo_breaks=%u\ncut_pieces_max=%u\nwall_rumbles=%u\ndepth_range_cm=%d\n"
+            "pause_calibrations=%u\nresults_replays=%u\ncombo_breaks=%u\ncut_pieces_max=%u\npitch_correction=%d\npitch_correction_result=%d\n"
+            "gem_status_flags_seen=0x%llx\ngem_status_slot0=0x%llx\n"
+            "gem_status_slot1=0x%llx\ncamera_exposure_live=%d\n"
+            "camera_exposure_time_x1000=%d\ncamera_gain_x1000=%d\n"
+            "camera_pitch_x1000=%d\ncamera_pitch_estimate_x1000=%d\n"
+            "loss_slot0=%u\nloss_slot1=%u\nloss_total_ms=%u\nloss_longest_ms=%u\n"
+            "loss_near_edge=%u\nloss_short=%u\nwall_rumbles=%u\ndepth_range_cm=%d\n"
             "imu_held_frames=%u\ncamera_depth=%d\ncamera_exposure=%d\ncamera_quality_pct=%d\n"
             "imu_slot0_variant=%d\nimu_slot1_variant=%d\n"
             "imu_slot0_error_deg=%d\nimu_slot1_error_deg=%d\n"
@@ -163,7 +174,13 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.tracking_pause_slot0_flags, status.tracking_pause_slot1_flags,
             status.tracking_quit_count, status.pause_menu_opens,
             status.level_restarts, status.pause_quits, status.pause_calibrations,
-            status.results_replays, status.combo_breaks, status.cut_pieces_max, status.wall_rumbles,
+            status.results_replays, status.combo_breaks, status.cut_pieces_max, status.pitch_correction, status.pitch_correction_result,
+            status.gem_status_flags_seen, status.gem_status_slot0, status.gem_status_slot1,
+            status.camera_exposure_live, status.camera_exposure_time_x1000,
+            status.camera_gain_x1000, status.camera_pitch_x1000,
+            status.camera_pitch_estimate_x1000, status.loss_slot0, status.loss_slot1,
+            status.loss_total_ms, status.loss_longest_ms, status.loss_near_edge,
+            status.loss_short, status.wall_rumbles,
             status.depth_range_cm, status.imu_held_frames,
             status.camera_depth, status.camera_exposure, status.camera_quality_pct,
             status.imu_slot0_variant, status.imu_slot1_variant,

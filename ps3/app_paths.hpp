@@ -13,6 +13,8 @@ const char kUsbLevelRootFormat[] = "/dev_usb%03d/MOVEBEAT/levels";
 const char kScoreLog[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/scores.log";
 const char kSettingsPath[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/settings.ini";
 const char kCapturePath[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/gem_capture.csv";
+// Every time the camera lost a Move during the latest song.
+const char kTrackingLogPath[] = "/dev_hdd0/game/MOVEBEAT1/USRDIR/tracking_log.csv";
 const char kStartupReportPath[] =
     "/dev_hdd0/game/MOVEBEAT1/USRDIR/startup_error.txt";
 const char kRunStatusPath[] =

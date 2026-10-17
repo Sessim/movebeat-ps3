@@ -64,6 +64,19 @@ public:
     void setHandHueValues(unsigned int left_hue, unsigned int right_hue);
     // libgem's state filter (gemFilterState), from the next initialize().
     void setStateFilter(bool enabled);
+    // libgem's camera pitch correction (gemEnableCameraPitchAngleCorrection),
+    // from the next initialize(): positions come out level even when the
+    // PS Eye is tilted, instead of mixing height into depth.
+    void setPitchCorrection(bool enabled);
+    int pitchCorrectionResult() const;
+    // libgem's status flags (CELL_GEM_FLAG_*): every flag raised since
+    // start, and the latest ones raised for a physical slot.
+    unsigned long long statusFlagsSeen() const;
+    unsigned long long lastStatusFlags(unsigned int slot) const;
+    // The PS Eye as libgem drives it (gemGetCameraState, every second):
+    // exposure, exposure time, gain, pitch angle and its estimate.
+    bool cameraState(int& exposure, float& exposure_time, float& gain,
+                     float& pitch, float& pitch_estimate) const;
     bool startCapture(const char* path);
     void stopCapture();
     bool captureActive() const;

@@ -86,6 +86,27 @@ struct RunStatus {
     unsigned int combo_breaks;
     // Most halves of cut cubes drawn in one frame.
     unsigned int cut_pieces_max;
+    // libgem camera pitch correction (setting, call result), its status
+    // flags (CELL_GEM_FLAG_*: all seen, latest per slot) and the camera as
+    // libgem drives it (exposure, exposure time, gain, pitch; x1000).
+    int pitch_correction;
+    int pitch_correction_result;
+    unsigned long long gem_status_flags_seen;
+    unsigned long long gem_status_slot0;
+    unsigned long long gem_status_slot1;
+    int camera_exposure_live;
+    int camera_exposure_time_x1000;
+    int camera_gain_x1000;
+    int camera_pitch_x1000;
+    int camera_pitch_estimate_x1000;
+    // Camera losses in the latest song: per slot, total and longest time,
+    // how many began at the frame's edge and how many were brief flicker.
+    unsigned int loss_slot0;
+    unsigned int loss_slot1;
+    unsigned int loss_total_ms;
+    unsigned int loss_longest_ms;
+    unsigned int loss_near_edge;
+    unsigned int loss_short;
     unsigned int wall_rumbles;
     // renderer.ini depth_range_cm in use.
     int depth_range_cm;

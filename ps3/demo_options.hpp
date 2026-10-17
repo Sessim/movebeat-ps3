@@ -68,11 +68,14 @@ struct RenderOptions {
     // "depth_range_cm=N": how far a hand may move toward the chest or
     // forward of the forward calibration pose (default 30).
     int depth_range_cm;
+    // "pitch_correction=off": no libgem camera pitch correction.
+    bool pitch_correction;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
-                      camera_depth(true), depth_range_cm(30) {}
+                      camera_depth(true), depth_range_cm(30),
+                      pitch_correction(true) {}
 };
 
 RenderOptions readRenderOptions();
