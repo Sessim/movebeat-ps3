@@ -409,13 +409,15 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
             const int camera_height = impl_->camera_info.height > 0
                 ? impl_->camera_info.height : 480;
             const gemImageState& image = images[index];
-            if (image_results[index] == 0 && image.visible && image.r_valid &&
+            // The radius is often not valid when the place is: the console
+            // log kept one place for seconds while it waited for both.
+            if (image_results[index] == 0 && image.visible &&
                 std::isfinite(image.u) && std::isfinite(image.v) &&
                 image.u >= 0.0f && image.u < camera_width &&
                 image.v >= 0.0f && image.v < camera_height) {
                 frame.image[index].x = image.u / camera_width;
                 frame.image[index].y = image.v / camera_height;
-                frame.image[index].radius = image.r;
+                frame.image[index].radius = image.r_valid ? image.r : 0.0f;
                 frame.image[index].valid = true;
             }
         }

@@ -38,7 +38,12 @@ public:
     ImuSaberTracker() { reset(); }
 
     // A hand moves well under this much in one frame; a bigger camera jump
-    // is a tracking glitch, unless the new place holds for jumpFrames().
+    // across or up is a tracking glitch, unless the new place holds for
+    // jumpFrames(). Depth is left out: it comes from the sphere's size, so
+    // it jumps far more than the hand, and output() already limits it to
+    // maxDepthStep() a frame. Measured with depth, the smoothed depth lagged
+    // the camera's by more than maxJump() and every sixth frame got through:
+    // the hand froze for 83 ms again and again on the console.
     static float maxJump() { return 0.35f; }
     static unsigned int jumpFrames() { return 6; }
     // Depth smoothing, after psmoveapi's adaptive radius smoothing
@@ -87,8 +92,10 @@ public:
                 pose.handle.z += shift;
                 pose.tip.z += shift;
             }
+            const float across = pose.handle.x - output_handle_.x;
+            const float up = pose.handle.y - output_handle_.y;
             const bool jump = have_output_ &&
-                lengthSquared(pose.handle - output_handle_) > maxJump() * maxJump();
+                across * across + up * up > maxJump() * maxJump();
             if (jump && ++jump_frames_ < jumpFrames()) {
                 // Hold through the glitch below.
             } else {

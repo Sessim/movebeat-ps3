@@ -397,6 +397,20 @@ void testImuHold() {
         out = depth.update(time, movebeat::SaberPose(deeper, deeper + blade, true), true, still);
     }
     expect(std::fabs(out.handle.z - 2.3f) < 0.01f, "depth settles on the new value");
+
+    // A depth reading far from the smoothed depth is not a jump: the hand
+    // follows across and up every frame instead of freezing.
+    ImuSaberTracker swing;
+    time = 12000;
+    swing.update(time, movebeat::SaberPose(at, at + blade, true), true, still);
+    bool froze = false;
+    for (int frame = 0; frame < 30; ++frame) {
+        time += 17;
+        const movebeat::Vec3 moved(0.01f * frame, 1.2f, frame % 2 ? 2.6f : 1.5f);
+        out = swing.update(time, movebeat::SaberPose(moved, moved + blade, true), true, still);
+        if (swing.held() || !near(out.handle.x, 0.01f * frame)) froze = true;
+    }
+    expect(!froze, "depth noise never holds the hand as a jump");
 }
 
 void testAudioCache() {
