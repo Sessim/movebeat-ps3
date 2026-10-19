@@ -152,20 +152,23 @@ bool Framebuffer::initialize(RendererPreference preference, bool full_hd) {
         return false;
     }
     // The software fallback writes every pixel from the PPU, so it stays at
-    // 720p; the RSX draws 1080p when the TV takes it.
+    // 720p. 1080p only on request and only when the system already outputs
+    // it: switching the output up to 1080p from 720p rebooted a console.
     const u32 fallback_id =
         videoGetResolutionAvailability(VIDEO_PRIMARY, VIDEO_RESOLUTION_720,
                                        VIDEO_ASPECT_AUTO, 0) == 1
         ? VIDEO_RESOLUTION_720 : state.displayMode.resolution;
     const bool want_full_hd = full_hd && preference == RENDERER_PREFER_RSX &&
-        videoGetResolutionAvailability(VIDEO_PRIMARY, VIDEO_RESOLUTION_1080,
-                                       VIDEO_ASPECT_AUTO, 0) == 1;
+        state.displayMode.resolution == VIDEO_RESOLUTION_1080;
     const u32 resolution_id = want_full_hd ? VIDEO_RESOLUTION_1080 : fallback_id;
+    // Each step is on disk before it runs, so a hang names it.
+    if (want_full_hd) recordVideoStage("configuring_1080");
     if (!configureDisplay(resolution_id, want_full_hd)) {
         shutdown();
         return false;
     }
     recordVideoStage(want_full_hd ? "buffers_ready_1080" : "buffers_ready");
+    if (want_full_hd) recordVideoStage("rsx_starting_1080");
 
     rsx_ = preference == RENDERER_PREFER_RSX &&
            gpu_.initialize(context_, display_width_, display_height_);

@@ -27,12 +27,13 @@ public:
     Framebuffer();
     ~Framebuffer();
 
-    // `full_hd`: on the RSX, output 1080p when the TV takes it. Everything
+    // `full_hd`: on the RSX, output 1080p when the system already outputs
+    // it (the output is never switched up to 1080p). Everything
     // is still drawn in 1280x720 coordinates (width(), height()); the RSX
     // scales the geometry to the 1920x1080 surface, so lines, cubes and the
     // font are drawn at full resolution and the layout is unchanged.
     bool initialize(RendererPreference preference = RENDERER_PREFER_RSX,
-                    bool full_hd = true);
+                    bool full_hd = false);
     void shutdown();
     void waitForPreviousFlip();
     void beginFrame(u32 color);

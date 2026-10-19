@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- 1080p output on the RSX when the TV takes it: the same layout, drawn at
-  full resolution (`resolution=720` in `renderer.ini` keeps 720p).
+- Experimental 1080p (`resolution=1080` in `renderer.ini`): when the system
+  already outputs 1080p, the RSX draws the same layout at full resolution.
+  Off by default: switching the output up from 720p rebooted a console.
 - The track list shows each difficulty's best score beside the track, in
   the difficulty's color.
 - Fixed: depth noise no longer freezes a hand for 83 ms at a time as a
