@@ -183,13 +183,20 @@ missing manifests, unsafe names and collisions with bundled levels.
 
 ## Head camera (head-tracking branch, preview)
 
-A Move worn on the head (sphere facing the screen) moves the camera; this
-first build does not use the hands. It is on by default in this branch
+A Move worn on the head (sphere facing the screen) moves the camera, and
+with two Moves the other one is the right saber (one hand plus the head, for
+OneSaber maps or any map's right-hand notes). It is on by default in this branch
 (`head_preview=off` in `renderer.ini` plays as usual).
 
 - Starting a track opens the head setup: press Move on the head Move. The
   press recalibrates its sphere; 0.7 s of steady view becomes the camera's
   home.
+- With a second Move connected, the setup goes on to the saber: arm
+  straight forward, pointing at the screen, press its Move. The press
+  recalibrates its sphere and 0.5 s of steady pose gives the play space
+  (`singleHandFrame` in `calibration.hpp`: facing and depth flip from the
+  blade, the hand 20 cm right of the centre). Only the saber rumbles; the
+  hand tracking pause is off in this mode. With one Move, the cubes fly past.
 - During the song the camera follows the head (`HeadCamera` in
   `head_camera.hpp`): leans and ducks are amplified 1.5 times, steps toward
   the screen count a third as much; the offset is smoothed and limited
@@ -197,7 +204,8 @@ first build does not use the hands. It is on by default in this branch
   its orientation, so the scene shows parallax; `cameraOffset()` in
   `projection.hpp` moves every world projection and the cube face choice.
 - Any Move: Triangle/Circle change the gain by 0.25, Square mirrors X,
-  Cross flips depth, Move takes the current head position as home.
+  Cross flips depth, the head Move's own Move button takes the current head
+  position as home.
   `HEAD NOT SEEN` shows while the camera loses the sphere.
 - `run_status.ini`: `head_slot`, `head_seen_frames`, `head_lost_frames`,
   `head_offset_*_mm`, `head_gain_pct`, `head_mirror_x`, `head_flip_z`.

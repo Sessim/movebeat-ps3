@@ -418,5 +418,33 @@ private:
     unsigned int partial_measures_;
 };
 
+// The play space from one hand's forward pose (arm stretched forward, blade
+// at the screen), for playing with a single saber: the facing, depth flip
+// and turn come from the blade as in BodyCalibration's forward pose, and the
+// hand stands `side_offset` meters right of the centre (negative: left), as
+// it would beside the other hand.
+inline BodyFrame singleHandFrame(const SaberPose& forward, float side_offset = 0.2f) {
+    BodyFrame frame;
+    const Vec3 direction = normalized(forward.tip - forward.handle);
+    frame.flip_depth = !(direction.z > 0.3f);
+    const float horizontal = std::sqrt(direction.x * direction.x + direction.z * direction.z);
+    if (horizontal >= 0.7f) {
+        const float degrees = (frame.flip_depth ? std::atan2(direction.x, -direction.z)
+                                                : -std::atan2(direction.x, direction.z)) *
+                              57.29577951308232f;
+        if (std::fabs(degrees) <= BodyCalibration::maximumTurnDegrees()) {
+            const float radians = degrees * 0.01745329251994329577f;
+            frame.yaw_cos = std::cos(radians);
+            frame.yaw_sin = std::sin(radians);
+        }
+    }
+    // A camera-space offset that play space sees as `side_offset` to the
+    // right: undo the depth flip (x is unchanged by it), then the turn.
+    const Vec3 side(side_offset * frame.yaw_cos, 0.0f, side_offset * frame.yaw_sin);
+    frame.handle_origin = forward.handle;
+    frame.hit_origin = forward.handle + direction * BodyFrame::hitDepth() - side;
+    return frame;
+}
+
 } // namespace movebeat
 #endif

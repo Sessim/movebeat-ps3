@@ -95,7 +95,9 @@ void drawCaptureIndicator(Framebuffer& screen);
 // with `total` 0, how many the finished copy added.
 void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total);
 // Head-camera setup: 0 = press Move on the head Move, 1 = its sphere is
-// being calibrated (not seen yet), 2 = hold still while it is measured.
+// being calibrated (not seen yet), 2 = hold still while it is measured;
+// then the saber: 3 = press its Move pointing at the screen, 4 = its sphere
+// is being calibrated, 5 = hold still.
 void drawHeadSetup(Framebuffer& screen, int state);
 // During a song: the head camera's settings (with the button help when
 // `show_help`) and a warning while the camera does not see the head.

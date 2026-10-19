@@ -568,6 +568,31 @@ void testMultiplier() {
     expect(game.score().score == 90, "fifth centered note receives x2 multiplier");
 }
 
+void testSingleHandFrame() {
+    using movebeat::Vec3;
+    // Pointing at the camera (its -z, as libgem reports on hardware).
+    const movebeat::SaberPose forward(Vec3(0.3f, 1.2f, 2.0f), Vec3(0.3f, 1.2f, 1.6f), true);
+    const movebeat::BodyFrame frame = movebeat::singleHandFrame(forward);
+    const movebeat::SaberPose play = frame.apply(forward);
+    expect(frame.flip_depth, "a blade at the camera flips depth for one hand too");
+    expect(std::fabs(play.handle.x - 0.2f) < 1e-4f && std::fabs(play.handle.y) < 1e-4f &&
+           std::fabs(play.handle.z + movebeat::BodyFrame::hitDepth()) < 1e-4f,
+           "the hand stands 20 cm right of the centre, an arm in front of the hit plane");
+    expect(play.tip.z > play.handle.z + 0.39f, "its blade points forward in play space");
+    // A player turned 20 degrees still gets the hand on the right and the
+    // blade forward.
+    const float radians = 20.0f * 0.0174533f;
+    const Vec3 turned_tip(0.3f - 0.4f * std::sin(radians), 1.2f, 2.0f - 0.4f * std::cos(radians));
+    const movebeat::SaberPose turned(Vec3(0.3f, 1.2f, 2.0f), turned_tip, true);
+    const movebeat::SaberPose turned_play = movebeat::singleHandFrame(turned).apply(turned);
+    expect(std::fabs(turned_play.handle.x - 0.2f) < 1e-3f &&
+           std::fabs(turned_play.tip.x - turned_play.handle.x) < 1e-3f,
+           "a turned player is turned back: hand right, blade straight ahead");
+    const movebeat::SaberPose left_play =
+        movebeat::singleHandFrame(forward, -0.2f).apply(forward);
+    expect(std::fabs(left_play.handle.x + 0.2f) < 1e-4f, "a left hand stands left");
+}
+
 void testComboBreak() {
     movebeat::Chart chart;
     chart.notes.push_back(makeNote(1000, 1, 1, movebeat::HAND_LEFT, movebeat::CUT_RIGHT));
@@ -1622,6 +1647,7 @@ int main() {
     checkpoint("wrong hand"); testWrongHand();
     checkpoint("multiplier"); testMultiplier();
     checkpoint("combo break"); testComboBreak();
+    checkpoint("single hand frame"); testSingleHandFrame();
     checkpoint("frame-rate independence"); testFrameRateIndependentSwingAndStacks();
     checkpoint("swing quality"); testPreAndPostSwingQuality();
     checkpoint("follow-through deadline"); testFollowThroughDeadline();

@@ -405,6 +405,7 @@ void App::startDemo() {
     if (imported_level_) startLevelAudio("Demo audio start failed", false);
     if (demo_options_.head_test) {
         head_slot_ = 0;
+        hand_active_ = true;
         diagnostic_.head_slot = 0;
         head_camera_.recenter(Vec3(0.0f, 0.0f, 2.0f));
         head_help_ms_ = nowMilliseconds() | 1u;
@@ -1536,6 +1537,10 @@ void App::beginHeadSetup() {
     head_setup_ = true;
     head_slot_ = -1;
     head_steady_since_ms_ = 0;
+    head_stage_ = 0;
+    hand_slot_ = -1;
+    hand_pressed_ = false;
+    hand_active_ = false;
     printf("Head camera: press Move on the head Move\n");
 }
 
@@ -1544,6 +1549,8 @@ void App::updateHeadSetup(FrameInput& input) {
     if (input.buttons.pressed & kButtonCross) {
         head_setup_ = false;
         printf("Head camera setup cancelled\n");
+    } else if (head_stage_ == 1) {
+        updateHandSetup(input);
     } else {
         const unsigned short pressed[2] = {input.buttons.left_pressed,
                                            input.buttons.right_pressed};
@@ -1567,12 +1574,25 @@ void App::updateHeadSetup(FrameInput& input) {
             // The average of 0.7 s in view is the camera's home.
             if (now_ms - head_steady_since_ms_ >= 700u) {
                 head_camera_.recenter(head_sum_ * (1.0f / head_samples_));
-                head_setup_ = false;
                 head_help_ms_ = now_ms | 1u;
-                input.calibrated_start = true;
                 ++diagnostic_.head_recenters;
                 diagnostic_.head_slot = head_slot_;
                 printf("Head camera: home taken from slot %d\n", head_slot_);
+                // The other Move, when connected, becomes the right saber.
+                const int other = 1 - head_slot_;
+                const bool other_connected = other == 0 ? input.moves.left_connected
+                                                        : input.moves.right_connected;
+                if (other_connected) {
+                    head_stage_ = 1;
+                    hand_slot_ = other;
+                    hand_pressed_ = false;
+                    hand_steady_since_ms_ = 0;
+                    printf("Head camera: now the saber Move (slot %d)\n", other);
+                } else {
+                    hand_active_ = false;
+                    head_setup_ = false;
+                    input.calibrated_start = true;
+                }
             }
         } else if (head_slot_ >= 0) {
             head_steady_since_ms_ = 0;
@@ -1585,6 +1605,48 @@ void App::updateHeadSetup(FrameInput& input) {
     input.start_pressed = false;
     input.move_tap_slot = -1;
     input.move_long_chord = false;
+}
+
+void App::updateHandSetup(FrameInput& input) {
+    const unsigned short pressed = hand_slot_ == 0 ? input.buttons.left_pressed
+                                                   : input.buttons.right_pressed;
+    if (pressed & GEM_BUTTON_MOVE) {
+        // Pointed at the screen, so at the camera: libgem's calibration
+        // wants exactly that pose.
+        hand_pressed_ = true;
+        hand_steady_since_ms_ = 0;
+        if (gem_.calibrateSlot(static_cast<unsigned int>(hand_slot_)))
+            printf("Saber: sphere %d recalibrating\n", hand_slot_);
+    }
+    const movebeat::SaberPose& pose = hand_slot_ == 0 ? input.optical.left : input.optical.right;
+    if (!hand_pressed_ || !pose.tracked || input.moves.partial[hand_slot_]) {
+        hand_steady_since_ms_ = 0;
+        return;
+    }
+    const unsigned int now_ms = nowMilliseconds();
+    if (!hand_steady_since_ms_) {
+        hand_steady_since_ms_ = now_ms | 1u;
+        hand_handle_sum_ = Vec3();
+        hand_tip_sum_ = Vec3();
+        hand_samples_ = 0;
+    }
+    hand_handle_sum_ = hand_handle_sum_ + pose.handle;
+    hand_tip_sum_ = hand_tip_sum_ + pose.tip;
+    ++hand_samples_;
+    if (now_ms - hand_steady_since_ms_ < 500u) return;
+    const float share = 1.0f / hand_samples_;
+    const movebeat::SaberPose forward(hand_handle_sum_ * share, hand_tip_sum_ * share, true);
+    body_frame_ = movebeat::singleHandFrame(forward);
+    body_frame_.depth_back = body_frame_.depth_forward = depth_range_;
+    pose_calibrated_ = true;
+    // The saber is the right hand: slot 1 unless it is the hand slot 0.
+    setHandAssignment(hand_slot_ == 0);
+    hand_active_ = true;
+    head_setup_ = false;
+    input.calibrated_start = true;
+    diagnostic_.body_flip_depth = body_frame_.flip_depth ? 1 : 0;
+    printf("Saber: right hand on slot %d, depth %s\n", hand_slot_,
+           body_frame_.flip_depth ? "flipped" : "kept");
 }
 
 void App::updateHeadCamera(const FrameInput& input, bool paused_at_frame_start) {
@@ -1611,8 +1673,10 @@ void App::updateHeadCamera(const FrameInput& input, bool paused_at_frame_start) 
     else if (pressed & kButtonCircle) head_camera_.changeGain(-0.25f);
     else if (pressed & kButtonSquare) head_camera_.toggleMirrorX();
     else if (pressed & kButtonCross) head_camera_.toggleFlipZ();
-    else if (((input.buttons.left_pressed | input.buttons.right_pressed) & GEM_BUTTON_MOVE) &&
-             seen) {
+    else if (seen && ((head_slot_ == 0 ? input.buttons.left_pressed
+                                       : input.buttons.right_pressed) & GEM_BUTTON_MOVE)) {
+        // Only the head Move's own button: the saber's Move must not move
+        // the camera's home.
         head_camera_.recenter(input.moves.sphere[head_slot_]);
         ++diagnostic_.head_recenters;
     } else {
@@ -1719,11 +1783,12 @@ void App::updateGameplay(FrameInput& input) {
     MoveFrame& moves = input.moves;
     if (hand_slots_swapped_) swapMoveFrameHands(moves);
     if (head_preview_) {
-        // The view only: no blades, the cubes fly past.
+        // The head Move is never a blade; the other one is the right saber
+        // once calibrated, otherwise the cubes just fly past.
         moves.left = movebeat::SaberPose();
-        moves.right = movebeat::SaberPose();
+        if (!hand_active_) moves.right = movebeat::SaberPose();
     }
-    if (run_state_ == RUN_PLAY && !head_preview_) {
+    if (run_state_ == RUN_PLAY && (!head_preview_ || hand_active_)) {
         moves.left = body_frame_.apply(moves.left);
         moves.right = body_frame_.apply(moves.right);
         // Physical reach limits for real controllers (the emulator's
@@ -1784,7 +1849,10 @@ void App::updateGameplay(FrameInput& input) {
         }
     }
     // A Move worn on the head must not buzz at every passing cube.
-    if (head_preview_) left_rumble_frames_ = right_rumble_frames_ = 0;
+    if (head_preview_) {
+        left_rumble_frames_ = 0;
+        if (!hand_active_) right_rumble_frames_ = 0;
+    }
     applyRumble();
     const bool audio_tail_finished = !audio_clock_ || audio_.finished() ||
                                      game_.score().failed;
@@ -1961,8 +2029,13 @@ void App::renderOverlays(const FrameInput& input) {
     if (run_state_ == RUN_PLAY && imported_level_ && !selected_level_.charts.empty())
         drawChartPips(screen_, selected_level_.charts.size(), selected_chart_index_);
     if (head_setup_ && run_state_ == RUN_SELECT) {
-        const bool seen = head_slot_ >= 0 && input.moves.sphere_seen[head_slot_];
-        drawHeadSetup(screen_, head_slot_ < 0 ? 0 : (seen ? 2 : 1));
+        if (head_stage_ == 1) {
+            const bool hand_seen = hand_slot_ >= 0 && input.moves.sphere_seen[hand_slot_];
+            drawHeadSetup(screen_, !hand_pressed_ ? 3 : (hand_seen ? 5 : 4));
+        } else {
+            const bool seen = head_slot_ >= 0 && input.moves.sphere_seen[head_slot_];
+            drawHeadSetup(screen_, head_slot_ < 0 ? 0 : (seen ? 2 : 1));
+        }
     }
     if (head_preview_ && run_state_ == RUN_PLAY && !paused_) {
         const bool seen = demo_mode_ || (head_slot_ >= 0 && input.moves.sphere_seen[head_slot_]);

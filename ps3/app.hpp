@@ -234,10 +234,21 @@ private:
     Vec3 head_sum_;
     unsigned int head_samples_ = 0;
     HeadCamera head_camera_;
+    // One hand plus the head: after the head, the other Move is the right
+    // saber, calibrated from one forward pose (head_stage_ 1).
+    int head_stage_ = 0;
+    int hand_slot_ = -1;
+    bool hand_pressed_ = false;
+    bool hand_active_ = false;
+    unsigned int hand_steady_since_ms_ = 0;
+    Vec3 hand_handle_sum_;
+    Vec3 hand_tip_sum_;
+    unsigned int hand_samples_ = 0;
     // The settings line shows for a few seconds after a start or a change.
     unsigned int head_help_ms_ = 0;
     void beginHeadSetup();
     void updateHeadSetup(FrameInput& input);
+    void updateHandSetup(FrameInput& input);
     void updateHeadCamera(const FrameInput& input, bool paused_at_frame_start);
     void queueUsbImport(unsigned int mask);
     void updateUsbImport();

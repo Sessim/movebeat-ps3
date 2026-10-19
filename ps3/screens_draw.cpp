@@ -615,15 +615,21 @@ void drawHeadSetup(Framebuffer& screen, int state) {
     const int y = (screen.height() - height) / 2;
     screen.rectangle(x, y, width, height, 0xff1a2440u);
     screen.rectangle(x + 4, y + 4, width - 8, height - 8, 0xff0c1222u);
-    drawMenuText(screen, "HEAD CAMERA", x + 30, y + 26, 4, 0xff70d8ffu);
-    drawMenuText(screen, "PUT A MOVE ON YOUR HEAD  SPHERE FACING THE SCREEN",
+    const bool saber = state >= 3;
+    drawMenuText(screen, saber ? "RIGHT SABER" : "HEAD CAMERA", x + 30, y + 26, 4,
+                 saber ? 0xffff6878u : 0xff70d8ffu);
+    drawMenuText(screen, saber ? "HOLD THE OTHER MOVE IN YOUR RIGHT HAND"
+                               : "PUT A MOVE ON YOUR HEAD  SPHERE FACING THE SCREEN",
                  x + 30, y + 86, 2, 0xffd9e7ffu);
-    drawMenuText(screen, "STAND WHERE YOU PLAY AND LOOK AT THE SCREEN",
+    drawMenuText(screen, saber ? "ARM STRAIGHT FORWARD  POINT IT AT THE SCREEN"
+                               : "STAND WHERE YOU PLAY AND LOOK AT THE SCREEN",
                  x + 30, y + 112, 2, 0xffd9e7ffu);
-    const char* status = state == 0 ? "PRESS MOVE ON THE HEAD MOVE" :
-        (state == 1 ? "CALIBRATING THE SPHERE  KEEP STILL" : "HOLD STILL");
+    const int step = saber ? state - 3 : state;
+    const char* status = step == 0 ? (saber ? "PRESS MOVE ON THE SABER" :
+                                              "PRESS MOVE ON THE HEAD MOVE") :
+        (step == 1 ? "CALIBRATING THE SPHERE  KEEP STILL" : "HOLD STILL");
     drawMenuText(screen, status, x + 30, y + 160, 3,
-                 state == 2 ? 0xff70e0a0u : 0xfff0d050u);
+                 step == 2 ? 0xff70e0a0u : 0xfff0d050u);
     drawMenuText(screen, "CROSS  BACK", x + 30, y + height - 40, 2, 0xff9cb3d3u);
 }
 
