@@ -78,7 +78,7 @@ bool writePpmPixels(const char* path, const u32* source, int width, int height) 
 
 Framebuffer::Framebuffer()
     : context_(0), host_memory_(0), current_(0), width_(0), height_(0),
-      pitch_(0), clear_color_(0xff050510u), initialized_(false), flip_submitted_(false),
+      display_width_(0), display_height_(0), pitch_(0), clear_color_(0xff050510u), initialized_(false), flip_submitted_(false),
       software_depth_(0), note_depth_active_(false), last_solid_note_count_(0), last_cut_piece_count_(0),
       rsx_(false), effects_(true), frame_submitted_(false),
       last_batch_vertices_(0),
@@ -91,7 +91,7 @@ Framebuffer::~Framebuffer() {
 }
 
 bool Framebuffer::makeBuffer(int index) {
-    const int byte_count = pitch_ * height_;
+    const int byte_count = pitch_ * display_height_;
     buffers_[index].pixels = static_cast<u32*>(rsxMemalign(64, byte_count));
     if (!buffers_[index].pixels) return false;
     if (rsxAddressToOffset(buffers_[index].pixels, &buffers_[index].offset) != 0) {
@@ -100,10 +100,40 @@ bool Framebuffer::makeBuffer(int index) {
         return false;
     }
     buffers_[index].id = index;
-    return gcmSetDisplayBuffer(index, buffers_[index].offset, pitch_, width_, height_) == 0;
+    return gcmSetDisplayBuffer(index, buffers_[index].offset, pitch_, display_width_,
+                               display_height_) == 0;
 }
 
-bool Framebuffer::initialize(RendererPreference preference) {
+void Framebuffer::freeBuffers() {
+    for (int i = 0; i < 2; ++i) {
+        if (buffers_[i].pixels) {
+            rsxFree(buffers_[i].pixels);
+            buffers_[i].pixels = 0;
+        }
+    }
+}
+
+bool Framebuffer::configureDisplay(u32 resolution_id, bool scaled) {
+    videoResolution resolution;
+    if (videoGetResolution(resolution_id, &resolution) != 0) return false;
+    display_width_ = resolution.width;
+    display_height_ = resolution.height;
+    // Scaled: the layout stays in 720p coordinates.
+    width_ = scaled ? 1280 : display_width_;
+    height_ = scaled ? 720 : display_height_;
+    pitch_ = display_width_ * static_cast<int>(sizeof(u32));
+
+    videoConfiguration config;
+    memset(&config, 0, sizeof(config));
+    config.resolution = static_cast<u8>(resolution_id);
+    config.format = VIDEO_BUFFER_FORMAT_XRGB;
+    config.pitch = pitch_;
+    config.aspect = VIDEO_ASPECT_AUTO;
+    return videoConfigure(VIDEO_PRIMARY, &config, 0, 0) == 0 &&
+           makeBuffer(0) && makeBuffer(1);
+}
+
+bool Framebuffer::initialize(RendererPreference preference, bool full_hd) {
     if (initialized_) return true;
 
     host_memory_ = memalign(1024 * 1024, kHostMemorySize);
@@ -117,40 +147,36 @@ bool Framebuffer::initialize(RendererPreference preference) {
     recordVideoStage("rsx_ready");
 
     videoState state;
-    videoResolution resolution;
     if (videoGetState(VIDEO_PRIMARY, 0, &state) != 0 || state.state != 0) {
         shutdown();
         return false;
     }
-    // Prefer 720p: the software fallback writes every pixel from the PPU,
-    // and 1080p adds nothing useful for tracking or readability.
-    const u32 resolution_id =
+    // The software fallback writes every pixel from the PPU, so it stays at
+    // 720p; the RSX draws 1080p when the TV takes it.
+    const u32 fallback_id =
         videoGetResolutionAvailability(VIDEO_PRIMARY, VIDEO_RESOLUTION_720,
                                        VIDEO_ASPECT_AUTO, 0) == 1
         ? VIDEO_RESOLUTION_720 : state.displayMode.resolution;
-    if (videoGetResolution(resolution_id, &resolution) != 0) {
+    const bool want_full_hd = full_hd && preference == RENDERER_PREFER_RSX &&
+        videoGetResolutionAvailability(VIDEO_PRIMARY, VIDEO_RESOLUTION_1080,
+                                       VIDEO_ASPECT_AUTO, 0) == 1;
+    const u32 resolution_id = want_full_hd ? VIDEO_RESOLUTION_1080 : fallback_id;
+    if (!configureDisplay(resolution_id, want_full_hd)) {
         shutdown();
         return false;
     }
-    width_ = resolution.width;
-    height_ = resolution.height;
-    pitch_ = width_ * static_cast<int>(sizeof(u32));
-
-    videoConfiguration config;
-    memset(&config, 0, sizeof(config));
-    config.resolution = static_cast<u8>(resolution_id);
-    config.format = VIDEO_BUFFER_FORMAT_XRGB;
-    config.pitch = pitch_;
-    config.aspect = VIDEO_ASPECT_AUTO;
-    if (videoConfigure(VIDEO_PRIMARY, &config, 0, 0) != 0 ||
-        !makeBuffer(0) || !makeBuffer(1)) {
-        shutdown();
-        return false;
-    }
-    recordVideoStage("buffers_ready");
+    recordVideoStage(want_full_hd ? "buffers_ready_1080" : "buffers_ready");
 
     rsx_ = preference == RENDERER_PREFER_RSX &&
-           gpu_.initialize(context_, width_, height_);
+           gpu_.initialize(context_, display_width_, display_height_);
+    if (!rsx_ && want_full_hd) {
+        // No RSX after all: back to the software path's 720p.
+        freeBuffers();
+        if (!configureDisplay(fallback_id, false)) {
+            shutdown();
+            return false;
+        }
+    }
     recordVideoStage(rsx_ ? "renderer_rsx" : "renderer_software");
 
     gcmSetFlipMode(GCM_FLIP_VSYNC);
@@ -171,12 +197,7 @@ void Framebuffer::shutdown() {
     if (software_depth_) free(software_depth_);
     software_depth_ = 0;
     note_depth_active_ = false;
-    for (int i = 0; i < 2; ++i) {
-        if (buffers_[i].pixels) {
-            rsxFree(buffers_[i].pixels);
-            buffers_[i].pixels = 0;
-        }
-    }
+    freeBuffers();
     if (context_) rsxFinish(context_, 1);
     if (host_memory_) {
         free(host_memory_);
@@ -333,7 +354,7 @@ bool Framebuffer::savePpm(const char* path) {
         rsxFlushBuffer(context_);
         rsxFinish(context_, 1);
     }
-    return writePpmPixels(path, buffers_[current_].pixels, width_, height_);
+    return writePpmPixels(path, buffers_[current_].pixels, display_width_, display_height_);
 }
 
 void Framebuffer::pixel(int x, int y, u32 color) {

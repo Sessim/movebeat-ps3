@@ -101,6 +101,10 @@ RenderOptions readRenderOptions() {
             options.pitch_correction = false;
         else if (strcmp(line, "pitch_correction=on") == 0)
             options.pitch_correction = true;
+        else if (strcmp(line, "resolution=720") == 0)
+            options.full_hd = false;
+        else if (strcmp(line, "resolution=1080") == 0)
+            options.full_hd = true;
         else if (strncmp(line, "left_hue=", 9) == 0)
             options.left_hue = atoi(line + 9);
         else if (strncmp(line, "right_hue=", 10) == 0)

@@ -103,6 +103,7 @@ struct vorbis_info { int version, channels; long rate; };
 #define VIDEO_BUFFER_FORMAT_XRGB 0
 #define VIDEO_PRIMARY 0
 #define VIDEO_ASPECT_AUTO 0
+#define VIDEO_RESOLUTION_1080 1
 #define VIDEO_RESOLUTION_720 2
 #define GCM_FLIP_VSYNC 1
 #define SYSUTIL_EXIT_GAME 0x101

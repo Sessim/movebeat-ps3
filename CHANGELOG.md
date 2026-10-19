@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 1080p output on the RSX when the TV takes it: the same layout, drawn at
+  full resolution (`resolution=720` in `renderer.ini` keeps 720p).
+- The track list shows each difficulty's best score beside the track, in
+  the difficulty's color.
+- Fixed: depth noise no longer freezes a hand for 83 ms at a time as a
+  false tracking jump.
 - Tracking diagnostics: every camera loss of a Move during a song goes to
   `tracking_log.csv` (where the sphere was last seen, how long, what libgem
   said); `run_status.ini` sums them up and adds libgem's status flags and

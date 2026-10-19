@@ -70,12 +70,14 @@ struct RenderOptions {
     int depth_range_cm;
     // "pitch_correction=off": no libgem camera pitch correction.
     bool pitch_correction;
+    // "resolution=720": keep 720p even when the TV takes 1080p.
+    bool full_hd;
 
     RenderOptions() : software(false), effects(true), hand_colors(true),
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
                       camera_depth(true), depth_range_cm(30),
-                      pitch_correction(true) {}
+                      pitch_correction(true), full_hd(true) {}
 };
 
 RenderOptions readRenderOptions();

@@ -190,7 +190,9 @@ missing manifests, unsafe names and collisions with bundled levels.
 - `renderer.ini` (optional, one `key=value` per line): `renderer=software`,
   `effects=off`, `background=off`, `hand_colors=on|off`, `camera_exposure`,
   `camera_quality`, `left_hue`, `right_hue`, `gem_filter=off`,
-  `camera_depth=off`, `depth_range_cm`.
+  `camera_depth=off`, `depth_range_cm`, `pitch_correction=off`,
+  `resolution=720` (the RSX outputs 1080p when the TV takes it; the layout
+  stays in 720p coordinates and is scaled).
 - `run_status.ini`: rewritten every 120 frames and at each state change, with
   the phase, tracking, calibration, audio, frame timing and library counters.
 - `startup_error.txt`: the stage and code of a startup failure (also shown on

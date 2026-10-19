@@ -27,7 +27,12 @@ public:
     Framebuffer();
     ~Framebuffer();
 
-    bool initialize(RendererPreference preference = RENDERER_PREFER_RSX);
+    // `full_hd`: on the RSX, output 1080p when the TV takes it. Everything
+    // is still drawn in 1280x720 coordinates (width(), height()); the RSX
+    // scales the geometry to the 1920x1080 surface, so lines, cubes and the
+    // font are drawn at full resolution and the layout is unchanged.
+    bool initialize(RendererPreference preference = RENDERER_PREFER_RSX,
+                    bool full_hd = true);
     void shutdown();
     void waitForPreviousFlip();
     void beginFrame(u32 color);
@@ -97,6 +102,8 @@ public:
 
     int width() const { return width_; }
     int height() const { return height_; }
+    // The video mode's lines: 720 or 1080.
+    int displayHeight() const { return display_height_; }
 
 private:
     struct Buffer {
@@ -109,6 +116,8 @@ private:
     Framebuffer& operator=(const Framebuffer&);
 
     bool makeBuffer(int index);
+    bool configureDisplay(u32 resolution_id, bool scaled);
+    void freeBuffers();
     void waitForFlip();
     void submitFrame();
 
@@ -118,6 +127,10 @@ private:
     int current_;
     int width_;
     int height_;
+    // The display buffers' size; larger than width_ x height_ only on the
+    // RSX at 1080p.
+    int display_width_;
+    int display_height_;
     int pitch_;
     u32 clear_color_;
     bool initialized_;

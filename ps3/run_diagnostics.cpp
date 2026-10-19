@@ -18,7 +18,7 @@ RunStatus::RunStatus()
       gpu_note_draw_calls(0), gpu_note_max_cubes(0),
       gpu_note_fallback_frames(0),
       software_note_draw_calls(0), software_note_max_cubes(0),
-      renderer("none"), effects_enabled(0), batch_max_vertices(0),
+      renderer("none"), display_height(0), effects_enabled(0), batch_max_vertices(0),
       batch_dropped_primitives(0), library_scan_ms(0), menu_steps(0),
       menu_step_avg_us(0), menu_step_max_us(0), menu_idle_max_us(0),
       menu_ticks(0), menu_flicks(0), menu_difficulty_changes(0),
@@ -84,7 +84,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             "gpu_note_draw_calls=%u\ngpu_note_max_cubes=%u\n"
             "gpu_note_fallback_frames=%u\n"
             "software_note_draw_calls=%u\nsoftware_note_max_cubes=%u\n"
-            "renderer=%s\neffects_enabled=%d\nbatch_max_vertices=%u\n"
+            "renderer=%s\ndisplay_height=%d\neffects_enabled=%d\nbatch_max_vertices=%u\n"
             "batch_dropped_primitives=%u\n"
             "library_scan_ms=%u\nmenu_steps=%u\nmenu_step_avg_us=%u\n"
             "menu_step_max_us=%u\nmenu_idle_max_us=%u\n"
@@ -157,7 +157,7 @@ bool writeRunStatus(const char* path, const RunStatus& status) {
             status.gpu_note_draw_calls,
             status.gpu_note_max_cubes, status.gpu_note_fallback_frames,
             status.software_note_draw_calls, status.software_note_max_cubes,
-            status.renderer, status.effects_enabled, status.batch_max_vertices,
+            status.renderer, status.display_height, status.effects_enabled, status.batch_max_vertices,
             status.batch_dropped_primitives,
             status.library_scan_ms, status.menu_steps, status.menu_step_avg_us,
             status.menu_step_max_us, status.menu_idle_max_us,

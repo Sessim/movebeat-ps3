@@ -155,7 +155,8 @@ bool App::initializeSystems(int& exit_code) {
     diagnostic_.camera_depth = camera_depth_ ? 1 : 0;
     screen_.setEffectsEnabled(render_options.effects);
     if (!screen_.initialize(render_options.software ? RENDERER_FORCE_SOFTWARE
-                                                    : RENDERER_PREFER_RSX)) {
+                                                    : RENDERER_PREFER_RSX,
+                            render_options.full_hd)) {
         printf("RSX framebuffer initialization failed\n");
         diagnostic_.state = "fatal";
         diagnostic_.phase = "framebuffer";
@@ -167,6 +168,7 @@ bool App::initializeSystems(int& exit_code) {
     }
     printf("MoveBeat PS3 0.1 (%s renderer)\n", screen_.rendererName());
     diagnostic_.renderer = screen_.rendererName();
+    diagnostic_.display_height = screen_.displayHeight();
     diagnostic_.effects_enabled = screen_.effectsEnabled() ? 1 : 0;
     diagnostic_.phase = "framebuffer_ready";
     writeRunStatus(kRunStatusPath, diagnostic_);

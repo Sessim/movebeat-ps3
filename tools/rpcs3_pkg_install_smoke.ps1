@@ -5,7 +5,9 @@ param(
     [switch]$AllCharts,
     [switch]$TrackingRecovery,
     [ValidateRange(0, 600000)][int]$CaptureAtMs = 0,
-    [ValidateRange(5, 600)][int]$DurationSeconds = 12
+    [ValidateRange(5, 600)][int]$DurationSeconds = 12,
+    # Emulate a TV that takes 1080p, so the game picks its 1080p output.
+    [switch]$FullHd
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +46,9 @@ if (Test-Path -LiteralPath $isolatedConfig -PathType Leaf) {
     $configText = Get-Content -LiteralPath $isolatedConfig -Raw
     $configText = $configText -replace '(?m)^(\s*Write Color Buffers:\s*)false',
         '${1}true'
+    if ($FullHd) {
+        $configText = $configText -replace '(?m)^(\s*Resolution:\s*)\S+', '${1}1920x1080'
+    }
     Set-Content -LiteralPath $isolatedConfig -Value $configText -NoNewline `
         -Encoding UTF8
 }
