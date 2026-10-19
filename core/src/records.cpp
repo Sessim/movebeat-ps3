@@ -71,6 +71,32 @@ bool loadBestScoreFile(const std::string& path, const std::string& key,
     return readBestScore(input, key, result, error);
 }
 
+void readAllBestScores(std::istream& input, std::map<std::string, HighScore>& result) {
+    result.clear();
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream row(line);
+        std::string row_key;
+        HighScore candidate;
+        char trailing = 0;
+        if (!(row >> row_key >> candidate.score >> candidate.max_combo) ||
+            (row >> trailing) || !validKey(row_key)) continue;
+        HighScore& best = result[row_key];
+        if (candidate.score >= best.score) best = candidate;
+    }
+}
+
+void loadAllBestScoresFile(const std::string& path,
+                           std::map<std::string, HighScore>& result) {
+    std::ifstream input(path.c_str());
+    if (!input) {
+        result.clear();
+        return;
+    }
+    readAllBestScores(input, result);
+}
+
 bool appendScoreFile(const std::string& path, const std::string& key,
                      const HighScore& score, std::string& error) {
     if (!validKey(key)) {

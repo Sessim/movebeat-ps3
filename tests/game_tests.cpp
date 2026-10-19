@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -1128,6 +1129,13 @@ void testHighScores() {
            "score log tolerates malformed unrelated rows");
     expect(best.score == 2400 && best.max_combo == 20,
            "score log returns the best matching run");
+
+    std::istringstream all_rows(rows.str());
+    std::map<std::string, movebeat::HighScore> all;
+    movebeat::readAllBestScores(all_rows, all);
+    expect(all.size() == 2 && all[key].score == 2400 && all[key].max_combo == 20 &&
+           all["0000000000000000"].score == 9000,
+           "the whole score log gives every key's best run");
 }
 
 void testSettings() {

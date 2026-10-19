@@ -219,6 +219,7 @@ void App::runStartupFailure(GemRuntime::InitStage stage, int error) {
 bool App::selectInitialLevel(int& exit_code) {
     const unsigned long long scan_start_us = nowMicroseconds();
     level_choices_ = discoverLibrary(playlists_, &diagnostic_.usb_level_count);
+    refreshBestScores();
     diagnostic_.library_scan_ms = static_cast<unsigned int>(
         (nowMicroseconds() - scan_start_us) / 1000ull);
     diagnostic_.playlist_count = static_cast<unsigned int>(playlists_.size());
@@ -358,6 +359,25 @@ void App::updateUsbImport() {
     if (!usb_import_.busy()) usb_import_.clearFinished();
 }
 
+void App::refreshBestScores() {
+    // Keys as finishLevel() writes them: the level's source key (or its
+    // folder) and the chart's file.
+    std::map<std::string, movebeat::HighScore> best;
+    movebeat::loadAllBestScoresFile(kScoreLog, best);
+    for (std::size_t index = 0; index < level_choices_.size(); ++index) {
+        LevelChoice& choice = level_choices_[index];
+        const std::string level_identity = choice.manifest.source_key.empty()
+            ? choice.directory : choice.manifest.source_key;
+        choice.best_scores.assign(choice.manifest.charts.size(), 0u);
+        for (std::size_t chart = 0; chart < choice.manifest.charts.size(); ++chart) {
+            const std::map<std::string, movebeat::HighScore>::const_iterator found =
+                best.find(movebeat::makeScoreKey(level_identity,
+                                                 choice.manifest.charts[chart].file));
+            if (found != best.end()) choice.best_scores[chart] = found->second.score;
+        }
+    }
+}
+
 void App::reloadLibrary() {
     const std::string selected = level_directory_.substr(level_directory_.find_last_of('/') + 1);
     std::vector<PlaylistChoice> playlists;
@@ -365,6 +385,7 @@ void App::reloadLibrary() {
     if (levels.empty()) return;
     level_choices_.swap(levels);
     playlists_.swap(playlists);
+    refreshBestScores();
     diagnostic_.playlist_count = static_cast<unsigned int>(playlists_.size());
     selected_level_index_ = 0;
     for (std::size_t index = 0; index < level_choices_.size(); ++index) {
@@ -1760,6 +1781,7 @@ void App::finishLevel() {
                                        best_score_, score_error)) {
             printf("Score write failed: %s\n", score_error.c_str());
         }
+        refreshBestScores();
     }
     printf("Level finished: score=%u hits=%u misses=%u\n",
            game_.score().score, game_.score().hits, game_.score().misses);

@@ -2,6 +2,7 @@
 #define MOVEBEAT_RECORDS_HPP
 
 #include <istream>
+#include <map>
 #include <string>
 
 namespace movebeat {
@@ -19,6 +20,10 @@ bool readBestScore(std::istream& input, const std::string& key,
                    HighScore& result, std::string& error);
 bool loadBestScoreFile(const std::string& path, const std::string& key,
                        HighScore& result, std::string& error);
+// Every key's best score in one pass, for the track list.
+void readAllBestScores(std::istream& input, std::map<std::string, HighScore>& result);
+void loadAllBestScoresFile(const std::string& path,
+                           std::map<std::string, HighScore>& result);
 bool appendScoreFile(const std::string& path, const std::string& key,
                      const HighScore& score, std::string& error);
 

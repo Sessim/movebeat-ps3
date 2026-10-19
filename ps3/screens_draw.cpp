@@ -113,6 +113,29 @@ void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
         drawMenuText(screen, "TRACK", static_cast<int>(place.label_x),
                      static_cast<int>(row.y) - 7, 2, 0xffd9e7ffu);
     }
+    // Best scores right of the label, one line per finished difficulty in
+    // its color, easiest on top.
+    if (row.alpha > 0.99f) {
+        std::size_t records = 0;
+        for (std::size_t index = 0; index < level.best_scores.size(); ++index)
+            if (level.best_scores[index]) ++records;
+        if (records) {
+            const int scale = row.label_scale > 0.8f ? 4 : 3;
+            const int line = scale * 8;
+            const int x = static_cast<int>(place.label_x + place.label_width) + scale * 6;
+            int y = static_cast<int>(row.y) - (static_cast<int>(records) * line - scale * 3) / 2;
+            for (std::size_t index = 0; index < level.best_scores.size() &&
+                                        index < level.manifest.charts.size(); ++index) {
+                const unsigned int score = level.best_scores[index];
+                if (!score) continue;
+                char text[16];
+                const int digits = snprintf(text, sizeof(text), "%u", score);
+                drawNumber(screen, score, x + (digits * scale * 4 - scale) / 2, y, scale,
+                           difficultyColor(level.manifest.charts[index].difficulty));
+                y += line;
+            }
+        }
+    }
     if (level.chart_broken && row.alpha > 0.35f)
         drawMenuText(screen, "CHART ERROR", static_cast<int>(place.label_x + 4),
                      static_cast<int>(place.label_y + place.label_height + 4), 2,

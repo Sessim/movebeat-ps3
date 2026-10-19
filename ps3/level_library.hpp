@@ -21,6 +21,8 @@ struct LevelChoice {
     bool card_missing;
     // A chart failed to parse when the level was started.
     bool chart_broken;
+    // Best score of each manifest chart, 0 when it was never finished.
+    std::vector<unsigned int> best_scores;
 
     LevelChoice() : card_missing(false), chart_broken(false) {}
 };
