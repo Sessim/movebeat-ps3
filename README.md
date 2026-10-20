@@ -70,9 +70,11 @@ ready-made sets with music.
 **Calibration** has three poses: both Moves on outstretched arms forward
 (blades towards the camera), out to the sides, then down. Confirm each pose
 with the Move button on both controllers. From the poses the game works out
-which hand is which (the red sphere is the right hand, the blue one the left),
-your arm span and the depth of the play area. You can calibrate again from
-the pause menu.
+which hand is which, your arm span and the depth of the play area. The
+calibration screen shows each hand in its sphere's real color: libgem picks
+colors the camera can tell apart from the room, and the game keeps the two
+spheres at least 120° apart on the color wheel (`min_hue_gap` in
+`renderer.ini`). You can calibrate again from the pause menu.
 
 **During a song** the score is in the top left and the combo in the top
 right; the screen flashes red when the combo breaks. At the bottom are the
@@ -83,11 +85,15 @@ every song plays to its end and no life bar is shown. The results show the
 score, your best score on that difficulty, hits, max combo and misses.
 
 **If the camera loses a Move**, the game pauses and resumes by itself as soon
-as it sees both controllers again. If a sphere stays lost, aim that Move at
-the camera and press its Move button.
+as it sees both controllers again. If a sphere stays lost, aim that Move
+forward and press its Move button.
 
 The timing offset (−500…+500 ms; positive shows notes earlier) and the blade
 length (50–140 cm) are saved in `USRDIR/settings.ini`.
+
+**Language.** The screens are in English or Russian, following the PS3 system
+language; `language=en` or `language=ru` in `USRDIR/settings.ini` overrides
+it. Buttons are shown as their icons.
 
 ## Importing songs
 

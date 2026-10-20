@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.1 — 2026-10-20
+
+- Russian screens. The game follows the PS3 system language (English or
+  Russian); `language=en|ru` in `settings.ini` overrides it. The menu font
+  gains Cyrillic capitals (Й and К after the public-domain misc-fixed
+  fonts), digits and punctuation.
+- Buttons are shown as icons in their own colors (triangle, circle, cross,
+  square, a tall Move oval, T, Start). The track list groups its controls,
+  with Move to play in the middle; the pause menu is centered; the song
+  screen drops the SCORE and COMBO labels for a small x before the combo
+  and a stopwatch for the time left.
+- Calibration asks to hold both Moves straight ahead and shows each hand in
+  its sphere's real color.
+- The two spheres keep their colors at least 120° apart: when libgem moves
+  one close to the other, it is asked for another hue (`min_hue_gap` in
+  `renderer.ini`, 0 turns it off).
+- The tracking pause shows the start pose only while Start re-centers the
+  play space.
+
 ## 0.2.0 — 2026-10-20
 
 - The starter set is 51 maps in six themed playlists (Throwback Hits, Party
