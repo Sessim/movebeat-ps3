@@ -378,8 +378,12 @@ void testMenuFont() {
     check(ya.rows == nextMenuGlyph(capital).rows, "lowercase Cyrillic draws as capitals");
     check(menuTextWidth("AB", 2) == 24 && menuTextWidth("ПРИВЕТ", 1) == 36,
           "a Cyrillic letter is as wide as a Latin one");
-    check(menuTextWidth(ICON_CROSS "  OK", 1) == 9 + 6 * 4,
+    check(menuTextWidth(ICON_CROSS "  OK", 1) == 9 + 6 * 4 &&
+          menuTextWidth(ICON_MOVE, 1) == 9,
           "a button icon is nine pixels wide");
+    const char* oval = ICON_MOVE;
+    const MenuGlyph move = nextMenuGlyph(oval);
+    check(move.height == 11 && move.top == 2, "the Move oval reaches above and below the line");
     const char* icon = ICON_TRIANGLE;
     check(nextMenuGlyph(icon).icon_color != 0, "icons keep their own colors");
     const char* digit = "7";
@@ -393,8 +397,9 @@ void testMenuFont() {
     check(difficultyLabel("ExpertPlus") == "EXPERT+" && std::string(tr("A", "Б")) == "A",
           "English labels");
     setLanguage(LANGUAGE_RU);
-    check(difficultyLabel("Easy") == "ЛЕГКО" && std::string(tr("A", "Б")) == "Б",
-          "Russian labels");
+    check(difficultyLabel("Easy") == "EASY" && difficultyLabel("ExpertPlus") == "EXPERT+" &&
+          std::string(tr("A", "Б")) == "Б",
+          "Russian text keeps the English difficulty names");
     setLanguage(LANGUAGE_EN);
 }
 

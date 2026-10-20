@@ -447,10 +447,10 @@ void App::runScreensGallery() {
     for (int which = 0; which < 2; ++which) {
         setLanguage(languages[which]);
         const char* code = which ? "ru" : "en";
-        for (int index = 1; index <= 13; ++index) {
+        for (int index = 1; index <= 22; ++index) {
             screen_.waitForPreviousFlip();
             screen_.beginFrame(0xff050510u);
-            const bool playfield = index >= 5 && index <= 8;
+            const bool playfield = (index >= 5 && index <= 8) || index >= 19;
             if (playfield) {
                 drawBackground(screen_, far_z, 0, 0.0f);
                 drawFloor(screen_, far_z);
@@ -525,6 +525,35 @@ void App::runScreensGallery() {
                 drawCalibrationOverlay(screen_, calibration);
                 break;
             }
+            case 14: case 15: case 16: case 17: case 18: {
+                // Calibration: each step, each state of a hand.
+                drawBackground(screen_, far_z, 0, 0.0f);
+                drawFloor(screen_, far_z);
+                static const int steps[5] = {0, 0, 1, 2, 2};
+                static const int states[5][2] = {{0, 0}, {1, 2}, {2, 1}, {0, 2}, {3, 3}};
+                static const bool visible[5][2] = {{true, false}, {true, true}, {true, false},
+                                                   {false, true}, {true, true}};
+                const int shot = index - 14;
+                CalibrationView calibration;
+                calibration.step = steps[shot];
+                for (int slot = 0; slot < 2; ++slot) {
+                    const float side = slot ? 1.0f : -1.0f;
+                    calibration.hand_state[slot] = states[shot][slot];
+                    calibration.hand_visible[slot] = visible[shot][slot];
+                    calibration.hand_x[slot] = side * (calibration.step == 1 ? 0.8f :
+                                                       (calibration.step == 2 ? 0.25f : 0.2f));
+                    calibration.hand_y[slot] = calibration.step == 2 ? -0.6f : 0.0f;
+                }
+                drawCalibrationOverlay(screen_, calibration);
+                break;
+            }
+            case 19: case 20: case 21: case 22:
+                // The tracking pause: lost, hands together, holding still,
+                // resuming.
+                drawHud(screen_, play, 65000u, 214000u, 0.0f, false);
+                drawTrackingPauseOverlay(screen_, index != 19, index != 22, index == 21,
+                                         index == 21 ? 400u : 700u);
+                break;
             }
             drawConnection(screen_, 0, true, true, 0xff40b8ffu);
             drawConnection(screen_, 1, true, true, 0xffff4058u);

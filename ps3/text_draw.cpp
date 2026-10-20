@@ -12,10 +12,10 @@ void drawMenuText(Framebuffer& screen, const char* label,
         const MenuGlyph glyph = nextMenuGlyph(cursor);
         if (glyph.rows) {
             const u32 ink = glyph.icon_color ? glyph.icon_color : color;
-            for (int row = 0; row < 7; ++row)
+            for (int row = 0; row < glyph.height; ++row)
                 for (int column = 0; column < glyph.columns; ++column)
                     if (glyph.rows[row] & (1u << (glyph.columns - 1 - column)))
-                        screen.rectangle(x + column * scale, y + row * scale,
+                        screen.rectangle(x + column * scale, y + (row - glyph.top) * scale,
                                          scale, scale, ink);
         }
         x += glyph.advance * scale;

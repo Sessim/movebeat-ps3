@@ -40,12 +40,16 @@ enum MenuIcon {
     MENU_ICON_MOVE, MENU_ICON_T, MENU_ICON_START, MENU_ICON_TIMER, MENU_ICON_COUNT
 };
 
-// One character of menu text: a 5x7 letter (bit 4 is the left column), a
-// 7x7 icon (bit 6 is the left column) or a blank, and its advance in
-// pixels of the font (6 for letters, 9 for icons).
+// One character of menu text: a 5x7 letter or an icon 7 rows high (the
+// highest bit of `columns` is the left column), or a blank, and its advance
+// in pixels of the font (6 for letters, two more than its width for icons).
 struct MenuGlyph {
-    const unsigned char* rows;
+    const unsigned short* rows;
     int columns;
+    // Rows drawn, from `top` rows above the line (the Move oval is taller
+    // than the text and reaches above and below it).
+    int height;
+    int top;
     int advance;
     uint32_t icon_color;
 };
@@ -53,7 +57,7 @@ struct MenuGlyph {
 namespace menu_font_detail {
 
 // Latin capitals, the HD44780-style face the menus have always used.
-static const unsigned char kLatin[26][7] = {
+static const unsigned short kLatin[26][7] = {
     {14,17,17,31,17,17,17}, {30,17,17,30,17,17,30}, {14,17,16,16,16,17,14},
     {30,17,17,17,17,17,30}, {31,16,16,30,16,16,31}, {31,16,16,30,16,16,16},
     {14,17,16,23,17,17,14}, {17,17,17,31,17,17,17}, {31,4,4,4,4,4,31},
@@ -65,7 +69,7 @@ static const unsigned char kLatin[26][7] = {
     {17,17,10,4,4,4,4}, {31,1,2,4,8,16,31}
 };
 // Cyrillic capitals А..Я in the same face, then Ё.
-static const unsigned char kCyrillic[33][7] = {
+static const unsigned short kCyrillic[33][7] = {
     {14,17,17,31,17,17,17}, {31,16,16,30,17,17,30}, {30,17,17,30,17,17,30},  // А Б В
     {31,16,16,16,16,16,16}, {14,10,10,10,10,31,17}, {31,16,16,30,16,16,31},  // Г Д Е
     {21,21,21,14,21,21,21}, {14,17,1,6,1,17,14}, {17,17,19,21,25,17,17},     // Ж З И
@@ -79,26 +83,28 @@ static const unsigned char kCyrillic[33][7] = {
     {18,21,21,29,21,21,18}, {15,17,17,15,5,9,17},                            // Ю Я
     {10,0,31,16,30,16,31}                                                    // Ё
 };
-static const unsigned char kDigits[10][7] = {
+static const unsigned short kDigits[10][7] = {
     {14,17,19,21,25,17,14}, {4,12,4,4,4,4,14}, {14,17,1,2,4,8,31},
     {31,2,4,2,1,17,14}, {2,6,10,18,31,2,2}, {31,16,30,1,1,17,14},
     {6,8,16,30,17,17,14}, {31,1,2,4,8,8,8}, {14,17,17,14,17,17,14},
     {14,17,17,15,1,2,12}
 };
 static const char kPunctuation[] = "+-.,:/!?()'";
-static const unsigned char kPunctuationRows[11][7] = {
+static const unsigned short kPunctuationRows[11][7] = {
     {0,4,4,31,4,4,0}, {0,0,0,31,0,0,0}, {0,0,0,0,0,12,12}, {0,0,0,0,12,4,8},
     {0,12,12,0,12,12,0}, {0,1,2,4,8,16,0}, {4,4,4,4,4,0,4}, {14,17,1,2,4,0,4},
     {2,4,8,8,8,4,2}, {8,4,2,2,2,4,8}, {4,4,8,0,0,0,0}
 };
-// Triangle, circle, cross, square, the Move button, the T trigger, Start,
-// a stopwatch.
-static const unsigned char kIcons[MENU_ICON_COUNT - 1][7] = {
+// Triangle, circle, cross, square, the Move button (a tall oval), the T
+// trigger, Start, a stopwatch.
+static const unsigned short kIcons[MENU_ICON_COUNT - 1][11] = {
     {8,20,20,34,34,65,127}, {28,34,65,65,65,34,28}, {65,34,20,8,20,34,65},
-    {127,65,65,65,65,65,127}, {28,62,127,127,127,62,28},
+    {127,65,65,65,65,65,127}, {28,62,127,127,127,127,127,127,127,62,28},
     {127,65,93,73,73,65,127}, {32,48,56,60,56,48,32},
     {28,42,73,79,65,34,28}
 };
+static const int kIconColumns[MENU_ICON_COUNT - 1] = {7, 7, 7, 7, 7, 7, 7, 7};
+static const int kIconHeights[MENU_ICON_COUNT - 1] = {7, 7, 7, 7, 11, 7, 7, 7};
 static const uint32_t kIconColors[MENU_ICON_COUNT - 1] = {
     0xff40d8a0u, 0xffff5a6au, 0xff7aa8ffu, 0xffe884d0u, 0xffe8e4f4u,
     0xffc8d0e0u, 0xffc8d0e0u, 0xffc8d0e0u
@@ -114,6 +120,8 @@ inline MenuGlyph nextMenuGlyph(const char*& cursor) {
     MenuGlyph glyph;
     glyph.rows = 0;
     glyph.columns = 5;
+    glyph.height = 7;
+    glyph.top = 0;
     glyph.advance = 6;
     glyph.icon_color = 0;
     const unsigned char lead = static_cast<unsigned char>(*cursor++);
@@ -126,8 +134,10 @@ inline MenuGlyph nextMenuGlyph(const char*& cursor) {
     }
     if (code >= MENU_ICON_TRIANGLE && code < MENU_ICON_COUNT) {
         glyph.rows = kIcons[code - 1];
-        glyph.columns = 7;
-        glyph.advance = 9;
+        glyph.columns = kIconColumns[code - 1];
+        glyph.height = kIconHeights[code - 1];
+        glyph.top = (glyph.height - 7) / 2;
+        glyph.advance = glyph.columns + 2;
         glyph.icon_color = kIconColors[code - 1];
     } else if (code >= 'a' && code <= 'z') {
         glyph.rows = kLatin[code - 'a'];
@@ -156,7 +166,7 @@ inline int menuTextWidth(const char* label, int scale) {
     return width * scale;
 }
 
-// A chart difficulty as the menus show it.
+// A chart difficulty as the menus show it: EASY ... EXPERT+.
 inline std::string difficultyLabel(const std::string& difficulty) {
     std::string folded;
     for (std::size_t index = 0; index < difficulty.size(); ++index) {
@@ -164,11 +174,8 @@ inline std::string difficultyLabel(const std::string& difficulty) {
         if (letter >= 'A' && letter <= 'Z') folded.push_back(static_cast<char>(letter + 32));
         else if (letter >= 'a' && letter <= 'z') folded.push_back(letter);
     }
-    if (folded == "easy") return tr("EASY", "ЛЕГКО");
-    if (folded == "normal") return tr("NORMAL", "НОРМА");
-    if (folded == "hard") return tr("HARD", "СЛОЖНО");
-    if (folded == "expert") return tr("EXPERT", "ЭКСПЕРТ");
-    if (folded == "expertplus") return tr("EXPERT+", "ЭКСПЕРТ+");
+    // As in Beat Saber, in English in every language.
+    if (folded == "expertplus") return "EXPERT+";
     std::string label;
     for (std::size_t index = 0; index < folded.size() && label.size() < 18; ++index)
         label.push_back(static_cast<char>(folded[index] - 32));

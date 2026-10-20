@@ -672,7 +672,7 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
         drawMenuText(screen, text, x + 66, row_y, 3, color);
     }
     drawMenuText(screen, tr(ICON_TRIANGLE "  START OVER      " ICON_CROSS "  BACK",
-                            ICON_TRIANGLE "  ЗАНОВО      " ICON_CROSS "  НАЗАД"),
+                            ICON_TRIANGLE "  ПЕРЕКАЛИБРОВАТЬ      " ICON_CROSS "  НАЗАД"),
                  x + 30, y + height - 40, 2,
                  0xff9cb3d3u);
 }
