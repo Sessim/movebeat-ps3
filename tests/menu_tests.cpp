@@ -3,9 +3,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "library_shelf.hpp"
+#include "menu_font.hpp"
 #include "menu_motion.hpp"
 #include "sound_effects.hpp"
 
@@ -366,7 +368,38 @@ void testPlaylistShelf() {
 } // namespace
 
 // Also linked into the PPU test package (see game_tests.cpp).
+void testMenuFont() {
+    // "Ё" and "я" are two-byte UTF-8 letters; "я" draws as "Я".
+    const char* text = "Ёя";
+    const MenuGlyph yo = nextMenuGlyph(text);
+    const MenuGlyph ya = nextMenuGlyph(text);
+    const char* capital = "Я";
+    check(yo.rows && ya.rows && *text == 0, "Cyrillic letters decode from UTF-8");
+    check(ya.rows == nextMenuGlyph(capital).rows, "lowercase Cyrillic draws as capitals");
+    check(menuTextWidth("AB", 2) == 24 && menuTextWidth("ПРИВЕТ", 1) == 36,
+          "a Cyrillic letter is as wide as a Latin one");
+    check(menuTextWidth(ICON_CROSS "  OK", 1) == 9 + 6 * 4,
+          "a button icon is nine pixels wide");
+    const char* icon = ICON_TRIANGLE;
+    check(nextMenuGlyph(icon).icon_color != 0, "icons keep their own colors");
+    const char* digit = "7";
+    check(nextMenuGlyph(digit).rows != 0, "menu text draws digits");
+    const char* unknown = "\xe2\x86\x92";  // an arrow: a blank, one letter wide
+    const MenuGlyph blank = nextMenuGlyph(unknown);
+    check(!blank.rows && blank.advance == 6 && *unknown == 0,
+          "a character without a glyph is one blank letter");
+
+    setLanguage(LANGUAGE_EN);
+    check(difficultyLabel("ExpertPlus") == "EXPERT+" && std::string(tr("A", "Б")) == "A",
+          "English labels");
+    setLanguage(LANGUAGE_RU);
+    check(difficultyLabel("Easy") == "ЛЕГКО" && std::string(tr("A", "Б")) == "Б",
+          "Russian labels");
+    setLanguage(LANGUAGE_EN);
+}
+
 int runMenuTests() {
+    testMenuFont();
     testCarouselSteps();
     testCarouselInertia();
     testRandomizerSpin();

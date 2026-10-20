@@ -14,7 +14,10 @@ param(
     [switch]$PauseTest,
     # Let the game copy USB bundles (dev_usb000/MOVEBEAT/levels) into the
     # hard-disk library (demo_mode.ini usb_import=1).
-    [switch]$UsbImport
+    [switch]$UsbImport,
+    # Draw every screen in English and Russian and save them
+    # (demo_mode.ini screens_test=1); the PNGs land in the report folder.
+    [switch]$Screens
 )
 
 # Runs the game's scripted library navigation (demo_mode.ini menu_test=1)
@@ -48,7 +51,7 @@ if (Test-Path -LiteralPath $demoBackup) {
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $reportDir = Join-Path $project ("out/rpcs3-{0}-smoke/$stamp" -f $(if ($Playlist) { 'playlist' } else { 'menu' }))
-$mode = if ($PauseTest) { 'pause_test' } elseif ($Playlist) { 'playlist_test' } else { 'menu_test' }
+$mode = if ($Screens) { 'screens_test' } elseif ($PauseTest) { 'pause_test' } elseif ($Playlist) { 'playlist_test' } else { 'menu_test' }
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
 $baseline = if (Test-Path -LiteralPath $statusPath) {
     (Get-Item -LiteralPath $statusPath).LastWriteTimeUtc
@@ -85,6 +88,7 @@ try {
                 }
             }
             if ($status['phase'] -eq "${mode}_done") { $outcome = 'done'; break }
+            if ($Screens -and $status['state'] -eq 'clean_exit') { $outcome = 'done'; break }
             if ($status['state'] -eq 'fatal') { $outcome = 'fatal'; break }
         }
         $process.Refresh()
@@ -110,7 +114,12 @@ try {
     }
 }
 
-foreach ($name in @('demo_frame.ppm', 'demo_timed_frame.ppm', 'demo_scored_frame.ppm')) {
+$frames = @('demo_frame.ppm', 'demo_timed_frame.ppm', 'demo_scored_frame.ppm')
+if ($Screens) {
+    $frames += Get-ChildItem -LiteralPath $usrdir -Filter 'screen_*.ppm' |
+        ForEach-Object { $_.Name }
+}
+foreach ($name in $frames) {
     $frame = Join-Path $usrdir $name
     if ((Test-Path -LiteralPath $frame) -and
         (Get-Item -LiteralPath $frame).LastWriteTimeUtc -gt $baseline) {

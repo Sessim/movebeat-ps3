@@ -202,5 +202,8 @@ s32 videoConfigure(u32, videoConfiguration*, void*, u32);
 s32 sysUtilRegisterCallback(u32, void (*)(u64, u64, void*), void*);
 s32 sysUtilUnregisterCallback(u32);
 void sysUtilCheckCallback();
+s32 sysUtilGetSystemParamInt(s32, s32*);
+#define SYSUTIL_SYSTEMPARAM_ID_LANG 0x0111
+#define SYSUTIL_LANG_RUSSIAN 8
 
 #endif

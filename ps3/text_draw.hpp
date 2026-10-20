@@ -3,11 +3,13 @@
 #include <string>
 
 #include "framebuffer.hpp"
+#include "menu_font.hpp"
 
 namespace movebeat {
 namespace ps3 {
 
-// Blocky uppercase Latin text; other characters advance without drawing.
+// Blocky capitals in UTF-8: Latin, Cyrillic, digits, some punctuation and
+// the button icons of menu_font.hpp; other characters are blank gaps.
 void drawMenuText(Framebuffer& screen, const char* label,
                   int x, int y, int scale, u32 color);
 void drawCenteredMenuText(Framebuffer& screen,

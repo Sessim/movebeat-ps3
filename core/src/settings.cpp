@@ -57,6 +57,16 @@ bool loadSettings(std::istream& input, Settings& settings, std::string& error) {
             return false;
         }
     }
+    const std::map<std::string, std::string>::const_iterator language_value =
+        values.find("language");
+    if (language_value != values.end()) {
+        if (language_value->second != "auto" && language_value->second != "en" &&
+            language_value->second != "ru") {
+            error = "language must be auto, en or ru";
+            return false;
+        }
+        parsed.language = language_value->second;
+    }
     settings = parsed;
     error.clear();
     return true;
@@ -91,7 +101,8 @@ bool saveSettingsFile(const std::string& path, const Settings& settings,
     output << "format=1\n"
            << "timing_offset_ms=" << settings.timing_offset_ms << '\n'
            << "blade_length_cm=" << settings.blade_length_cm << '\n'
-           << "invert_hands=" << (settings.invert_hands ? 1 : 0) << '\n';
+           << "invert_hands=" << (settings.invert_hands ? 1 : 0) << '\n'
+           << "language=" << settings.language << '\n';
     if (!output) {
         error = "could not write settings file";
         return false;

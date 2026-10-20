@@ -828,13 +828,13 @@ void drawHud(Framebuffer& screen,
         screen.rectangle(screen.width() - edge - panel_width, panel_y,
                          panel_width, panel_height, panel);
     }
-    drawMenuText(screen, "SCORE", edge + screen.width() / 80,
+    drawMenuText(screen, tr("SCORE", "ОЧКИ"), edge + screen.width() / 80,
                  label_y, label_scale, label);
     drawNumber(screen, score.score, edge + panel_width / 2,
                value_y, value_scale,
                score.failed ? 0xffff5060u : 0xfff0d050u);
     const int combo_x = screen.width() - edge - panel_width;
-    drawMenuText(screen, "COMBO", combo_x + screen.width() / 80,
+    drawMenuText(screen, tr("COMBO", "КОМБО"), combo_x + screen.width() / 80,
                  label_y, label_scale, label);
     drawNumber(screen, score.combo, combo_x + panel_width / 2,
                value_y, value_scale,
@@ -854,7 +854,7 @@ void drawHud(Framebuffer& screen,
                          energy_y,
                          bar_width * static_cast<int>(score.energy) / 100,
                          std::max(4, screen.height() / 180), energy_color);
-        drawMenuText(screen, "LIFE", bar_x + bar_width + screen.width() / 96,
+        drawMenuText(screen, tr("LIFE", "ЖИЗНЬ"), bar_x + bar_width + screen.width() / 96,
                      energy_y - label_scale * 7 - screen.height() / 180,
                      label_scale, label);
     }
@@ -868,7 +868,7 @@ void drawHud(Framebuffer& screen,
         screen.rectangle(bar_x, bar_y, progress_width, bar_height,
                          0xff40b8ffu);
         const unsigned int remaining_ms = duration_ms - clamped_time;
-        drawMenuText(screen, "LEFT", screen.width() / 12,
+        drawMenuText(screen, tr("LEFT", "ОСТАЛОСЬ"), screen.width() / 12,
                      bar_y - screen.height() / 48, label_scale, label);
         drawTime(screen, remaining_ms, screen.width() / 6,
                  bar_y - screen.height() / 48, label_scale,

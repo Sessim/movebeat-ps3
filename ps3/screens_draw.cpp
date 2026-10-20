@@ -16,14 +16,14 @@ namespace {
 const char* startupFailureHint(GemRuntime::InitStage stage,
                                int error) {
     if (stage == GemRuntime::INIT_CAMERA_TYPE && error == -1003)
-        return "PS EYE NOT FOUND";
+        return tr("PS EYE NOT FOUND", "PS EYE НЕ НАЙДЕНА");
     if (stage >= GemRuntime::INIT_CAMERA &&
         stage <= GemRuntime::INIT_CAMERA_START)
-        return "CHECK PS EYE USB";
+        return tr("CHECK PS EYE USB", "ПРОВЕРЬТЕ USB PS EYE");
     if (stage == GemRuntime::INIT_CAMERA_MODULE ||
         stage == GemRuntime::INIT_GEM_MODULE)
-        return "SYSTEM MODULE ERROR";
-    return "MOVE ENGINE ERROR";
+        return tr("SYSTEM MODULE ERROR", "ОШИБКА СИСТЕМНОГО МОДУЛЯ");
+    return tr("MOVE ENGINE ERROR", "ОШИБКА ДВИЖКА MOVE");
 }
 
 } // namespace
@@ -110,7 +110,7 @@ void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
                          static_cast<int>(place.cover_y),
                          static_cast<int>(row.cover), static_cast<int>(row.cover),
                          0xff1c2f4eu);
-        drawMenuText(screen, "TRACK", static_cast<int>(place.label_x),
+        drawMenuText(screen, tr("TRACK", "ТРЕК"), static_cast<int>(place.label_x),
                      static_cast<int>(row.y) - 7, 2, 0xffd9e7ffu);
     }
     // Best scores right of the label, one line per finished difficulty in
@@ -137,7 +137,8 @@ void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
         }
     }
     if (level.chart_broken && row.alpha > 0.35f)
-        drawMenuText(screen, "CHART ERROR", static_cast<int>(place.label_x + 4),
+        drawMenuText(screen, tr("CHART ERROR", "ОШИБКА КАРТЫ"),
+                     static_cast<int>(place.label_x + 4),
                      static_cast<int>(place.label_y + place.label_height + 4), 2,
                      0xffff6470u);
 }
@@ -156,13 +157,13 @@ void drawLevelLibrary(Framebuffer& screen,
     // script, so it comes pre-rendered from the PC like the track cards).
     int counter_y = 112;
     if (!view.playlist) {
-        drawMenuText(screen, "TRACKS", 40, 70, 4, 0xffd9e7ffu);
+        drawMenuText(screen, tr("TRACKS", "ТРЕКИ"), 40, 70, 4, 0xffd9e7ffu);
     } else if (view.playlist->card.ready()) {
         view.playlist->card.drawCover(screen, 40.0f, 34.0f, 72.0f, 1.0f);
         view.playlist->card.drawLabel(screen, 120.0f, 34.0f, 0.75f, 1.0f);
         counter_y = 124;
     } else {
-        drawMenuText(screen, "PLAYLIST", 40, 70, 4, 0xffd9e7ffu);
+        drawMenuText(screen, tr("PLAYLIST", "ПЛЕЙЛИСТ"), 40, 70, 4, 0xffd9e7ffu);
     }
     // One mark per shelf (all tracks, then each playlist), Select steps.
     if (view.shelf_count > 1) {
@@ -175,8 +176,8 @@ void drawLevelLibrary(Framebuffer& screen,
         }
     }
     if (order.empty()) {
-        drawMenuText(screen, "NO TRACKS", width / 2 - 90,
-                     static_cast<int>(center_y), 3, 0xffffa0a0u);
+        drawCenteredMenuText(screen, tr("NO TRACKS", "НЕТ ТРЕКОВ"),
+                             static_cast<int>(center_y), 3, 0xffffa0a0u);
         return;
     }
     const std::size_t count = order.size();
@@ -248,16 +249,16 @@ void drawLevelLibrary(Framebuffer& screen,
     int chip_x = static_cast<int>(place.label_x) + 16;
     for (std::size_t index = 0; index < level.manifest.charts.size() && index < 5;
          ++index) {
-        const std::string name = menuLabel(level.manifest.charts[index].difficulty);
+        const std::string name = difficultyLabel(level.manifest.charts[index].difficulty);
+        const int name_width = menuTextWidth(name.c_str(), 2);
         const bool active = index == view.chart_index;
         const std::uint32_t color = active
             ? difficultyColor(level.manifest.charts[index].difficulty)
             : 0xff56607au;
         drawMenuText(screen, name.c_str(), chip_x, chips_y, 2, color);
         if (active)
-            screen.rectangle(chip_x, chips_y + 17,
-                             static_cast<int>(name.size()) * 12 - 2, 3, color);
-        chip_x += static_cast<int>(name.size()) * 12 + 18;
+            screen.rectangle(chip_x, chips_y + 17, name_width - 2, 3, color);
+        chip_x += name_width + 18;
     }
     if (view.preview_playing) {
         // Three bars bouncing with the clock: the preview is audible.
@@ -271,14 +272,21 @@ void drawLevelLibrary(Framebuffer& screen,
         }
     }
 
-    drawMenuText(screen,
-                 "HOLD T  UP DOWN  SCROLL   LEFT RIGHT  DIFFICULTY   HOLD BOTH MOVE  RANDOM",
-                 width / 2 - 444, height - 56, 2, 0xff9cb3d3u);
-    drawMenuText(screen, view.shelf_count > 1
-                     ? "TRI CIRCLE  TRACKS   CROSS  DIFFICULTY   SQUARE  LISTS   MOVE  PLAY"
-                     : "TRI CIRCLE  TRACKS   CROSS  DIFFICULTY   MOVE  PLAY",
-                 view.shelf_count > 1 ? width / 2 - 402 : width / 2 - 306,
-                 height - 30, 2, 0xff9cb3d3u);
+    drawCenteredMenuText(screen, tr(
+        "HOLD " ICON_T "  UP DOWN  SCROLL   LEFT RIGHT  DIFFICULTY   "
+        "HOLD " ICON_MOVE ICON_MOVE "  RANDOM",
+        "ДЕРЖИ " ICON_T "  ВВЕРХ ВНИЗ  ЛИСТАТЬ   ВЛЕВО ВПРАВО  СЛОЖНОСТЬ   "
+        "ДЕРЖИ " ICON_MOVE ICON_MOVE "  СЛУЧАЙНЫЙ"), height - 56, 2, 0xff9cb3d3u);
+    drawCenteredMenuText(screen, view.shelf_count > 1
+        ? tr(ICON_TRIANGLE ICON_CIRCLE "  TRACKS   " ICON_CROSS "  DIFFICULTY   "
+             ICON_SQUARE "  LISTS   " ICON_MOVE "  PLAY",
+             ICON_TRIANGLE ICON_CIRCLE "  ТРЕКИ   " ICON_CROSS "  СЛОЖНОСТЬ   "
+             ICON_SQUARE "  СПИСКИ   " ICON_MOVE "  ИГРАТЬ")
+        : tr(ICON_TRIANGLE ICON_CIRCLE "  TRACKS   " ICON_CROSS "  DIFFICULTY   "
+             ICON_MOVE "  PLAY",
+             ICON_TRIANGLE ICON_CIRCLE "  ТРЕКИ   " ICON_CROSS "  СЛОЖНОСТЬ   "
+             ICON_MOVE "  ИГРАТЬ"),
+        height - 30, 2, 0xff9cb3d3u);
 }
 
 void drawMovePointer(Framebuffer& screen,
@@ -313,23 +321,27 @@ void drawResults(Framebuffer& screen,
     const int label_y = row_y - label_scale * 7 - small;
     const int columns[3] = { screen.width() / 4, screen.width() / 2,
                              screen.width() * 3 / 4 };
-    const char* labels[3] = { "HITS", "MAX COMBO", "MISSES" };
+    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС. КОМБО"),
+                              tr("MISSES", "ПРОМАХИ") };
     const unsigned int values[3] = { score.hits, score.max_combo, score.misses };
     const u32 colors[3] = { 0xff40c8ffu, 0xfff0f0f0u, 0xffff5060u };
     for (int column = 0; column < 3; ++column) {
-        const int label_width = static_cast<int>(strlen(labels[column])) * label_scale * 6;
+        const int label_width = menuTextWidth(labels[column], label_scale);
         drawMenuText(screen, labels[column], columns[column] - label_width / 2,
                      label_y, label_scale, 0xff9cb3d3u);
         drawNumber(screen, values[column], columns[column], row_y, small, colors[column]);
         screen.rectangle(columns[column] - screen.width() / 12, row_y + small * 6,
                          screen.width() / 6, small / 2 + 1, colors[column]);
     }
-    drawCenteredMenuText(screen, "BEST", screen.height() / 10 - label_scale * 7 - small,
+    drawCenteredMenuText(screen, tr("BEST", "РЕКОРД"),
+                         screen.height() / 10 - label_scale * 7 - small,
                          label_scale, 0xffa080ffu);
 }
 
 void drawResultsHint(Framebuffer& screen) {
-    drawCenteredMenuText(screen, "CROSS  CIRCLE  MOVE  CONTINUE      TRI  REPLAY",
+    drawCenteredMenuText(screen, tr(
+        ICON_CROSS ICON_CIRCLE ICON_MOVE "  CONTINUE      " ICON_TRIANGLE "  REPLAY",
+        ICON_CROSS ICON_CIRCLE ICON_MOVE "  ДАЛЬШЕ      " ICON_TRIANGLE "  ЕЩЁ РАЗ"),
                          screen.height() - 40, 2, 0xff9cb3d3u);
 }
 
@@ -344,16 +356,18 @@ void drawPlaylistNext(Framebuffer& screen, const PlaylistRun& run,
     screen.line(width / 2 - 298, y + 27, width / 2 - 288, y + 2, 0xff7d92b2u, 2);
     drawNumber(screen, static_cast<unsigned int>(run.trackCount()),
                width / 2 - 266, y + 4, 4, 0xffd9e7ffu);
-    drawMenuText(screen, "NEXT", width / 2 - 200, y + 6, 3, 0xff9cb3d3u);
+    drawMenuText(screen, tr("NEXT", "ДАЛЕЕ"), width / 2 - 200, y + 6, 3, 0xff9cb3d3u);
     if (next.card.ready()) {
         next.card.drawCover(screen, width / 2 - 110.0f, static_cast<float>(y), 72.0f, 1.0f);
         next.card.drawLabel(screen, width / 2 - 30.0f, static_cast<float>(y), 0.75f, 1.0f);
     } else {
-        drawMenuText(screen, "TRACK", width / 2 - 110, y + 26, 3, 0xffd9e7ffu);
+        drawMenuText(screen, tr("TRACK", "ТРЕК"), width / 2 - 110, y + 26, 3, 0xffd9e7ffu);
     }
     drawNumber(screen, seconds_left, width / 2 + 330, y + 18, 6, 0xfff0d050u);
-    drawMenuText(screen, "CROSS  NOW     TRI  REPLAY     SQUARE  STOP", width / 2 - 246,
-                 y + 92, 2, 0xff9cb3d3u);
+    drawCenteredMenuText(screen, tr(
+        ICON_CROSS "  NOW     " ICON_TRIANGLE "  REPLAY     " ICON_SQUARE "  STOP",
+        ICON_CROSS "  СЕЙЧАС     " ICON_TRIANGLE "  ПОВТОР     " ICON_SQUARE "  СТОП"),
+        y + 92, 2, 0xff9cb3d3u);
 }
 
 void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
@@ -365,14 +379,18 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
         playlist.card.drawCover(screen, width / 2 - 250.0f, 28.0f, 72.0f, 1.0f);
         playlist.card.drawLabel(screen, width / 2 - 170.0f, 28.0f, 0.75f, 1.0f);
     }
-    drawCenteredMenuText(screen, "PLAYLIST COMPLETE", 116, 3, 0xff70e0a0u);
+    drawCenteredMenuText(screen, tr("PLAYLIST COMPLETE", "ПЛЕЙЛИСТ ПРОЙДЕН"), 116, 3,
+                         0xff70e0a0u);
     drawNumber(screen, run.totalScore(), width / 2, 150, 8, 0xfff0d050u);
     drawNumber(screen, run.totalHits(), width / 4, 222, 4, 0xff40c8ffu);
     drawNumber(screen, run.maxCombo(), width / 2, 222, 4, 0xfff0f0f0u);
     drawNumber(screen, run.totalMisses(), width * 3 / 4, 222, 4, 0xffff5060u);
-    drawMenuText(screen, "HITS", width / 4 - 24, 200, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "MAX COMBO", width / 2 - 54, 200, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "MISSES", width * 3 / 4 - 36, 200, 2, 0xff9cb3d3u);
+    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС. КОМБО"),
+                              tr("MISSES", "ПРОМАХИ") };
+    for (int column = 0; column < 3; ++column)
+        drawMenuText(screen, labels[column],
+                     width * (column + 1) / 4 - menuTextWidth(labels[column], 2) / 2, 200, 2,
+                     0xff9cb3d3u);
     // The latest songs, one row each: number, card, score.
     const std::vector<PlaylistSongResult>& results = run.results();
     const std::size_t rows = std::min<std::size_t>(results.size(), 7);
@@ -390,14 +408,17 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
             levels[result.level].card.drawLabel(screen, width / 2 - 258.0f, y + 3.0f,
                                                 0.46f, 1.0f);
         } else {
-            drawMenuText(screen, "TRACK", width / 2 - 300, y + 15, 2, 0xffd9e7ffu);
+            drawMenuText(screen, tr("TRACK", "ТРЕК"), width / 2 - 300, y + 15, 2,
+                         0xffd9e7ffu);
         }
         if (result.failed)
-            drawMenuText(screen, "FAILED", width / 2 + 120, y + 16, 2, 0xffff5060u);
+            drawMenuText(screen, tr("FAILED", "ПРОВАЛ"), width / 2 + 120, y + 16, 2,
+                         0xffff5060u);
         drawNumber(screen, result.score, width / 2 + 300, y + 13, 4,
                    result.failed ? 0xffff5060u : 0xfff0d050u);
     }
-    drawCenteredMenuText(screen, "CROSS  BACK TO TRACKS", height - 40, 2, 0xffd9e7ffu);
+    drawCenteredMenuText(screen, tr(ICON_CROSS "  BACK TO TRACKS", ICON_CROSS "  К ТРЕКАМ"),
+                         height - 40, 2, 0xffd9e7ffu);
 }
 
 void drawPauseMenu(Framebuffer& screen) {
@@ -406,11 +427,15 @@ void drawPauseMenu(Framebuffer& screen) {
     const int x = (screen.width() - width) / 2;
     const int y = (screen.height() - height) / 2;
     screen.rectangle(x, y, width, height, 0xff101828u);
-    drawCenteredMenuText(screen, "PAUSED", y + 30, 4, 0xffd9e7ffu);
-    drawMenuText(screen, "CROSS  CONTINUE", x + 70, y + 100, 3, 0xff40e890u);
-    drawMenuText(screen, "CIRCLE  RESTART", x + 70, y + 145, 3, 0xffffc030u);
-    drawMenuText(screen, "SQUARE  CALIBRATE", x + 70, y + 190, 3, 0xff70d8ffu);
-    drawMenuText(screen, "TRI  BACK TO TRACKS", x + 70, y + 235, 3, 0xffff6470u);
+    drawCenteredMenuText(screen, tr("PAUSED", "ПАУЗА"), y + 30, 4, 0xffd9e7ffu);
+    drawMenuText(screen, tr(ICON_CROSS "  CONTINUE", ICON_CROSS "  ПРОДОЛЖИТЬ"),
+                 x + 70, y + 100, 3, 0xff40e890u);
+    drawMenuText(screen, tr(ICON_CIRCLE "  RESTART", ICON_CIRCLE "  ЗАНОВО"),
+                 x + 70, y + 145, 3, 0xffffc030u);
+    drawMenuText(screen, tr(ICON_SQUARE "  CALIBRATE", ICON_SQUARE "  КАЛИБРОВКА"),
+                 x + 70, y + 190, 3, 0xff70d8ffu);
+    drawMenuText(screen, tr(ICON_TRIANGLE "  BACK TO TRACKS", ICON_TRIANGLE "  К ТРЕКАМ"),
+                 x + 70, y + 235, 3, 0xffff6470u);
 }
 
 void drawAudioError(Framebuffer& screen, int error) {
@@ -418,12 +443,12 @@ void drawAudioError(Framebuffer& screen, int error) {
     const int center_y = screen.height() / 2;
     screen.rectangle(center_x - 330, center_y - 120, 660, 245, 0xff411018u);
     screen.rectangle(center_x - 325, center_y - 115, 650, 235, 0xff200b11u);
-    drawMenuText(screen, "AUDIO ERROR", center_x - 155, center_y - 84,
-                 4, 0xffff6470u);
+    drawCenteredMenuText(screen, tr("AUDIO ERROR", "ОШИБКА ЗВУКА"), center_y - 84,
+                         4, 0xffff6470u);
     drawHexNumber(screen, static_cast<unsigned int>(error), center_x,
                   center_y - 8, screen.height() / 75 + 2, 0xffffd070u);
-    drawMenuText(screen, "CROSS  BACK TO TRACKS", center_x - 125,
-                 center_y + 76, 2, 0xffd9e7ffu);
+    drawCenteredMenuText(screen, tr(ICON_CROSS "  BACK TO TRACKS", ICON_CROSS "  К ТРЕКАМ"),
+                         center_y + 76, 2, 0xffd9e7ffu);
 }
 
 void drawTimingOffset(Framebuffer& screen, int offset_ms) {
@@ -447,19 +472,19 @@ void drawStartupFailure(Framebuffer& screen, GemRuntime::InitStage stage,
                      screen.width() * 5 / 7, screen.height() * 11 / 20,
                      0xffb02030u);
     const int label_scale = std::max(2, screen.height() / 240);
-    drawCenteredMenuText(screen, "MOVE START FAILED",
+    drawCenteredMenuText(screen, tr("MOVE START FAILED", "MOVE НЕ ЗАПУСТИЛСЯ"),
                          screen.height() * 28 / 100, label_scale,
                          0xffffffffu);
     drawCenteredMenuText(screen, startupFailureHint(stage, error),
                          screen.height() * 35 / 100, label_scale,
                          0xffffd070u);
-    drawCenteredMenuText(screen, "STAGE",
+    drawCenteredMenuText(screen, tr("STAGE", "ЭТАП"),
                          screen.height() * 44 / 100, 2,
                          0xffffffffu);
     drawNumber(screen, static_cast<unsigned int>(stage),
                screen.width() / 2, screen.height() * 48 / 100,
                screen.height() / 45, 0xffffffffu);
-    drawCenteredMenuText(screen, "ERROR CODE",
+    drawCenteredMenuText(screen, tr("ERROR CODE", "КОД ОШИБКИ"),
                          screen.height() * 62 / 100, 2,
                          0xffffffffu);
     drawHexNumber(screen, static_cast<unsigned int>(error),
@@ -476,19 +501,25 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
     screen.rectangle(x - 12, y - 20, width + 24, 194, 0xff111b30u);
     // Both spheres back in view: the level resumes by itself (the bar),
     // or Start re-centers the play space first.
-    const char* message = !both_moves_tracked ? "TRACKING LOST" :
-        (!recalibrating ? "RESUMING" :
-         (!hands_separated ? "SEPARATE MOVE HANDS" :
-          "HOLD BOTH MOVE STILL"));
+    const char* message = !both_moves_tracked ? tr("TRACKING LOST", "ПОТЕРЯ ОТСЛЕЖИВАНИЯ") :
+        (!recalibrating ? tr("RESUMING", "ПРОДОЛЖАЕМ") :
+         (!hands_separated ? tr("SEPARATE MOVE HANDS", "РАЗВЕДИТЕ РУКИ") :
+          tr("HOLD BOTH MOVE STILL", "ДЕРЖИТЕ ОБА MOVE НЕПОДВИЖНО")));
     drawMenuText(screen, message, x + 25, y, 3,
                  both_moves_tracked ? 0xffd9e7ffu : 0xffffad8bu);
-    drawMenuText(screen, !both_moves_tracked ? "SHOW BOTH MOVE TO THE CAMERA" :
-                 (recalibrating ? "RETURN TO START POSE" :
-                  "START  RECENTER"), x + 25, y + 50, 2, 0xff9cb3d3u);
-    drawMenuText(screen, "HANDS APART - BUTTONS UP - SABERS FORWARD",
+    drawMenuText(screen, !both_moves_tracked
+                     ? tr("SHOW BOTH MOVE TO THE CAMERA", "ПОКАЖИТЕ ОБА MOVE КАМЕРЕ") :
+                 (recalibrating ? tr("RETURN TO START POSE", "ВЕРНИТЕСЬ В НАЧАЛЬНУЮ ПОЗУ") :
+                  tr(ICON_START "  RECENTER", ICON_START "  ЦЕНТРОВКА")),
+                 x + 25, y + 50, 2, 0xff9cb3d3u);
+    drawMenuText(screen, tr("HANDS APART - BUTTONS UP - SABERS FORWARD",
+                            "РУКИ ВРОЗЬ - КНОПКАМИ ВВЕРХ - МЕЧИ ВПЕРЁД"),
                  x + 25, y + 77, 2, 0xff9cb3d3u);
     // A sphere the camera lost for good: its Move button recalibrates it.
-    drawMenuText(screen, "AIM AT CAMERA  MOVE RESETS SPHERE  TRI QUIT",
+    drawMenuText(screen, tr("AIM AT CAMERA   " ICON_MOVE "  RESETS SPHERE   "
+                            ICON_TRIANGLE "  QUIT",
+                            "ЦЕЛЬТЕСЬ В КАМЕРУ   " ICON_MOVE "  СБРОС СФЕРЫ   "
+                            ICON_TRIANGLE "  ВЫХОД"),
                  x + 25, y + 140, 2, 0xff9cb3d3u);
     screen.rectangle(x + 25, y + 108, width - 50, 14, 0xff303b56u);
     if (both_moves_tracked && (!recalibrating || hands_separated)) {
@@ -532,13 +563,14 @@ void drawPoseFigure(Framebuffer& screen, int step, int cx, int sy, float scale,
 } // namespace
 
 void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
-    static const char* const titles[3] = {
-        "ARMS FORWARD", "ARMS OUT TO THE SIDES", "ARMS DOWN"
+    const char* const titles[3] = {
+        tr("ARMS FORWARD", "РУКИ ВПЕРЁД"), tr("ARMS OUT TO THE SIDES", "РУКИ В СТОРОНЫ"),
+        tr("ARMS DOWN", "РУКИ ВНИЗ")
     };
-    static const char* const hints[3] = {
-        "POINT BOTH MOVE AT THE CAMERA",
-        "SPREAD THEM WIDE  LIKE A LETTER T",
-        "RELAX BOTH ARMS ALONG THE BODY"
+    const char* const hints[3] = {
+        tr("POINT BOTH MOVE AT THE CAMERA", "НАПРАВЬТЕ ОБА MOVE НА КАМЕРУ"),
+        tr("SPREAD THEM WIDE  LIKE A LETTER T", "РАЗВЕДИТЕ ШИРОКО, КАК БУКВА Т"),
+        tr("RELAX BOTH ARMS ALONG THE BODY", "ОПУСТИТЕ РУКИ ВДОЛЬ ТЕЛА")
     };
     const int step = view.step < 0 ? 0 : (view.step > 2 ? 2 : view.step);
     const int width = 900;
@@ -579,28 +611,35 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
 
     // Each controller: press its Move button in the pose, then hold while
     // its sphere settles and is measured.
-    drawMenuText(screen, "IN THE POSE PRESS MOVE ON EACH CONTROLLER",
+    drawMenuText(screen, tr("IN THE POSE PRESS " ICON_MOVE " ON EACH CONTROLLER",
+                            "В ПОЗЕ НАЖМИТЕ " ICON_MOVE " НА КАЖДОМ MOVE"),
                  x + 30, y + 150, 2, 0xffd9e7ffu);
     if (step == 0 && view.directions_disagree)
-        drawMenuText(screen, "BLADES DISAGREE  AIM BOTH AT THE CAMERA AGAIN",
+        drawMenuText(screen, tr("BLADES DISAGREE  AIM BOTH AT THE CAMERA AGAIN",
+                                "МЕЧИ НЕ СОВПАЛИ - СНОВА НАЦЕЛЬТЕ ОБА НА КАМЕРУ"),
                      x + 30, y + 176, 2, 0xffff6470u);
     else if (step == 0)
-        drawMenuText(screen, "THIS ALSO CALIBRATES ITS SPHERE", x + 30, y + 176, 2,
+        drawMenuText(screen, tr("THIS ALSO CALIBRATES ITS SPHERE", "ЗАОДНО КАЛИБРУЕТСЯ СФЕРА"),
+                     x + 30, y + 176, 2,
                      0xff9cb3d3u);
     for (int slot = 0; slot < 2; ++slot) {
         const int row_y = y + 222 + slot * 48;
         screen.circle(x + 42, row_y + 8, 10, hand_colors[slot]);
         const int state = view.hand_state[slot];
-        const char* text = state == 0 ? (view.hand_visible[slot] ? "PRESS MOVE"
-                                                                 : "NOT SEEN  PRESS MOVE")
-                         : state == 1 ? (view.hand_visible[slot] ? "HOLD STILL"
-                                                                 : "WAITING FOR THE SPHERE")
-                         : state == 2 ? "MEASURING" : "OK";
+        const char* text = state == 0
+            ? (view.hand_visible[slot] ? tr("PRESS " ICON_MOVE, "НАЖМИТЕ " ICON_MOVE)
+                                       : tr("NOT SEEN  PRESS " ICON_MOVE,
+                                            "НЕ ВИДНО - НАЖМИТЕ " ICON_MOVE))
+            : state == 1 ? (view.hand_visible[slot] ? tr("HOLD STILL", "НЕ ДВИГАЙТЕСЬ")
+                                                    : tr("WAITING FOR THE SPHERE", "ЖДЁМ СФЕРУ"))
+            : state == 2 ? tr("MEASURING", "ИЗМЕРЯЕМ") : tr("OK", "ГОТОВО");
         const u32 color = state == 3 ? 0xff40e890u
                         : (state == 0 ? 0xffd9e7ffu : 0xffffc030u);
         drawMenuText(screen, text, x + 66, row_y, 3, color);
     }
-    drawMenuText(screen, "TRI  START OVER      CROSS  BACK", x + 30, y + height - 40, 2,
+    drawMenuText(screen, tr(ICON_TRIANGLE "  START OVER      " ICON_CROSS "  BACK",
+                            ICON_TRIANGLE "  ЗАНОВО      " ICON_CROSS "  НАЗАД"),
+                 x + 30, y + height - 40, 2,
                  0xff9cb3d3u);
 }
 
@@ -613,23 +652,13 @@ void drawCaptureIndicator(Framebuffer& screen) {
 
 void drawUsbImport(Framebuffer& screen, unsigned int copied, unsigned int total) {
     char text[40];
-    if (total) snprintf(text, sizeof(text), "USB COPY %u OF %u", copied, total);
-    else snprintf(text, sizeof(text), "USB ADDED %u", copied);
-    // Digits are drawn by drawMenuText as blank advances: draw them apart.
+    if (total)
+        snprintf(text, sizeof(text), tr("USB COPY %u OF %u", "USB: КОПИЯ %u ИЗ %u"),
+                 copied, total);
+    else snprintf(text, sizeof(text), tr("USB ADDED %u", "USB: ДОБАВЛЕНО %u"), copied);
     const int scale = 2;
-    const int width = static_cast<int>(strlen(text)) * scale * 6;
-    const int x = screen.width() - width - screen.width() / 40;
-    const int y = screen.height() / 30;
-    int cursor = x;
-    for (const char* letter = text; *letter; ++letter, cursor += scale * 6) {
-        if (*letter >= '0' && *letter <= '9')
-            drawDigit(screen, static_cast<unsigned int>(*letter - '0'), cursor, y + scale,
-                      scale, 0xff70e0a0u);
-        else if (*letter != ' ') {
-            const char one[2] = { *letter, 0 };
-            drawMenuText(screen, one, cursor, y, scale, 0xff70e0a0u);
-        }
-    }
+    const int x = screen.width() - menuTextWidth(text, scale) - screen.width() / 40;
+    drawMenuText(screen, text, x, screen.height() / 30, scale, 0xff70e0a0u);
 }
 
 void drawChartPips(Framebuffer& screen, std::size_t chart_count,
@@ -647,8 +676,8 @@ void drawChartPips(Framebuffer& screen, std::size_t chart_count,
 }
 
 void drawHandMode(Framebuffer& screen, bool invert_hands) {
-    drawMenuText(screen, invert_hands ? "HANDS FLIPPED" :
-                 "HANDS AUTO", 24, screen.height() - 30, 2,
+    drawMenuText(screen, invert_hands ? tr("HANDS FLIPPED", "РУКИ НАОБОРОТ") :
+                 tr("HANDS AUTO", "РУКИ: АВТО"), 24, screen.height() - 30, 2,
                  invert_hands ? 0xffffb068u : 0xff80d8c0u);
 }
 

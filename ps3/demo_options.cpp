@@ -47,6 +47,8 @@ EmulatorDemoOptions readEmulatorDemoOptions() {
             options.playlist_test = true;
         else if (strcmp(line, "pause_test=1") == 0)
             options.pause_test = true;
+        else if (strcmp(line, "screens_test=1") == 0)
+            options.screens_test = true;
         else if (strcmp(line, "usb_import=1") == 0)
             options.usb_import = true;
         else if (strncmp(line, "playlist_shelf=", 15) == 0)

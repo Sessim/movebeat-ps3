@@ -112,6 +112,8 @@ App::App()
 
 int App::run() {
     int exit_code = 0;
+    // The language first: a startup failure is already shown in it.
+    applyLanguage();
     if (!initializeSystems(exit_code)) return exit_code;
     if (!selectInitialLevel(exit_code)) return exit_code;
     loadSettings();
@@ -127,6 +129,10 @@ int App::run() {
         ? selected_level_.charts[selected_chart_index_].difficulty : "Easy";
     writeRunStatus(kRunStatusPath, diagnostic_);
 
+    if (demo_mode_ && demo_options_.screens_test) {
+        runScreensGallery();
+        g_running = false;
+    }
     while (g_running) runFrame();
 
     shutdown();
@@ -402,6 +408,144 @@ void App::reloadLibrary() {
     printf("Library reloaded: %u levels, %u playlists\n",
            static_cast<unsigned int>(level_choices_.size()),
            static_cast<unsigned int>(playlists_.size()));
+}
+
+void App::applyLanguage() {
+    movebeat::Settings settings;
+    std::string error;
+    if (!movebeat::loadSettingsFile(kSettingsPath, settings, error))
+        settings = movebeat::Settings();
+    Language chosen = LANGUAGE_EN;
+    if (settings.language == "ru") {
+        chosen = LANGUAGE_RU;
+    } else if (settings.language == "auto") {
+        s32 system_language = 0;
+        if (sysUtilGetSystemParamInt(SYSUTIL_SYSTEMPARAM_ID_LANG, &system_language) == 0 &&
+            system_language == SYSUTIL_LANG_RUSSIAN)
+            chosen = LANGUAGE_RU;
+    }
+    setLanguage(chosen);
+    diagnostic_.language = chosen == LANGUAGE_RU ? "ru" : "en";
+}
+
+void App::runScreensGallery() {
+    // Every screen once per language, for checking translations and layout
+    // in the emulator. Not reachable on hardware (demo mode only).
+    const Language languages[2] = {LANGUAGE_EN, LANGUAGE_RU};
+    const Language chosen = language();
+    showShelf(0);
+    movebeat::ScoreState play;
+    play.score = 48210;
+    play.combo = 42;
+    play.max_combo = 97;
+    play.hits = 312;
+    play.misses = 9;
+    movebeat::HighScore best;
+    best.score = 51370;
+    best.max_combo = 120;
+    const float far_z = game_.noteSpawnDepth();
+    for (int which = 0; which < 2; ++which) {
+        setLanguage(languages[which]);
+        const char* code = which ? "ru" : "en";
+        for (int index = 1; index <= 13; ++index) {
+            screen_.waitForPreviousFlip();
+            screen_.beginFrame(0xff050510u);
+            const bool playfield = index >= 5 && index <= 8;
+            if (playfield) {
+                drawBackground(screen_, far_z, 0, 0.0f);
+                drawFloor(screen_, far_z);
+                drawGrid(screen_, far_z);
+            }
+            LibraryView view;
+            view.halo_color = difficultyColor("Easy");
+            view.shelf_count = playlists_.size() + 1;
+            switch (index) {
+            case 1:
+            case 13:
+                drawLevelLibrary(screen_, level_choices_, shelf_order_, view);
+                drawHandMode(screen_, false);
+                if (index == 13) drawUsbImport(screen_, 3, 12);
+                break;
+            case 2:
+                if (playlists_.empty()) continue;
+                showShelf(1);
+                updateLibraryCards(level_choices_, shelf_order_, 0,
+                                   static_cast<unsigned int>(kLibraryCardWindow * 2 + 1));
+                view.playlist = &playlists_[0];
+                view.shelf = 1;
+                drawLevelLibrary(screen_, level_choices_, shelf_order_, view);
+                drawHandMode(screen_, true);
+                break;
+            case 3:
+            case 4: {
+                drawBackground(screen_, far_z, 0, 0.0f);
+                drawFloor(screen_, far_z);
+                CalibrationView calibration;
+                calibration.step = index == 3 ? 0 : 1;
+                calibration.hand_state[0] = index == 3 ? 0 : 3;
+                calibration.hand_state[1] = index == 3 ? 1 : 2;
+                calibration.hand_visible[0] = true;
+                calibration.hand_visible[1] = index == 4;
+                calibration.hand_x[0] = index == 3 ? -0.2f : -0.8f;
+                calibration.hand_x[1] = 0.8f;
+                drawCalibrationOverlay(screen_, calibration);
+                break;
+            }
+            case 5:
+                drawHud(screen_, play, 65000u, 214000u, 0.0f, false);
+                break;
+            case 6:
+                drawHud(screen_, play, 65000u, 214000u, 0.0f, false);
+                drawPauseMenu(screen_);
+                break;
+            case 7:
+                drawHud(screen_, play, 65000u, 214000u, 0.0f, false);
+                drawTrackingPauseOverlay(screen_, false, false, false, 0u);
+                break;
+            case 8:
+                drawHud(screen_, play, 65000u, 214000u, 0.0f, false);
+                drawTrackingPauseOverlay(screen_, true, true, true, 600u);
+                break;
+            case 9:
+                drawResults(screen_, play, best);
+                drawResultsHint(screen_);
+                break;
+            case 10:
+                drawAudioError(screen_, static_cast<int>(0x80010002u));
+                break;
+            case 11:
+                drawStartupFailure(screen_, GemRuntime::INIT_CAMERA_TYPE, -1003);
+                break;
+            case 12: {
+                drawBackground(screen_, far_z, 0, 0.0f);
+                CalibrationView calibration;
+                calibration.step = 0;
+                calibration.directions_disagree = true;
+                calibration.hand_state[0] = calibration.hand_state[1] = 0;
+                drawCalibrationOverlay(screen_, calibration);
+                break;
+            }
+            }
+            drawConnection(screen_, 0, true, true, 0xff40b8ffu);
+            drawConnection(screen_, 1, true, true, 0xffff4058u);
+            char path[96];
+            snprintf(path, sizeof(path), "/dev_hdd0/game/MOVEBEAT1/USRDIR/screen_%s_%02d.ppm",
+                     code, index);
+            if (screen_.savePpm(path)) printf("Screen saved: %s\n", path);
+            screen_.present();
+            if (shelf_ != 0) {
+                // Only once the RSX has drawn the frame: leaving the shelf
+                // frees the playlist card the frame still reads.
+                screen_.waitForPreviousFlip();
+                showShelf(0);
+                updateLibraryCards(level_choices_, shelf_order_, shelf_pos_,
+                                   static_cast<unsigned int>(kLibraryCardWindow * 2 + 1));
+            }
+        }
+    }
+    setLanguage(chosen);
+    diagnostic_.phase = "screens_test_done";
+    writeRunStatus(kRunStatusPath, diagnostic_);
 }
 
 void App::loadSettings() {
@@ -1853,7 +1997,7 @@ void App::renderPlayfield(const FrameInput& input) {
     }
     drawNotes(screen_, game_, level_time_ms, !solid_notes_drawn);
     if (!solid_notes_drawn) {
-        drawMenuText(screen_, "3D RENDER UNAVAILABLE", 24,
+        drawMenuText(screen_, tr("3D RENDER UNAVAILABLE", "3D-ГРАФИКА НЕДОСТУПНА"), 24,
                      screen_.height() - 54, 2, 0xffffad8bu);
     }
     drawCutFeedback(screen_, cut_feedback_, level_time_ms);

@@ -1152,6 +1152,13 @@ void testSettings() {
            "blade length is preserved");
     expect(settings.invert_hands,
            "manual hand inversion is preserved");
+    expect(settings.language == "auto", "the language follows the system by default");
+    std::istringstream russian("format=1\ntiming_offset_ms=0\nlanguage=ru\n");
+    expect(movebeat::loadSettings(russian, settings, error) && settings.language == "ru",
+           "the language can be set to Russian");
+    std::istringstream unknown_language("format=1\ntiming_offset_ms=0\nlanguage=fr\n");
+    expect(!movebeat::loadSettings(unknown_language, settings, error),
+           "an unknown language is rejected");
 
     std::istringstream legacy("format=1\ntiming_offset_ms=20\n");
     expect(movebeat::loadSettings(legacy, settings, error),

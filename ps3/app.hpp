@@ -100,6 +100,8 @@ private:
         return demo_mode_ && (demo_options_.menu_test || demo_options_.playlist_test);
     }
     void recordMenuTest(const FrameInput& input);
+    void applyLanguage();
+    void runScreensGallery();
     void refreshBestScores();
 
     // Library scene.

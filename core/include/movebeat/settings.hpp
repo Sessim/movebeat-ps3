@@ -16,10 +16,12 @@ struct Settings {
     int timing_offset_ms;
     int blade_length_cm;
     bool invert_hands;
+    // On-screen language: "auto" (the PS3 system language), "en" or "ru".
+    std::string language;
 
     Settings()
         : timing_offset_ms(0), blade_length_cm(DEFAULT_BLADE_LENGTH_CM),
-          invert_hands(false) {}
+          invert_hands(false), language("auto") {}
 };
 
 bool loadSettings(std::istream& input, Settings& settings, std::string& error);

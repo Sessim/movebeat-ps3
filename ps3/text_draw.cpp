@@ -8,36 +8,23 @@ namespace ps3 {
 
 void drawMenuText(Framebuffer& screen, const char* label,
                   int x, int y, int scale, u32 color) {
-    static const unsigned char glyphs[26][7] = {
-        {14,17,17,31,17,17,17}, {30,17,17,30,17,17,30},
-        {14,17,16,16,16,17,14}, {30,17,17,17,17,17,30},
-        {31,16,16,30,16,16,31}, {31,16,16,30,16,16,16},
-        {14,17,16,23,17,17,14}, {17,17,17,31,17,17,17},
-        {31,4,4,4,4,4,31}, {7,2,2,2,18,18,12},
-        {17,18,20,24,20,18,17}, {16,16,16,16,16,16,31},
-        {17,27,21,21,17,17,17}, {17,25,21,19,17,17,17},
-        {14,17,17,17,17,17,14}, {30,17,17,30,16,16,16},
-        {14,17,17,17,21,18,13}, {30,17,17,30,20,18,17},
-        {15,16,16,14,1,1,30}, {31,4,4,4,4,4,4},
-        {17,17,17,17,17,17,14}, {17,17,17,17,17,10,4},
-        {17,17,17,21,21,21,10}, {17,17,10,4,10,17,17},
-        {17,17,10,4,4,4,4}, {31,1,2,4,8,16,31}
-    };
-    for (const char* letter = label; *letter; ++letter, x += scale * 6) {
-        if (*letter < 'A' || *letter > 'Z') continue;
-        const unsigned char* rows = glyphs[*letter - 'A'];
-        for (int row = 0; row < 7; ++row)
-            for (int column = 0; column < 5; ++column)
-                if (rows[row] & (1u << (4 - column)))
-                    screen.rectangle(x + column * scale, y + row * scale,
-                                     scale, scale, color);
+    for (const char* cursor = label; *cursor;) {
+        const MenuGlyph glyph = nextMenuGlyph(cursor);
+        if (glyph.rows) {
+            const u32 ink = glyph.icon_color ? glyph.icon_color : color;
+            for (int row = 0; row < 7; ++row)
+                for (int column = 0; column < glyph.columns; ++column)
+                    if (glyph.rows[row] & (1u << (glyph.columns - 1 - column)))
+                        screen.rectangle(x + column * scale, y + row * scale,
+                                         scale, scale, ink);
+        }
+        x += glyph.advance * scale;
     }
 }
 
 void drawCenteredMenuText(Framebuffer& screen,
                           const char* label, int y, int scale, u32 color) {
-    const int width = static_cast<int>(strlen(label)) * scale * 6;
-    drawMenuText(screen, label, (screen.width() - width) / 2,
+    drawMenuText(screen, label, (screen.width() - menuTextWidth(label, scale)) / 2,
                  y, scale, color);
 }
 
