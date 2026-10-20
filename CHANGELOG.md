@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-20
 
+- The starter set is 51 maps in six themed playlists (Throwback Hits, Party
+  Hits, Fresh Hits, Pop Rock Anthems, Electro and Memes, Russian Rock and
+  Rap), each with a cover made of its songs' covers. The single "MoveBeat
+  Starter" list of 0.1.0 is replaced.
 - Experimental 1080p (`resolution=1080` in `renderer.ini`): when the system
   already outputs 1080p, the RSX draws the same layout at full resolution.
   Off by default: switching the output up from 720p rebooted a console.

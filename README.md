@@ -28,8 +28,9 @@ download songs.
 2. Install `movebeat.pkg` on the PS3 (Package Manager → Install Package
    Files, from a USB stick or over FTP). The package only contains the
    built-in tutorial song.
-3. Run the assistant on the PC and press **Starter set**: it downloads six
-   maps and the "MoveBeat Starter" playlist from BeatSaver.
+3. Run the assistant on the PC and press **Starter set**: it downloads 51
+   maps from BeatSaver in six themed playlists (Throwback Hits, Party Hits,
+   Fresh Hits, Pop Rock Anthems, Electro and Memes, Russian Rock and Rap).
    Any other map can be found by name or by its `!bsr` code.
 4. Plug in the USB stick and press **All levels to USB**; the assistant
    checks that the stick is FAT32.
@@ -96,7 +97,7 @@ length (50–140 cm) are saved in `USRDIR/settings.ini`.
 it follows the Windows display language, and the menu in the top right
 switches it.
 
-- **Starter set**: six maps and the "MoveBeat Starter" playlist.
+- **Starter set**: 51 maps in six themed playlists.
 - **Search** by name, author, ID (`54851`) or BSR command (`!bsr 54851`),
   with the cover, difficulties and download size; **Prepare level**
   downloads the map and checks its SHA-1. An already downloaded ZIP can be

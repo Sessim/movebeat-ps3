@@ -52,7 +52,7 @@ from assistant.ftp_profile import (
 )
 
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 APP_NAME = f"MoveBeat Track Assistant {APP_VERSION}"
 MAX_PREVIEW_PIXELS = 16_000_000
 LANGUAGE_NAMES = {"en": "English", "ru": "Русский"}
@@ -406,8 +406,8 @@ class AssistantApp(tk.Tk):
                 elif kind == "log":
                     self._append_log(str(payload) + "\n")
                 elif kind == "starter":
-                    destination, report = payload
-                    self.refresh_bundles(select=destination.name)
+                    bundles, report = payload
+                    self.refresh_bundles(select=bundles[0].name if bundles else None)
                     lines = [tr(f"Стартовый набор: скачано {len(report.imported)}, "
                                 f"уже было {len(report.existing)}, ошибок {len(report.failed)}",
                                 f"Starter set: {len(report.imported)} downloaded, "
@@ -834,9 +834,9 @@ class AssistantApp(tk.Tk):
         output_root = Path(self.output_var.get()).expanduser()
 
         def operation() -> None:
-            destination, report = import_starter_set(
+            bundles, report = import_starter_set(
                 output_root, log=lambda line: self.events.put(("log", line)))
-            self.events.put(("starter", (destination, report)))
+            self.events.put(("starter", (bundles, report)))
 
         self._run(tr("Скачивание стартового набора…", "Downloading the starter set…"), operation)
 
