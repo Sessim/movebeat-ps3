@@ -145,6 +145,33 @@ void drawCarouselRow(Framebuffer& screen, const LevelChoice& level,
 
 } // namespace
 
+// Lines of a hint group are 24 px apart; "what" sits level with their
+// middle, after the widest "how" of the column. A right column ends at x.
+template <typename Group>
+void drawHintGroups(Framebuffer& screen, const Group* groups, int count, int x,
+                    bool right_aligned) {
+    const int scale = 2;
+    const int gap = 24;
+    int how_width = 0;
+    int what_width = 0;
+    for (int index = 0; index < count; ++index) {
+        for (int line = 0; line < 2; ++line)
+            if (groups[index].how[line])
+                how_width = std::max(how_width, menuTextWidth(groups[index].how[line], scale));
+        what_width = std::max(what_width, menuTextWidth(groups[index].what, scale));
+    }
+    const int start = right_aligned ? x - (how_width + gap + what_width) : x;
+    for (int index = 0; index < count; ++index) {
+        const Group& group = groups[index];
+        const int lines = group.how[1] ? 2 : 1;
+        for (int line = 0; line < lines; ++line)
+            drawMenuText(screen, group.how[line], start, group.y + line * 24 +
+                         (lines == 1 ? 12 : 0), scale, 0xff9cb3d3u);
+        drawMenuText(screen, group.what, start + how_width + gap, group.y + 12, scale,
+                     0xffd9e7ffu);
+    }
+}
+
 void drawLevelLibrary(Framebuffer& screen,
                       const std::vector<LevelChoice>& levels,
                       const std::vector<std::size_t>& order,
@@ -272,21 +299,29 @@ void drawLevelLibrary(Framebuffer& screen,
         }
     }
 
-    drawCenteredMenuText(screen, tr(
-        "HOLD " ICON_T "  UP DOWN  SCROLL   LEFT RIGHT  DIFFICULTY   "
-        "HOLD " ICON_MOVE ICON_MOVE "  RANDOM",
-        "ДЕРЖИ " ICON_T "  ВВЕРХ ВНИЗ  ЛИСТАТЬ   ВЛЕВО ВПРАВО  СЛОЖНОСТЬ   "
-        "ДЕРЖИ " ICON_MOVE ICON_MOVE "  СЛУЧАЙНЫЙ"), height - 56, 2, 0xff9cb3d3u);
-    drawCenteredMenuText(screen, view.shelf_count > 1
-        ? tr(ICON_TRIANGLE ICON_CIRCLE "  TRACKS   " ICON_CROSS "  DIFFICULTY   "
-             ICON_SQUARE "  LISTS   " ICON_MOVE "  PLAY",
-             ICON_TRIANGLE ICON_CIRCLE "  ТРЕКИ   " ICON_CROSS "  СЛОЖНОСТЬ   "
-             ICON_SQUARE "  СПИСКИ   " ICON_MOVE "  ИГРАТЬ")
-        : tr(ICON_TRIANGLE ICON_CIRCLE "  TRACKS   " ICON_CROSS "  DIFFICULTY   "
-             ICON_MOVE "  PLAY",
-             ICON_TRIANGLE ICON_CIRCLE "  ТРЕКИ   " ICON_CROSS "  СЛОЖНОСТЬ   "
-             ICON_MOVE "  ИГРАТЬ"),
-        height - 30, 2, 0xff9cb3d3u);
+    // Controls, in groups: the ways to do something (one or two lines),
+    // then what it does; Move to play in the middle, larger.
+    struct HintGroup {
+        const char* how[2];
+        const char* what;
+        int y;
+    };
+    const HintGroup left[2] = {
+        {{tr("HOLD " ICON_T " UP-DOWN", "ЗАЖМИ " ICON_T " ВВЕРХ-ВНИЗ"),
+          ICON_TRIANGLE " " ICON_CIRCLE}, tr("SCROLL TRACKS", "ЛИСТАТЬ ТРЕКИ"), height - 112},
+        {{tr("HOLD " ICON_T " LEFT-RIGHT", "ЗАЖМИ " ICON_T " ВЛЕВО-ВПРАВО"), ICON_CROSS},
+         tr("DIFFICULTY", "ВЫБОР СЛОЖНОСТИ"), height - 58}
+    };
+    const HintGroup right[2] = {
+        {{tr("HOLD " ICON_MOVE ICON_MOVE, "ЗАЖМИ " ICON_MOVE ICON_MOVE), 0},
+         tr("RANDOM TRACK", "СЛУЧАЙНЫЙ ТРЕК"), height - 112},
+        {{ICON_SQUARE, 0}, tr("PLAYLISTS", "ПЛЕЙЛИСТЫ"), height - 58}
+    };
+    const int right_groups = view.shelf_count > 1 ? 2 : 1;
+    drawHintGroups(screen, left, 2, 40, false);
+    drawHintGroups(screen, right, right_groups, width - 40, true);
+    drawCenteredMenuText(screen, tr(ICON_MOVE "  PLAY", ICON_MOVE "  ИГРАТЬ"),
+                         height - 82, 3, 0xffd9e7ffu);
 }
 
 void drawMovePointer(Framebuffer& screen,
@@ -321,7 +356,7 @@ void drawResults(Framebuffer& screen,
     const int label_y = row_y - label_scale * 7 - small;
     const int columns[3] = { screen.width() / 4, screen.width() / 2,
                              screen.width() * 3 / 4 };
-    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС. КОМБО"),
+    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС КОМБО"),
                               tr("MISSES", "ПРОМАХИ") };
     const unsigned int values[3] = { score.hits, score.max_combo, score.misses };
     const u32 colors[3] = { 0xff40c8ffu, 0xfff0f0f0u, 0xffff5060u };
@@ -385,7 +420,7 @@ void drawPlaylistSummary(Framebuffer& screen, const PlaylistRun& run,
     drawNumber(screen, run.totalHits(), width / 4, 222, 4, 0xff40c8ffu);
     drawNumber(screen, run.maxCombo(), width / 2, 222, 4, 0xfff0f0f0u);
     drawNumber(screen, run.totalMisses(), width * 3 / 4, 222, 4, 0xffff5060u);
-    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС. КОМБО"),
+    const char* labels[3] = { tr("HITS", "ПОПАДАНИЯ"), tr("MAX COMBO", "МАКС КОМБО"),
                               tr("MISSES", "ПРОМАХИ") };
     for (int column = 0; column < 3; ++column)
         drawMenuText(screen, labels[column],
@@ -428,14 +463,19 @@ void drawPauseMenu(Framebuffer& screen) {
     const int y = (screen.height() - height) / 2;
     screen.rectangle(x, y, width, height, 0xff101828u);
     drawCenteredMenuText(screen, tr("PAUSED", "ПАУЗА"), y + 30, 4, 0xffd9e7ffu);
-    drawMenuText(screen, tr(ICON_CROSS "  CONTINUE", ICON_CROSS "  ПРОДОЛЖИТЬ"),
-                 x + 70, y + 100, 3, 0xff40e890u);
-    drawMenuText(screen, tr(ICON_CIRCLE "  RESTART", ICON_CIRCLE "  ЗАНОВО"),
-                 x + 70, y + 145, 3, 0xffffc030u);
-    drawMenuText(screen, tr(ICON_SQUARE "  CALIBRATE", ICON_SQUARE "  КАЛИБРОВКА"),
-                 x + 70, y + 190, 3, 0xff70d8ffu);
-    drawMenuText(screen, tr(ICON_TRIANGLE "  BACK TO TRACKS", ICON_TRIANGLE "  К ТРЕКАМ"),
-                 x + 70, y + 235, 3, 0xffff6470u);
+    const char* items[4] = {
+        tr(ICON_CROSS "  CONTINUE", ICON_CROSS "  ПРОДОЛЖИТЬ"),
+        tr(ICON_CIRCLE "  RESTART", ICON_CIRCLE "  ЗАНОВО"),
+        tr(ICON_SQUARE "  CALIBRATE", ICON_SQUARE "  КАЛИБРОВКА"),
+        tr(ICON_TRIANGLE "  BACK TO TRACKS", ICON_TRIANGLE "  К ТРЕКАМ")
+    };
+    const u32 colors[4] = {0xff40e890u, 0xffffc030u, 0xff70d8ffu, 0xffff6470u};
+    int block = 0;
+    for (int item = 0; item < 4; ++item)
+        block = std::max(block, menuTextWidth(items[item], 3));
+    for (int item = 0; item < 4; ++item)
+        drawMenuText(screen, items[item], (screen.width() - block) / 2, y + 100 + item * 45, 3,
+                     colors[item]);
 }
 
 void drawAudioError(Framebuffer& screen, int error) {
@@ -568,7 +608,7 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
         tr("ARMS DOWN", "РУКИ ВНИЗ")
     };
     const char* const hints[3] = {
-        tr("POINT BOTH MOVE AT THE CAMERA", "НАПРАВЬТЕ ОБА MOVE НА КАМЕРУ"),
+        tr("HOLD BOTH MOVE STRAIGHT AHEAD", "ВЫТЯНИТЕ ОБА MOVE ПЕРЕД СОБОЙ"),
         tr("SPREAD THEM WIDE  LIKE A LETTER T", "РАЗВЕДИТЕ ШИРОКО, КАК БУКВА Т"),
         tr("RELAX BOTH ARMS ALONG THE BODY", "ОПУСТИТЕ РУКИ ВДОЛЬ ТЕЛА")
     };
@@ -610,18 +650,11 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
     }
 
     // Each controller: press its Move button in the pose, then hold while
-    // its sphere settles and is measured.
-    drawMenuText(screen, tr("IN THE POSE PRESS " ICON_MOVE " ON EACH CONTROLLER",
-                            "В ПОЗЕ НАЖМИТЕ " ICON_MOVE " НА КАЖДОМ MOVE"),
-                 x + 30, y + 150, 2, 0xffd9e7ffu);
+    // its sphere settles and is measured (each row says which).
     if (step == 0 && view.directions_disagree)
-        drawMenuText(screen, tr("BLADES DISAGREE  AIM BOTH AT THE CAMERA AGAIN",
-                                "МЕЧИ НЕ СОВПАЛИ - СНОВА НАЦЕЛЬТЕ ОБА НА КАМЕРУ"),
+        drawMenuText(screen, tr("BLADES DISAGREE  HOLD BOTH STRAIGHT AHEAD AGAIN",
+                                "МЕЧИ НЕ СОВПАЛИ - СНОВА ВЫТЯНИТЕ ОБА ВПЕРЁД"),
                      x + 30, y + 176, 2, 0xffff6470u);
-    else if (step == 0)
-        drawMenuText(screen, tr("THIS ALSO CALIBRATES ITS SPHERE", "ЗАОДНО КАЛИБРУЕТСЯ СФЕРА"),
-                     x + 30, y + 176, 2,
-                     0xff9cb3d3u);
     for (int slot = 0; slot < 2; ++slot) {
         const int row_y = y + 222 + slot * 48;
         screen.circle(x + 42, row_y + 8, 10, hand_colors[slot]);
@@ -631,7 +664,8 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
                                        : tr("NOT SEEN  PRESS " ICON_MOVE,
                                             "НЕ ВИДНО - НАЖМИТЕ " ICON_MOVE))
             : state == 1 ? (view.hand_visible[slot] ? tr("HOLD STILL", "НЕ ДВИГАЙТЕСЬ")
-                                                    : tr("WAITING FOR THE SPHERE", "ЖДЁМ СФЕРУ"))
+                                                    : tr("LOOKING FOR THE CONTROLLER",
+                                                         "ИЩЕМ КОНТРОЛЛЕР"))
             : state == 2 ? tr("MEASURING", "ИЗМЕРЯЕМ") : tr("OK", "ГОТОВО");
         const u32 color = state == 3 ? 0xff40e890u
                         : (state == 0 ? 0xffd9e7ffu : 0xffffc030u);
@@ -676,8 +710,10 @@ void drawChartPips(Framebuffer& screen, std::size_t chart_count,
 }
 
 void drawHandMode(Framebuffer& screen, bool invert_hands) {
-    drawMenuText(screen, invert_hands ? tr("HANDS FLIPPED", "РУКИ НАОБОРОТ") :
-                 tr("HANDS AUTO", "РУКИ: АВТО"), 24, screen.height() - 30, 2,
+    const char* text = invert_hands ? tr("HANDS FLIPPED", "РУКИ НАОБОРОТ") :
+                                      tr("HANDS AUTO", "РУКИ: АВТО");
+    drawMenuText(screen, text, screen.width() - menuTextWidth(text, 2) - screen.width() / 40,
+                 screen.height() / 30 + 34, 2,
                  invert_hands ? 0xffffb068u : 0xff80d8c0u);
 }
 

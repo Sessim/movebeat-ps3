@@ -33,10 +33,11 @@ inline const char* tr(const char* en, const char* ru) {
 #define ICON_MOVE "\x05"
 #define ICON_T "\x06"
 #define ICON_START "\x07"
+#define ICON_TIMER "\x08"
 
 enum MenuIcon {
     MENU_ICON_TRIANGLE = 1, MENU_ICON_CIRCLE, MENU_ICON_CROSS, MENU_ICON_SQUARE,
-    MENU_ICON_MOVE, MENU_ICON_T, MENU_ICON_START, MENU_ICON_COUNT
+    MENU_ICON_MOVE, MENU_ICON_T, MENU_ICON_START, MENU_ICON_TIMER, MENU_ICON_COUNT
 };
 
 // One character of menu text: a 5x7 letter (bit 4 is the left column), a
@@ -90,15 +91,17 @@ static const unsigned char kPunctuationRows[11][7] = {
     {0,12,12,0,12,12,0}, {0,1,2,4,8,16,0}, {4,4,4,4,4,0,4}, {14,17,1,2,4,0,4},
     {2,4,8,8,8,4,2}, {8,4,2,2,2,4,8}, {4,4,8,0,0,0,0}
 };
-// Triangle, circle, cross, square, the Move button, the T trigger, Start.
+// Triangle, circle, cross, square, the Move button, the T trigger, Start,
+// a stopwatch.
 static const unsigned char kIcons[MENU_ICON_COUNT - 1][7] = {
     {8,20,20,34,34,65,127}, {28,34,65,65,65,34,28}, {65,34,20,8,20,34,65},
     {127,65,65,65,65,65,127}, {28,62,127,127,127,62,28},
-    {127,65,93,73,73,65,127}, {32,48,56,60,56,48,32}
+    {127,65,93,73,73,65,127}, {32,48,56,60,56,48,32},
+    {28,42,73,79,65,34,28}
 };
 static const uint32_t kIconColors[MENU_ICON_COUNT - 1] = {
     0xff40d8a0u, 0xffff5a6au, 0xff7aa8ffu, 0xffe884d0u, 0xffe8e4f4u,
-    0xffc8d0e0u, 0xffc8d0e0u
+    0xffc8d0e0u, 0xffc8d0e0u, 0xffc8d0e0u
 };
 
 } // namespace menu_font_detail
