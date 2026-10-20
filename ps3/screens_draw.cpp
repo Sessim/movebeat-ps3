@@ -552,13 +552,16 @@ void drawTrackingPauseOverlay(Framebuffer& screen, bool both_moves_tracked,
                  (recalibrating ? tr("RETURN TO START POSE", "ВЕРНИТЕСЬ В НАЧАЛЬНУЮ ПОЗУ") :
                   tr(ICON_START "  RECENTER", ICON_START "  ЦЕНТРОВКА")),
                  x + 25, y + 50, 2, 0xff9cb3d3u);
-    drawMenuText(screen, tr("HANDS APART - BUTTONS UP - SABERS FORWARD",
-                            "РУКИ ВРОЗЬ - КНОПКАМИ ВВЕРХ - МЕЧИ ВПЕРЁД"),
-                 x + 25, y + 77, 2, 0xff9cb3d3u);
+    // The start pose matters only while Start re-centers the play space;
+    // otherwise the song resumes by itself once both spheres are back.
+    if (both_moves_tracked && recalibrating)
+        drawMenuText(screen, tr("HANDS APART - BUTTONS UP - SABERS FORWARD",
+                                "РУКИ ВРОЗЬ - КНОПКАМИ ВВЕРХ - МЕЧИ ВПЕРЕД"),
+                     x + 25, y + 77, 2, 0xff9cb3d3u);
     // A sphere the camera lost for good: its Move button recalibrates it.
-    drawMenuText(screen, tr("AIM AT CAMERA   " ICON_MOVE "  RESETS SPHERE   "
+    drawMenuText(screen, tr("AIM FORWARD   " ICON_MOVE "  RESETS SPHERE   "
                             ICON_TRIANGLE "  QUIT",
-                            "ЦЕЛЬТЕСЬ В КАМЕРУ   " ICON_MOVE "  СБРОС СФЕРЫ   "
+                            "НАПРАВЬТЕ ВПЕРЕД   " ICON_MOVE "  СБРОС СФЕРЫ   "
                             ICON_TRIANGLE "  ВЫХОД"),
                  x + 25, y + 140, 2, 0xff9cb3d3u);
     screen.rectangle(x + 25, y + 108, width - 50, 14, 0xff303b56u);
