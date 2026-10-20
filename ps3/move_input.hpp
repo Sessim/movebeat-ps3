@@ -50,6 +50,40 @@ inline u32 gemHueForPhysicalSlot(unsigned int slot, bool slots_swapped,
     return GEM_HUE_DONT_CARE;
 }
 
+// Distance of two hue angles around the color wheel (0..180).
+inline unsigned int hueGap(u32 a, u32 b) {
+    const int difference = static_cast<int>(a % 360u) - static_cast<int>(b % 360u);
+    const int distance = difference < 0 ? -difference : difference;
+    return static_cast<unsigned int>(distance > 180 ? 360 - distance : distance);
+}
+
+// Hues to ask for a sphere whose color came too close to the other one's:
+// opposite it first, then fanning out to either side.
+enum { HUE_SPREAD_TRIES = 5 };
+inline u32 hueAwayFrom(u32 anchor, unsigned int attempt) {
+    static const unsigned int offsets[HUE_SPREAD_TRIES] = {180u, 150u, 210u, 120u, 240u};
+    return (anchor % 360u + offsets[attempt % HUE_SPREAD_TRIES]) % 360u;
+}
+
+// A sphere hue as an opaque screen color (full saturation and brightness).
+inline u32 hueColor(u32 hue) {
+    const float h = static_cast<float>(hue % 360u) / 60.0f;
+    const int sector = static_cast<int>(h);
+    const float f = h - static_cast<float>(sector);
+    const u32 rising = static_cast<u32>(255.0f * f + 0.5f);
+    const u32 falling = 255u - rising;
+    u32 r = 0, g = 0, b = 0;
+    switch (sector) {
+    case 0: r = 255u; g = rising; break;
+    case 1: r = falling; g = 255u; break;
+    case 2: g = 255u; b = rising; break;
+    case 3: g = falling; b = 255u; break;
+    case 4: r = rising; b = 255u; break;
+    default: r = 255u; b = falling; break;
+    }
+    return 0xff000000u | (r << 16) | (g << 8) | b;
+}
+
 enum GemButtonMask {
     GEM_BUTTON_SELECT = 1u << 0,
     GEM_BUTTON_T = 1u << 1,

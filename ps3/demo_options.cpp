@@ -103,6 +103,8 @@ RenderOptions readRenderOptions() {
             options.pitch_correction = false;
         else if (strcmp(line, "pitch_correction=on") == 0)
             options.pitch_correction = true;
+        else if (strncmp(line, "min_hue_gap=", 12) == 0)
+            options.min_hue_gap = atoi(line + 12);
         else if (strcmp(line, "resolution=720") == 0)
             options.full_hd = false;
         else if (strcmp(line, "resolution=1080") == 0)

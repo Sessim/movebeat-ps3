@@ -62,6 +62,12 @@ public:
     void setCameraTuning(int max_exposure, float image_quality);
     // Hue angles (0..359) of the left and right hand spheres.
     void setHandHueValues(unsigned int left_hue, unsigned int right_hue);
+    // Two spheres whose hues libgem placed closer than this (degrees around
+    // the color wheel) get another hue for one of them; 0 accepts any.
+    void setMinHueGap(unsigned int degrees);
+    // Hue requests made to keep the spheres apart since the hands or the
+    // controllers last changed.
+    unsigned int hueSpreadAttempts() const;
     // libgem's state filter (gemFilterState), from the next initialize().
     void setStateFilter(bool enabled);
     // libgem's camera pitch correction (gemEnableCameraPitchAngleCorrection),
@@ -105,6 +111,13 @@ public:
     unsigned int imuScored(unsigned int slot) const;
 
 private:
+    // The hue a physical slot asks libgem for: a spreading override, the
+    // hand's color, or libgem's choice.
+    u32 requestedHue(unsigned int slot) const;
+    // Asks libgem for both slots' hues; keeps the answer and, when the two
+    // came out too close, queues another request. Returns libgem's error.
+    int requestHues(unsigned int connection_mask);
+    void clearHueSpread();
     struct Impl;
     Impl* impl_;
 

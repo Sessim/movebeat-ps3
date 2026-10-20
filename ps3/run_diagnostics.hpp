@@ -34,6 +34,8 @@ struct RunStatus {
     const char* renderer;
     // On-screen language: "en" or "ru".
     const char* language;
+    // Hue requests made to keep the two spheres' colors apart.
+    unsigned int hue_spread_attempts;
     // Video mode lines: 720 or 1080.
     int display_height;
     int effects_enabled;

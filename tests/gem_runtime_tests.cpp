@@ -24,6 +24,12 @@ unsigned int g_camera_read_count = 1;
 unsigned int g_calibrate_count = 0;
 unsigned short g_state_buttons = 0;
 bool g_state_tracked = false;
+// libgem moving a requested hue: `from` comes back as `to`; a slot-0 hue
+// forced whatever is asked (kNone: off).
+const u32 kNone = 0xffffffffu;
+u32 g_hue_from = kNone;
+u32 g_hue_to = kNone;
+u32 g_slot0_forced = kNone;
 
 void fail(const char* message) {
     std::fprintf(stderr, "GemRuntime test failed: %s\n", message);
@@ -44,6 +50,7 @@ void resetFakes() {
     g_calibrate_count = 0;
     g_state_buttons = 0;
     g_state_tracked = false;
+    g_hue_from = g_hue_to = g_slot0_forced = kNone;
 }
 
 } // namespace
@@ -104,6 +111,9 @@ s32 gemTrackHues(const u32* requested, u32* assigned) {
         return error;
     }
     std::memcpy(assigned, requested, sizeof(g_last_requested_hues));
+    for (int slot = 0; slot < 2; ++slot)
+        if (assigned[slot] == g_hue_from) assigned[slot] = g_hue_to;
+    if (g_slot0_forced != kNone) assigned[0] = g_slot0_forced;
     return 0;
 }
 s32 gemCalibrate(u32) { ++g_calibrate_count; return 0; }
@@ -263,6 +273,51 @@ void runGemRuntimeHueTests() {
             "the game recalibrates a sphere only on request");
 
     runtime.shutdown();
+
+    // libgem turns the left hand's blue (204) into purple (280), 72 degrees
+    // from the right hand's red: the left sphere is asked for the hue
+    // opposite red, and keeps it.
+    resetFakes();
+    {
+        GemRuntime spread;
+        spread.setHandHuesEnabled(true);
+        require(spread.initialize(), "fake libgem should initialize");
+        g_hue_from = GEM_HUE_LEFT_HAND;
+        g_hue_to = 280u;
+        g_state_result = GEM_STATUS_OK;
+        spread.setHandSlotsSwapped(false);
+        require(spread.update(frame, 0.6f) && spread.hueForPhysicalSlot(0) == 280u,
+                "libgem moved the blue request to purple");
+        require(spread.update(frame, 0.6f) && g_last_requested_hues[0] == 172u &&
+                g_last_requested_hues[1] == GEM_HUE_RIGHT_HAND,
+                "the sphere close to red asks for the hue opposite it");
+        require(spread.hueForPhysicalSlot(0) == 172u && spread.hueSpreadAttempts() == 1u &&
+                !spread.hueAssignmentPending(), "far enough apart, the spreading stops");
+        const unsigned int calls = g_hue_call_count;
+        for (int i = 0; i < 10; ++i) spread.update(frame, 0.6f);
+        require(g_hue_call_count == calls, "settled hues are not requested again");
+        spread.shutdown();
+    }
+    // A slot libgem always paints close to the other: a few tries, then stop.
+    resetFakes();
+    {
+        GemRuntime stuck;
+        stuck.setHandHuesEnabled(true);
+        require(stuck.initialize(), "fake libgem should initialize");
+        g_slot0_forced = 340u;
+        g_state_result = GEM_STATUS_OK;
+        stuck.setHandSlotsSwapped(false);
+        for (int i = 0; i < 20; ++i) stuck.update(frame, 0.6f);
+        require(stuck.hueSpreadAttempts() == HUE_SPREAD_TRIES &&
+                g_hue_call_count == 1u + HUE_SPREAD_TRIES,
+                "hopeless hue spreading gives up after a few requests");
+        stuck.setMinHueGap(0);
+        stuck.shutdown();
+    }
+    require(hueGap(350u, 10u) == 20u && hueGap(10u, 190u) == 180u &&
+            hueAwayFrom(352u, 0) == 172u, "hue distances wrap around the color wheel");
+    require(hueColor(0u) == 0xffff0000u && hueColor(120u) == 0xff00ff00u &&
+            hueColor(240u) == 0xff0000ffu, "hues map to screen colors");
     std::puts("All GemRuntime physical LED hue tests passed.");
 }
 

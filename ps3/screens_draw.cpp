@@ -640,7 +640,8 @@ void drawCalibrationOverlay(Framebuffer& screen, const CalibrationView& view) {
     const int cx = x + width - 230;
     const int sy = y + 150;
     drawPoseFigure(screen, step, cx, sy, scale, 0xff3a5a86u);
-    const u32 hand_colors[2] = {0xff70d8ffu, 0xffff6878u};
+    const u32 hand_colors[2] = {view.hand_color[0] ? view.hand_color[0] : 0xff70d8ffu,
+                                view.hand_color[1] ? view.hand_color[1] : 0xffff6878u};
     for (int slot = 0; slot < 2; ++slot) {
         if (!view.hand_visible[slot]) continue;
         float px = cx + view.hand_x[slot] * scale;

@@ -79,9 +79,12 @@ struct CalibrationView {
     bool hand_visible[2];
     float hand_x[2];
     float hand_y[2];
+    // The sphere's real color per hand; 0 draws the hand color.
+    u32 hand_color[2];
 
     CalibrationView() : step(0), directions_disagree(false) {
         for (int slot = 0; slot < 2; ++slot) {
+            hand_color[slot] = 0;
             hand_state[slot] = 0;
             hand_visible[slot] = false;
             hand_x[slot] = hand_y[slot] = 0.0f;

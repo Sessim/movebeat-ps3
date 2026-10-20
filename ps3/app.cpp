@@ -184,6 +184,8 @@ bool App::initializeSystems(int& exit_code) {
     diagnostic_.phase = "gem_initializing";
     writeRunStatus(kRunStatusPath, diagnostic_);
     gem_.setHandHuesEnabled(render_options.hand_colors);
+    gem_.setMinHueGap(static_cast<unsigned int>(
+        render_options.min_hue_gap < 0 ? 0 : render_options.min_hue_gap));
     gem_.setCameraTuning(render_options.camera_exposure, render_options.camera_quality);
     gem_.setStateFilter(render_options.gem_filter);
     gem_.setPitchCorrection(render_options.pitch_correction);
@@ -544,6 +546,9 @@ void App::runScreensGallery() {
                                                        (calibration.step == 2 ? 0.25f : 0.2f));
                     calibration.hand_y[slot] = calibration.step == 2 ? -0.6f : 0.0f;
                 }
+                // Real sphere colors: red, and the hue opposite it.
+                calibration.hand_color[0] = hueColor(172u);
+                calibration.hand_color[1] = hueColor(352u);
                 drawCalibrationOverlay(screen_, calibration);
                 break;
             }
@@ -2064,6 +2069,11 @@ void App::renderOverlays(const FrameInput& input) {
             ? body_calibration_.forwardHandles()
             : (moves.left.handle + moves.right.handle) * 0.5f;
         for (int slot = 0; slot < 2; ++slot) {
+            // Hand slot 0 is the left hand: physical slot 1 when swapped.
+            const unsigned int physical = static_cast<unsigned int>(
+                hand_slots_swapped_ ? 1 - slot : slot);
+            const unsigned int hue = gem_.hueForPhysicalSlot(physical);
+            if (gem_.hueValuesKnown() && hue < 360u) view.hand_color[slot] = hueColor(hue);
             view.hand_state[slot] = static_cast<int>(body_calibration_.handState(slot));
             view.hand_visible[slot] = poses[slot]->tracked;
             view.hand_x[slot] = poses[slot]->handle.x - reference.x;
@@ -2295,6 +2305,7 @@ void App::publishDiagnostics(const FrameInput& input) {
         gem_.hueAssignmentPending() ? 1 : 0;
     diagnostic_.gem_slot0_hue = gem_.hueForPhysicalSlot(0);
     diagnostic_.gem_slot1_hue = gem_.hueForPhysicalSlot(1);
+    diagnostic_.hue_spread_attempts = gem_.hueSpreadAttempts();
     diagnostic_.hue_error_code =
         static_cast<unsigned int>(gem_.lastHueError());
     diagnostic_.tracking_paused = tracking_paused_ ? 1 : 0;

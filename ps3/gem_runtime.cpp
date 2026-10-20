@@ -21,6 +21,8 @@ namespace {
 const unsigned int kCaptureFrames = 60u * 30u;
 // About two seconds at 60 Hz before an unanswered hue request is repeated.
 const unsigned int kHueRetryFrames = 120u;
+// No hue override for a slot.
+const u32 kNoHue = 0xffffffffu;
 
 float vectorComponent(const vec_float4& value, unsigned int index) {
     union VectorAccess {
@@ -71,6 +73,15 @@ struct GemRuntime::Impl {
     unsigned int update_count;
     u32 assigned_hues[4];
     int last_hue_error;
+    // Keeping the two spheres' colors apart: the hues asked for instead of
+    // the hand or automatic ones (kNoHue: none), the requests made, and the
+    // widest pair seen.
+    unsigned int min_hue_gap;
+    u32 hue_override[2];
+    unsigned int hue_spread_attempts;
+    unsigned int best_hue_gap;
+    u32 best_hues[2];
+    bool best_hues_requested;
     bool calibration_requested[2];
     unsigned int connection_mask;
     int last_error;
@@ -107,7 +118,8 @@ struct GemRuntime::Impl {
           camera_exposure(128), camera_quality(0.5f),
           left_hue(GEM_HUE_LEFT_HAND), right_hue(GEM_HUE_RIGHT_HAND), gem_filter(true),
           update_count(0),
-          last_hue_error(0),
+          last_hue_error(0), min_hue_gap(120u), hue_spread_attempts(0),
+          best_hue_gap(0), best_hues_requested(false),
           connection_mask(0), last_error(0),
           last_stage(GemRuntime::INIT_NONE),
           last_update_stage(GemRuntime::UPDATE_NONE),
@@ -122,6 +134,8 @@ struct GemRuntime::Impl {
         previous_results[0] = previous_results[1] = -1;
         rumble[0] = rumble[1] = 0;
         memset(assigned_hues, 0, sizeof(assigned_hues));
+        hue_override[0] = hue_override[1] = kNoHue;
+        best_hues[0] = best_hues[1] = kNoHue;
         calibration_requested[0] = calibration_requested[1] = false;
         last_results[0] = last_results[1] = -1;
         last_tracking[0] = last_tracking[1] = 0;
@@ -263,6 +277,7 @@ void GemRuntime::shutdown() {
     impl_->hue_values_known = false;
     memset(impl_->assigned_hues, 0, sizeof(impl_->assigned_hues));
     impl_->last_hue_error = 0;
+    clearHueSpread();
     impl_->calibration_requested[0] = impl_->calibration_requested[1] = false;
     impl_->connection_mask = 0;
     impl_->previous_buttons[0] = impl_->previous_buttons[1] = 0;
@@ -316,6 +331,7 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     }
     if (connection_mask != impl_->connection_mask) {
         impl_->hues_requested = false;
+        clearHueSpread();
         if (impl_->hand_assignment_known && impl_->hand_hues_enabled) {
             impl_->hue_assignment_dirty = true;
             impl_->hue_values_known = false;
@@ -504,65 +520,10 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
         if ((connection_mask & (1u << i)) != 0 &&
             results[i] != GEM_STATUS_OK) all_ready = false;
     }
-    if (impl_->hue_assignment_dirty) {
-        const u32 requested_hues[4] = {
-            gemHueForPhysicalSlot(0, impl_->hand_slots_swapped,
-                                  impl_->left_hue, impl_->right_hue),
-            gemHueForPhysicalSlot(1, impl_->hand_slots_swapped,
-                                  impl_->left_hue, impl_->right_hue),
-            GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
-        };
-        u32 assigned_hues[4] = {};
-        const int hue_error = gemTrackHues(requested_hues, assigned_hues);
-        impl_->last_hue_error = hue_error;
-        if (hue_error == 0) {
-            memcpy(impl_->assigned_hues, assigned_hues,
-                   sizeof(impl_->assigned_hues));
-            impl_->hue_values_known = true;
-            impl_->hue_assignment_dirty = false;
-            impl_->hues_requested = true;
-        } else {
-            recovery_error = hue_error;
-        }
-    }
-    if (!impl_->hue_assignment_dirty && needs_hues &&
-        !impl_->hues_requested) {
-        if (impl_->hand_assignment_known && impl_->hand_hues_enabled) {
-            const u32 requested_hues[4] = {
-                gemHueForPhysicalSlot(0, impl_->hand_slots_swapped,
-                                  impl_->left_hue, impl_->right_hue),
-                gemHueForPhysicalSlot(1, impl_->hand_slots_swapped,
-                                  impl_->left_hue, impl_->right_hue),
-                GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
-            };
-            u32 assigned_hues[4] = {};
-            const int hue_error = gemTrackHues(requested_hues, assigned_hues);
-            impl_->last_hue_error = hue_error;
-            if (hue_error == 0) {
-                memcpy(impl_->assigned_hues, assigned_hues,
-                       sizeof(impl_->assigned_hues));
-                impl_->hue_values_known = true;
-                impl_->hues_requested = true;
-            } else {
-                recovery_error = hue_error;
-            }
-        } else {
-            const u32 automatic_hues[4] = {
-                GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE,
-                GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
-            };
-            u32 assigned_hues[4] = {};
-            const int hue_error = gemTrackHues(automatic_hues, assigned_hues);
-            impl_->last_hue_error = hue_error;
-            if (hue_error == 0) {
-                memcpy(impl_->assigned_hues, assigned_hues,
-                       sizeof(impl_->assigned_hues));
-                impl_->hue_values_known = true;
-                impl_->hues_requested = true;
-            } else {
-                recovery_error = hue_error;
-            }
-        }
+    if (impl_->hue_assignment_dirty ||
+        (needs_hues && !impl_->hues_requested)) {
+        const int hue_error = requestHues(connection_mask);
+        if (hue_error != 0) recovery_error = hue_error;
     }
 
     // A later HUE_NOT_SET result should be able to start a fresh request after
@@ -583,12 +544,86 @@ bool GemRuntime::update(MoveFrame& frame, float blade_length_m,
     return true;
 }
 
+u32 GemRuntime::requestedHue(unsigned int slot) const {
+    if (impl_->hue_override[slot] != kNoHue) return impl_->hue_override[slot];
+    if (impl_->hand_assignment_known && impl_->hand_hues_enabled)
+        return gemHueForPhysicalSlot(slot, impl_->hand_slots_swapped,
+                                     impl_->left_hue, impl_->right_hue);
+    return GEM_HUE_DONT_CARE;
+}
+
+void GemRuntime::clearHueSpread() {
+    impl_->hue_override[0] = impl_->hue_override[1] = kNoHue;
+    impl_->hue_spread_attempts = 0;
+    impl_->best_hue_gap = 0;
+    impl_->best_hues[0] = impl_->best_hues[1] = kNoHue;
+    impl_->best_hues_requested = false;
+}
+
+int GemRuntime::requestHues(unsigned int connection_mask) {
+    const u32 requested_hues[4] = {
+        requestedHue(0), requestedHue(1), GEM_HUE_DONT_CARE, GEM_HUE_DONT_CARE
+    };
+    u32 assigned_hues[4] = {};
+    const int hue_error = gemTrackHues(requested_hues, assigned_hues);
+    impl_->last_hue_error = hue_error;
+    if (hue_error != 0) return hue_error;
+    memcpy(impl_->assigned_hues, assigned_hues, sizeof(impl_->assigned_hues));
+    impl_->hue_values_known = true;
+    impl_->hue_assignment_dirty = false;
+    impl_->hues_requested = true;
+
+    // libgem may move a requested hue the room makes hard to track (blue
+    // became purple next to red on a console). Two spheres that end up
+    // close are hard to tell apart: ask for another hue for one of them.
+    const u32 first = assigned_hues[0], second = assigned_hues[1];
+    if (!impl_->min_hue_gap || connection_mask != 3u || first >= 360u || second >= 360u)
+        return 0;
+    const unsigned int gap = hueGap(first, second);
+    if (gap > impl_->best_hue_gap) {
+        impl_->best_hue_gap = gap;
+        impl_->best_hues[0] = first;
+        impl_->best_hues[1] = second;
+    }
+    if (gap >= impl_->min_hue_gap) return 0;
+    if (impl_->hue_spread_attempts >= HUE_SPREAD_TRIES) {
+        // No try kept them apart enough: settle on the widest pair seen.
+        if (!impl_->best_hues_requested && gap < impl_->best_hue_gap) {
+            impl_->hue_override[0] = impl_->best_hues[0];
+            impl_->hue_override[1] = impl_->best_hues[1];
+            impl_->best_hues_requested = true;
+            impl_->hue_assignment_dirty = true;
+        }
+        return 0;
+    }
+    // The sphere that got the hue it asked for keeps it (the right hand's
+    // when both did); the other one moves away from it.
+    const unsigned int anchor = second == requested_hues[1] ? 1u
+                              : (first == requested_hues[0] ? 0u : 1u);
+    const u32 anchor_hue = assigned_hues[anchor];
+    impl_->hue_override[anchor] = anchor_hue;
+    impl_->hue_override[1u - anchor] = hueAwayFrom(anchor_hue, impl_->hue_spread_attempts++);
+    impl_->hue_assignment_dirty = true;
+    printf("Sphere hues %u and %u are %u degrees apart; asking slot %u for %u\n",
+           first, second, gap, 1u - anchor, impl_->hue_override[1u - anchor]);
+    return 0;
+}
+
+void GemRuntime::setMinHueGap(unsigned int degrees) {
+    if (impl_) impl_->min_hue_gap = degrees > 180u ? 180u : degrees;
+}
+
+unsigned int GemRuntime::hueSpreadAttempts() const {
+    return impl_ ? impl_->hue_spread_attempts : 0u;
+}
+
 void GemRuntime::setHandSlotsSwapped(bool slots_swapped) {
     if (!impl_) return;
     if (!impl_->hand_assignment_known ||
         impl_->hand_slots_swapped != slots_swapped) {
         impl_->hand_assignment_known = true;
         impl_->hand_slots_swapped = slots_swapped;
+        clearHueSpread();
         if (!impl_->hand_hues_enabled) return;
         impl_->hue_assignment_dirty = true;
         impl_->hue_values_known = false;
