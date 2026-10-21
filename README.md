@@ -71,10 +71,9 @@ ready-made sets with music.
 (blades towards the camera), out to the sides, then down. Confirm each pose
 with the Move button on both controllers. From the poses the game works out
 which hand is which, your arm span and the depth of the play area. The
-calibration screen shows each hand in its sphere's real color: libgem picks
-colors the camera can tell apart from the room, and the game keeps the two
-spheres at least 120° apart on the color wheel (`min_hue_gap` in
-`renderer.ini`). You can calibrate again from the pause menu.
+calibration screen shows each hand in its sphere's real color: the game
+asks for blue and red, and libgem may shift them to colors the camera can
+tell apart from the room. You can calibrate again from the pause menu.
 
 **During a song** the score is in the top left and the combo in the top
 right; the screen flashes red when the combo breaks. At the bottom are the

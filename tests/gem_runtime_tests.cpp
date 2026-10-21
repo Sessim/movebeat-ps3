@@ -281,6 +281,7 @@ void runGemRuntimeHueTests() {
     {
         GemRuntime spread;
         spread.setHandHuesEnabled(true);
+        spread.setMinHueGap(120);
         require(spread.initialize(), "fake libgem should initialize");
         g_hue_from = GEM_HUE_LEFT_HAND;
         g_hue_to = 280u;
@@ -298,11 +299,27 @@ void runGemRuntimeHueTests() {
         require(g_hue_call_count == calls, "settled hues are not requested again");
         spread.shutdown();
     }
+    // By default the hues stay as libgem sets them, even close together.
+    resetFakes();
+    {
+        GemRuntime plain;
+        plain.setHandHuesEnabled(true);
+        require(plain.initialize(), "fake libgem should initialize");
+        g_hue_from = GEM_HUE_LEFT_HAND;
+        g_hue_to = 280u;
+        g_state_result = GEM_STATUS_OK;
+        plain.setHandSlotsSwapped(false);
+        for (int i = 0; i < 10; ++i) plain.update(frame, 0.6f);
+        require(plain.hueForPhysicalSlot(0) == 280u && plain.hueSpreadAttempts() == 0u &&
+                g_hue_call_count == 1u, "by default close hues are not asked again");
+        plain.shutdown();
+    }
     // A slot libgem always paints close to the other: a few tries, then stop.
     resetFakes();
     {
         GemRuntime stuck;
         stuck.setHandHuesEnabled(true);
+        stuck.setMinHueGap(120);
         require(stuck.initialize(), "fake libgem should initialize");
         g_slot0_forced = 340u;
         g_state_result = GEM_STATUS_OK;

@@ -74,8 +74,8 @@ struct RenderOptions {
     // "pitch_correction=off": no libgem camera pitch correction.
     bool pitch_correction;
     // "min_hue_gap=N": the least distance in degrees between the two
-    // spheres' hues before one is asked for another color (default 120,
-    // 0: off).
+    // spheres' hues before one is asked for another color (default 0:
+    // the colors stay as libgem sets them).
     int min_hue_gap;
     // "resolution=1080": draw 1080p when the system outputs 1080p
     // (experimental; 720p by default).
@@ -85,7 +85,7 @@ struct RenderOptions {
                       background(true), camera_exposure(128), camera_quality(0.5f),
                       left_hue(204), right_hue(352), gem_filter(true),
                       camera_depth(true), depth_range_cm(30),
-                      pitch_correction(true), min_hue_gap(120), full_hd(false) {}
+                      pitch_correction(true), min_hue_gap(0), full_hd(false) {}
 };
 
 RenderOptions readRenderOptions();

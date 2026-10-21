@@ -9,6 +9,9 @@
   follows it, and fades within 0.2 s after the blade leaves.
 - In a long track list the lowest row no longer runs into the control hints.
 - `trim_charts.py --max-difficulty` drops charts harder than a cap.
+- The sphere colors are left as libgem sets them again: keeping them 120°
+  apart is off by default (`min_hue_gap=120` in `renderer.ini` turns it on).
+  The calibration screen still shows each hand in its sphere's real color.
 
 ## 0.2.1 — 2026-10-20
 

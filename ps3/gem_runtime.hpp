@@ -63,7 +63,8 @@ public:
     // Hue angles (0..359) of the left and right hand spheres.
     void setHandHueValues(unsigned int left_hue, unsigned int right_hue);
     // Two spheres whose hues libgem placed closer than this (degrees around
-    // the color wheel) get another hue for one of them; 0 accepts any.
+    // the color wheel) get another hue for one of them; 0 (the default)
+    // accepts any.
     void setMinHueGap(unsigned int degrees);
     // Hue requests made to keep the spheres apart since the hands or the
     // controllers last changed.

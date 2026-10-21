@@ -193,7 +193,8 @@ missing manifests, unsafe names and collisions with bundled levels.
   `effects=off`, `background=off`, `hand_colors=on|off`, `camera_exposure`,
   `camera_quality`, `left_hue`, `right_hue`, `gem_filter=off`,
   `camera_depth=off`, `depth_range_cm`, `pitch_correction=off`,
-  `min_hue_gap` (degrees between the two sphere hues, default 120, 0: off),
+  `min_hue_gap` (the least degrees between the two sphere hues before one
+  is asked for another; default 0, off),
   `resolution=1080` (experimental: the RSX draws 1080p when the system
   already outputs 1080p; the layout stays in 720p coordinates and is
   scaled).

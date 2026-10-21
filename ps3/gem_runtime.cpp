@@ -118,7 +118,7 @@ struct GemRuntime::Impl {
           camera_exposure(128), camera_quality(0.5f),
           left_hue(GEM_HUE_LEFT_HAND), right_hue(GEM_HUE_RIGHT_HAND), gem_filter(true),
           update_count(0),
-          last_hue_error(0), min_hue_gap(120u), hue_spread_attempts(0),
+          last_hue_error(0), min_hue_gap(0u), hue_spread_attempts(0),
           best_hue_gap(0), best_hues_requested(false),
           connection_mask(0), last_error(0),
           last_stage(GemRuntime::INIT_NONE),
