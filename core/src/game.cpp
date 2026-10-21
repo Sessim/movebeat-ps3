@@ -194,6 +194,7 @@ void Game::reset() {
     states_.assign(chart_.notes.size(), NOTE_PENDING);
     obstacle_states_.assign(chart_.obstacles.size(), NOTE_PENDING);
     arc_followed_ms_.assign(chart_.arcs.size(), 0u);
+    arc_on_at_ms_.assign(chart_.arcs.size(), 0u);
     arc_states_.assign(chart_.arcs.size(), NOTE_PENDING);
     invalidateInput();
     score_ = ScoreState();
@@ -635,6 +636,7 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
                         config_.arc_follow_radius) {
                     arc_followed_ms_[i] = std::min(duration,
                         arc_followed_ms_[i] + covered_interval);
+                    arc_on_at_ms_[i] = now_ms;
                 }
             }
         }
@@ -700,6 +702,15 @@ const Obstacle& Game::obstacle(std::size_t index) const {
 
 bool Game::obstaclePending(std::size_t index) const {
     return index < obstacle_states_.size() && obstacle_states_[index] == NOTE_PENDING;
+}
+
+float Game::arcGlow(std::size_t index, unsigned int now_ms) const {
+    if (index >= arc_on_at_ms_.size() || !arc_on_at_ms_[index] ||
+        now_ms < arc_on_at_ms_[index])
+        return 0.0f;
+    const unsigned int since = now_ms - arc_on_at_ms_[index];
+    return since >= kArcGlowMs ? 0.0f
+                               : 1.0f - static_cast<float>(since) / kArcGlowMs;
 }
 
 std::size_t Game::arcCount() const {

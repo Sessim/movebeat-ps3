@@ -119,6 +119,10 @@ public:
     std::size_t arcCount() const;
     const Arc& arc(std::size_t index) const;
     Vec3 arcPoint(const Arc& arc, unsigned int now_ms, float progress) const;
+    // 1 while the matching blade follows an arc, fading to 0 within
+    // kArcGlowMs after it leaves (the arc lights up as it is followed).
+    float arcGlow(std::size_t index, unsigned int now_ms) const;
+    static const unsigned int kArcGlowMs = 200u;
 
 private:
     enum NoteState { NOTE_PENDING, NOTE_HIT, NOTE_MISSED };
@@ -170,6 +174,8 @@ private:
     std::vector<NoteState> states_;
     std::vector<NoteState> obstacle_states_;
     std::vector<unsigned int> arc_followed_ms_;
+    // Song time the blade was last on each arc (0: never).
+    std::vector<unsigned int> arc_on_at_ms_;
     std::vector<NoteState> arc_states_;
     SaberPose previous_left_;
     SaberPose previous_right_;

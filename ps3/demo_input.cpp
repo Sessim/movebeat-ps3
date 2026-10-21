@@ -51,6 +51,18 @@ SaberPose scriptedPose(const Game& game, unsigned int now_ms, Hand hand,
         const Vec3 center = game.notePosition(note, note.time_ms);
         tip = center + cutDirection(note.direction) * (progress * 0.46f);
         tip.z = 0.05f;
+    } else {
+        // Between notes, the blade's tip rides an arc of its hand.
+        for (std::size_t index = 0; index < game.arcCount(); ++index) {
+            const Arc& arc = game.arc(index);
+            if (arc.hand != hand || now_ms < arc.head_time_ms || now_ms > arc.tail_time_ms)
+                continue;
+            const unsigned int duration = arc.tail_time_ms - arc.head_time_ms;
+            const float progress = duration
+                ? static_cast<float>(now_ms - arc.head_time_ms) / duration : 1.0f;
+            tip = game.arcPoint(arc, now_ms, progress);
+            break;
+        }
     }
     return SaberPose(tip + Vec3(0.0f, -0.7f, -0.3f), tip, true);
 }

@@ -165,6 +165,7 @@ missing manifests, unsafe names and collisions with bundled levels.
   smaller ring-marked targets along the swing; **arcs** are guides, as in
   Beat Saber: following one with the matching blade for 60% of its length
   earns bonus points, and leaving it is no miss and breaks no combo.
+  An arc being followed glows as a neon tube (`Game::arcGlow`).
 - **Cut halves.** A cut cube splits along the blade's swing into two
   rounded halves (`cutPieces` in `cut_feedback.hpp`) that drift apart, fall,
   tumble and fade over 450 ms. They use the note mesh on a coarser grid

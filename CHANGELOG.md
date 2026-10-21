@@ -5,6 +5,8 @@
 - Arcs (the lines between two notes) are guides, as in Beat Saber: following
   one earns bonus points, leaving it is no miss and no longer breaks the
   combo or costs energy.
+- An arc lights up as a neon tube in the hand's color while its blade
+  follows it, and fades within 0.2 s after the blade leaves.
 - In a long track list the lowest row no longer runs into the control hints.
 - `trim_charts.py --max-difficulty` drops charts harder than a cap.
 

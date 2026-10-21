@@ -897,6 +897,9 @@ void testArcs() {
             time < 1500 ? time : 1500, progress);
         follow_game.update(time, pose(target.x, target.y, target.z), parked);
     }
+    expect(follow_game.arcGlow(0, 1500) > 0.8f &&
+           follow_game.arcGlow(0, 1500 + movebeat::Game::kArcGlowMs) == 0.0f,
+           "a followed arc glows, and fades after the blade leaves");
     expect(follow_game.score().arcs_hit == 1 &&
            follow_game.score().arcs_missed == 0 &&
            follow_game.score().score > 0 && follow_game.score().hits == 0,

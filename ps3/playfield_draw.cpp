@@ -469,6 +469,8 @@ void drawArcs(Framebuffer& screen, const movebeat::Game& game,
             ? 0xff70d8ffu : 0xffff6878u;
         const u32 glow = arc.hand == movebeat::HAND_LEFT
             ? 0xff174870u : 0xff701727u;
+        // Followed by its blade, the arc lights up as a neon tube.
+        const float lit = screen.effectsEnabled() ? game.arcGlow(index, now_ms) : 0.0f;
         for (unsigned int segment = 1; segment <= segments; ++segment) {
             const float progress = static_cast<float>(segment) /
                 static_cast<float>(segments);
@@ -478,8 +480,15 @@ void drawArcs(Framebuffer& screen, const movebeat::Game& game,
                 current.z >= -0.8f && current.z <= game.noteSpawnDepth()) {
                 const ScreenPoint from = projectTrackPoint(previous, screen);
                 const ScreenPoint to = projectTrackPoint(current, screen);
-                screen.line(from.x, from.y, to.x, to.y, glow, 7);
-                screen.line(from.x, from.y, to.x, to.y, core, 2);
+                if (lit > 0.0f) {
+                    screen.glowLine(from.x + 0.5f, from.y + 0.5f, to.x + 0.5f, to.y + 0.5f,
+                                    22.0f * effectScale(screen), withAlpha(core, 0.8f * lit));
+                    screen.line(from.x, from.y, to.x, to.y, core, 6);
+                    screen.line(from.x, from.y, to.x, to.y, 0xfff2f8ffu, 2);
+                } else {
+                    screen.line(from.x, from.y, to.x, to.y, glow, 7);
+                    screen.line(from.x, from.y, to.x, to.y, core, 2);
+                }
             }
             previous = current;
         }
