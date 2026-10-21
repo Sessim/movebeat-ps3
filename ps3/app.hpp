@@ -101,6 +101,8 @@ private:
     }
     void recordMenuTest(const FrameInput& input);
     void applyLanguage();
+    // run_status level_id: the BeatSaver key, or the level's folder.
+    std::string diagnosticLevelId() const;
     void runScreensGallery();
     void refreshBestScores();
 

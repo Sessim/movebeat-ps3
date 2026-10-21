@@ -124,7 +124,7 @@ int App::run() {
         (demo_mode_ && !demo_options_.menu_test ? "demo_play" : "select");
     diagnostic_.level_count = static_cast<int>(level_choices_.size());
     diagnostic_.imported_level = imported_level_ ? 1 : 0;
-    diagnostic_.level_id = imported_level_ ? selected_level_.source_key : "builtin_tutorial";
+    diagnostic_.level_id = diagnosticLevelId();
     diagnostic_.chart_difficulty = imported_level_ && !selected_level_.charts.empty()
         ? selected_level_.charts[selected_chart_index_].difficulty : "Easy";
     writeRunStatus(kRunStatusPath, diagnostic_);
@@ -410,6 +410,13 @@ void App::reloadLibrary() {
     printf("Library reloaded: %u levels, %u playlists\n",
            static_cast<unsigned int>(level_choices_.size()),
            static_cast<unsigned int>(playlists_.size()));
+}
+
+std::string App::diagnosticLevelId() const {
+    if (!imported_level_) return "builtin_tutorial";
+    // A map converted from a ZIP has no BeatSaver key: name its folder.
+    if (!selected_level_.source_key.empty()) return selected_level_.source_key;
+    return level_directory_.substr(level_directory_.find_last_of('/') + 1);
 }
 
 void App::applyLanguage() {
@@ -2273,8 +2280,7 @@ void App::publishDiagnostics(const FrameInput& input) {
     ++diagnostic_.heartbeat;
     diagnostic_.level_count = static_cast<int>(level_choices_.size());
     diagnostic_.imported_level = imported_level_ ? 1 : 0;
-    diagnostic_.level_id = imported_level_
-        ? selected_level_.source_key : "builtin_tutorial";
+    diagnostic_.level_id = diagnosticLevelId();
     diagnostic_.chart_difficulty = imported_level_ &&
         selected_chart_index_ < selected_level_.charts.size()
         ? selected_level_.charts[selected_chart_index_].difficulty : "Easy";
