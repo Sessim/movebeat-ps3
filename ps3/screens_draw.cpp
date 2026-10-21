@@ -227,7 +227,9 @@ void drawLevelLibrary(Framebuffer& screen,
             const float offset = row_index - view.position;
             if (std::fabs(offset) > 3.6f) continue;
             if (count < 7 && std::fabs(offset) > count * 0.5f) continue;
-            const RowLayout row = carouselRow(offset, center_y);
+            RowLayout row = carouselRow(offset, center_y);
+            // Rows below fade out before they reach the control hints.
+            if (offset > 2.0f) row.alpha *= std::max(0.0f, 1.0f - (offset - 2.0f) / 0.6f);
             if (row.alpha <= 0.0f) continue;
             drawCarouselRow(screen, levels[order[CarouselScroll::wrap(row_index, count)]],
                             row, center_x);

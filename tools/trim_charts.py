@@ -9,6 +9,7 @@ validates. Playlist bundles are copied as they are; the PS3 picks the
 nearest kept difficulty for a playlist song. SOURCE is never changed.
 
     python tools/trim_charts.py out/levels out/levels-pack --keep 2
+    python tools/trim_charts.py raw out/levels-disney --keep 3 --max-difficulty Hard
     MOVEBEAT_LEVELS_DIR=out/levels-pack bash tools/build_ps3.sh --include-imported
 """
 
@@ -37,9 +38,10 @@ def _chart_order(chart: dict[str, str]) -> tuple[int, int]:
     return (1 if other else 0, rank)
 
 
-def trim_level(directory: Path, keep: int) -> list[str]:
-    """Keeps the `keep` easiest charts of a level bundle in place; returns
-    the difficulties kept."""
+def trim_level(directory: Path, keep: int, max_difficulty: str | None = None) -> list[str]:
+    """Keeps the `keep` easiest charts of a level bundle in place, none
+    harder than `max_difficulty` (when a level has only harder ones, its
+    easiest stays); returns the difficulties kept."""
     level_ini = directory / "level.ini"
     head: list[str] = []
     charts: dict[int, dict[str, str]] = {}
@@ -51,7 +53,13 @@ def trim_level(directory: Path, keep: int) -> list[str]:
         elif key != "chart_count":
             head.append(line)
     ordered = [charts[index] for index in sorted(charts)]
-    kept = sorted(ordered, key=_chart_order)[:keep]
+    candidates = sorted(ordered, key=_chart_order)
+    if max_difficulty:
+        cap = DIFFICULTY_RANK[max_difficulty.casefold()]
+        capped = [chart for chart in candidates
+                  if DIFFICULTY_RANK.get(chart.get("difficulty", "").casefold(), 9) <= cap]
+        candidates = capped or candidates[:1]
+    kept = candidates[:keep]
     # Keep the original order of the kept charts (easiest first as imported).
     kept = [chart for chart in ordered if chart in kept]
     lines = head + [f"chart_count={len(kept)}"]
@@ -80,7 +88,8 @@ def trim_level(directory: Path, keep: int) -> list[str]:
     return [f"{chart.get('characteristic', '')}/{chart.get('difficulty', '')}" for chart in kept]
 
 
-def trim_library(source: Path, destination: Path, keep: int, log=print) -> int:
+def trim_library(source: Path, destination: Path, keep: int, log=print,
+                 max_difficulty: str | None = None) -> int:
     if destination.resolve() == source.resolve():
         raise ValueError("the destination must differ from the source library")
     if destination.exists():
@@ -92,7 +101,7 @@ def trim_library(source: Path, destination: Path, keep: int, log=print) -> int:
         target = destination / bundle.name
         shutil.copytree(bundle, target)
         if (target / "level.ini").is_file():
-            kept = trim_level(target, keep)
+            kept = trim_level(target, keep, max_difficulty)
             note = ", ".join(kept)
         else:
             note = "copied"
@@ -110,10 +119,13 @@ def main() -> int:
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
     parser.add_argument("--keep", type=int, default=2, help="charts kept per level (default 2)")
+    parser.add_argument("--max-difficulty", choices=["Easy", "Normal", "Hard", "Expert"],
+                        help="drop charts harder than this")
     args = parser.parse_args()
     if args.keep < 1:
         parser.error("--keep must be at least 1")
-    return 1 if trim_library(args.source, args.destination, args.keep) else 0
+    return 1 if trim_library(args.source, args.destination, args.keep,
+                             max_difficulty=args.max_difficulty) else 0
 
 
 if __name__ == "__main__":
