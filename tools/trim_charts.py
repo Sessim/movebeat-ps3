@@ -54,6 +54,10 @@ def trim_level(directory: Path, keep: int, max_difficulty: str | None = None) ->
             head.append(line)
     ordered = [charts[index] for index in sorted(charts)]
     candidates = sorted(ordered, key=_chart_order)
+    # Lightshow charts carry lights and no notes: not a level to play.
+    playable = [chart for chart in candidates
+                if chart.get("characteristic", "").casefold() != "lightshow"]
+    candidates = playable or candidates
     if max_difficulty:
         cap = DIFFICULTY_RANK[max_difficulty.casefold()]
         capped = [chart for chart in candidates
