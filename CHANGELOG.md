@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Arcs (the lines between two notes) are guides, as in Beat Saber: following
+  one earns bonus points, leaving it is no miss and no longer breaks the
+  combo or costs energy.
+- In a long track list the lowest row no longer runs into the control hints.
+- `trim_charts.py --max-difficulty` drops charts harder than a cap.
+
 ## 0.2.1 — 2026-10-20
 
 - Russian screens. The game follows the PS3 system language (English or

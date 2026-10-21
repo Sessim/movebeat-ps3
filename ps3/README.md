@@ -162,8 +162,9 @@ missing manifests, unsafe names and collisions with bundled levels.
 - **Walls** are purple volumes; both blade tips must stay out of them while
   they cross the play plane. Touching one breaks the combo once and rumbles
   both controllers for as long as a blade stays inside. **Chains** are
-  smaller ring-marked targets along the swing; **arcs** are guides the
-  matching blade should follow for 60% of their length.
+  smaller ring-marked targets along the swing; **arcs** are guides, as in
+  Beat Saber: following one with the matching blade for 60% of its length
+  earns bonus points, and leaving it is no miss and breaks no combo.
 - **Cut halves.** A cut cube splits along the blade's swing into two
   rounded halves (`cutPieces` in `cut_feedback.hpp`) that drift apart, fall,
   tumble and fade over 450 ms. They use the note mesh on a coarser grid

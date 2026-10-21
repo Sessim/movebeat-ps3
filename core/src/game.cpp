@@ -639,6 +639,9 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
             }
         }
         if (now_ms > arc.tail_time_ms) {
+            // As in Beat Saber, an arc only guides the swing between its two
+            // notes: following it earns bonus points, and leaving it costs
+            // nothing (no miss, no combo break, no energy).
             arc_states_[i] = NOTE_MISSED;
             const unsigned int required_ms = (duration / 100u) * 60u +
                 ((duration % 100u) * 60u + 99u) / 100u;
@@ -647,11 +650,9 @@ void Game::update(unsigned int now_ms, const SaberPose& left, const SaberPose& r
                 const unsigned int quality = static_cast<unsigned int>(
                     static_cast<unsigned long long>(arc_followed_ms_[i]) * 50u /
                     duration);
-                registerHit(quality);
+                score_.score += quality * multiplierForCombo(score_.combo);
             } else {
                 ++score_.arcs_missed;
-                registerMiss(8);
-                events_.miss = true;
             }
         }
     }

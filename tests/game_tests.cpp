@@ -899,16 +899,30 @@ void testArcs() {
     }
     expect(follow_game.score().arcs_hit == 1 &&
            follow_game.score().arcs_missed == 0 &&
-           follow_game.score().score > 0,
-           "following the assigned saber along an arc awards score");
+           follow_game.score().score > 0 && follow_game.score().hits == 0,
+           "following the assigned saber along an arc awards bonus score");
 
+    // An arc only guides the swing, as in Beat Saber: leaving it is no miss.
+    movebeat::Chart combo_chart = followed_chart;
+    movebeat::Note before;
+    before.time_ms = 900;
+    before.lane = 1;
+    before.row = 1;
+    before.hand = movebeat::HAND_RIGHT;
+    before.direction = movebeat::CUT_ANY;
+    combo_chart.notes.push_back(before);
     movebeat::Game miss_game;
-    miss_game.load(followed_chart);
-    miss_game.update(990, parked, parked);
+    miss_game.load(combo_chart);
+    const movebeat::Vec3 note_at = miss_game.notePosition(before, 900);
+    miss_game.update(880, parked, pose(note_at.x - 0.3f, note_at.y, note_at.z));
+    miss_game.update(900, parked, pose(note_at.x + 0.3f, note_at.y, note_at.z));
+    const unsigned int energy = miss_game.score().energy;
+    expect(miss_game.score().combo == 1, "the note before the arc is cut");
     miss_game.update(1515, parked, parked);
-    expect(miss_game.score().arcs_missed == 1 &&
-           miss_game.score().energy == 42,
-           "ignoring an arc registers a reduced miss penalty");
+    expect(miss_game.score().arcs_missed == 1 && miss_game.score().misses == 0 &&
+           miss_game.score().combo == 1 && miss_game.score().energy == energy &&
+           !miss_game.events().combo_broken,
+           "leaving an arc breaks no combo and costs no energy");
 }
 
 void testLevelManifest() {
